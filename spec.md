@@ -35,6 +35,18 @@ First audience:
 - small hand-made sites
 - technically curious people who are comfortable self-hosting
 
+## Core concepts
+
+- Site — a single place a person can visit on the web
+- TownSquare / scene — the shared presence layer attached to that site
+- Character — a visitor as represented inside the scene
+- Props — environmental objects inside the scene, such as benches, trees, and lamps
+- Interaction — a small action between a character and the scene, another character, or a prop
+- Chat — lightweight local conversation inside that shared place
+- Map — a higher-level view of how places connect
+- Neighbourhood — a cluster of nearby or related places
+- World — the larger network of connected places
+
 ## Core product principles
 
 - Presence and lightweight chat are both essential
@@ -67,18 +79,9 @@ Characters should be able to:
 - visually occupy the same scene as other visitors
 - approach and interact with props placed in the scene
 
-Props are part of the product feel, not decorative afterthoughts.
-The first scene should likely include things like:
-- benches
-- trees
-- street lamps
-- possibly a few other simple objects that read instantly
+Props are part of the feel, not just decoration. The first scene should likely include benches, trees, street lamps, and a few other instantly readable objects.
 
-Prop interaction should stay lightweight and legible.
-It does not need to become game logic.
-The point is to give visitors small expressive actions and shared points of attention inside the scene.
-
-Examples of the right kind of interaction:
+Interaction should stay lightweight and legible rather than becoming game logic. Good examples:
 - standing near a bench and sitting on it
 - pausing under a lamp or near a tree
 - triggering a tiny visual response from an object
@@ -112,9 +115,6 @@ Customization is allowed, but the product should not depend on customization to 
 ## Product roadmap
 
 For now, the roadmap should stay at the product and experience level, not the implementation level.
-This spec remains the source of truth for product intent; any later engineering plan may become more detailed and more disposable.
-
-A good near-term sequence is:
 
 - Phase 1 — Presence baseline
   - visitors appear in the shared scene
@@ -137,35 +137,30 @@ A good near-term sequence is:
   - movement between sites starts to feel diegetic rather than link-like
   - the product begins to resemble a small web neighbourhood rather than a single isolated widget
 
-This roadmap is intentionally directional.
-It should help decide what to work on next without pretending that the exact implementation order is already settled.
+This roadmap is directional. The spec is the source of truth for product intent; later engineering plans can be more detailed and more disposable.
 
 ## Product shape
 
-Two modes exist, but only one matters now:
+TownSquare can support both:
+- a self-hosted, open-source path
+- a hosted, shared-service path
 
-- Model A: self-hosted open-source version first
-- Model B: hosted/shared service later
+These are not two different products, just two ways the same product may exist and spread. Sequencing can be made clearer later in the roadmap if needed.
 
-The hosted path should not distort the first version.
+## A wider world
 
-## Possible expansion after v1
+A strong post-v1 direction is for TownSquare to stop feeling like a widget attached to one site and start feeling like a small world spread across many sites.
 
-A compelling later direction is lightweight movement between participating sites.
+The core idea is simple:
+- each site is a place
+- movement between places is part of the experience
+- travel should feel like travel, not like clicking away
 
-The presence layer could act a bit like a web ring, but organized through local proximity rather than a flat global directory:
-- a site owner chooses a small set of neighbouring sites
-- a visitor encounters a character, port, gate, or portal inside the shared scene
-- interacting with it takes them to one of those neighbouring websites
-- the transition should feel animated and diegetic, not like a cold link click
-- over time this could create little clusters, streets, districts, and larger regions across the indie web
+If this works, the web starts to feel less like isolated pages and more like a walkable neighbourhood. Small clusters can become streets, districts, and eventually a larger shared world.
 
-The map should be global.
-A natural companion to the portal system would be an actual shared map: a cartoonish, hand-drawn graph in the same visual language as the stick figures, showing how participating sites connect and where a portal might lead.
-One promising structure is for each server to have its own local map or metropolitan region, while also allowing links between servers that feel more like highways between cities or regions.
+The important quality is not scale for its own sake, but continuity. A visitor should feel that they are still inside the same living environment even as they move outward.
 
-This is not necessary for v1, but it fits the product strongly if the core presence layer already works.
-The important product quality is that travel should feel like moving through a neighbourhood, then a city, then a wider world — not being dumped into an arbitrary link graph.
+This is not necessary for v1, but it is one of the clearest long-term directions in the product.
 
 ## Open questions worth preserving
 
@@ -173,7 +168,7 @@ The important product quality is that travel should feel like moving through a n
 - What is the minimum moderation story needed even for lightweight public chat?
 - How much customization is necessary before the product starts getting diluted?
 - How should cross-site travel work without breaking the simplicity of the widget?
-- Should neighbouring sites be explicitly chosen by each site owner, mutually agreed, or discovered some lighter way?
-- How should a global map represent server-level regions versus site-level neighbours without becoming visually cluttered?
-- What is the lightest mechanism for connecting different servers while keeping the world coherent?
+- How should neighbouring sites be chosen or discovered?
+- How should the map show local clusters without becoming cluttered?
+- What is the lightest way to connect different regions while keeping the world coherent?
 - How much shared identity between sites is useful before the system starts feeling too persistent?
