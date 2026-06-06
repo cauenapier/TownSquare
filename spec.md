@@ -6,7 +6,7 @@ Short product spec for what this project is trying to be.
 
 A tiny presence layer for websites.
 
-Visitors can see that other people are there, move around lightly, and chat in a lightweight shared space at the bottom of the page.
+Visitors can see that other people are there, walk left and right through a tiny shared scene, interact with a few simple props, and chat in a lightweight shared space at the bottom of the page.
 
 The goal is to make a site feel inhabited.
 
@@ -51,9 +51,39 @@ Version 1 should provide:
 - lightweight real-time presence
 - lightweight real-time chat
 - one strong default scene
+- simple left/right walking for characters inside that scene
+- a small set of environmental props that characters can interact with
 - very low-friction setup
 - self-hosted backend
 - ephemeral interaction by default
+
+## Scene and interaction language
+
+The shared space should feel a bit like a tiny sidewalk, park strip, or town-edge scene rather than an abstract chat box.
+
+Characters should be able to:
+- walk left and right
+- stop and idle
+- visually occupy the same scene as other visitors
+- approach and interact with props placed in the scene
+
+Props are part of the product feel, not decorative afterthoughts.
+The first scene should likely include things like:
+- benches
+- trees
+- street lamps
+- possibly a few other simple objects that read instantly
+
+Prop interaction should stay lightweight and legible.
+It does not need to become game logic.
+The point is to give visitors small expressive actions and shared points of attention inside the scene.
+
+Examples of the right kind of interaction:
+- standing near a bench and sitting on it
+- pausing under a lamp or near a tree
+- triggering a tiny visual response from an object
+
+The interaction model should remain simple enough that a new visitor understands it almost immediately, even if they never read instructions.
 
 ## Non-goals for v1
 
@@ -78,6 +108,37 @@ A person should be able to add it to their site and quickly get something that f
 The default experience should already feel good.
 
 Customization is allowed, but the product should not depend on customization to be compelling.
+
+## Product roadmap
+
+For now, the roadmap should stay at the product and experience level, not the implementation level.
+This spec remains the source of truth for product intent; any later engineering plan may become more detailed and more disposable.
+
+A good near-term sequence is:
+
+- Phase 1 — Presence baseline
+  - visitors appear in the shared scene
+  - characters can walk left and right
+  - characters can stop, idle, and feel co-present
+  - lightweight chat works reliably
+
+- Phase 2 — Scene legibility
+  - the default scene feels like a place, not just a UI layer
+  - benches, trees, street lamps, and similar props are added
+  - prop interactions make the shared space easier to read at a glance
+
+- Phase 3 — Social texture
+  - lightweight names are supported
+  - small expressive actions and ambient feedback make the scene feel more alive
+  - the balance between movement, props, and chat becomes smoother and more intuitive
+
+- Phase 4 — Neighbourhood expansion
+  - portals, gates, or similar transitions can link participating sites
+  - movement between sites starts to feel diegetic rather than link-like
+  - the product begins to resemble a small web neighbourhood rather than a single isolated widget
+
+This roadmap is intentionally directional.
+It should help decide what to work on next without pretending that the exact implementation order is already settled.
 
 ## Product shape
 
