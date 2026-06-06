@@ -162,6 +162,16 @@ The important quality is not scale for its own sake, but continuity. A visitor s
 
 This is not necessary for v1, but it is one of the clearest long-term directions in the product.
 
+## Extensibility
+
+Over time, TownSquare should be open enough that other people can add to the world rather than only consume it.
+
+This may include:
+- custom props and interactions
+- open interfaces for maps, visualizations, and related tools
+
+This does not need to become a full platform story in v1, but the product should leave room for it.
+
 ## Open questions worth preserving
 
 - How much short-term history is useful before it starts feeling too persistent?
