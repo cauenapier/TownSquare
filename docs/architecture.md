@@ -23,7 +23,8 @@ TownSquare currently has three practical surfaces:
    - should stay separate from the reusable widget boundary
 
 That separation is now reflected directly in the repo:
-- `public/townsquare.mjs` = reusable widget module
+- `public/townsquare.mjs` = reusable widget mount API
+- `public/widget/` = widget implementation split by concern (DOM, chat, presence, protocol, movement)
 - `public/demo.mjs` + `public/index.html` = demo shell
 - `server.js` = static + realtime service
 

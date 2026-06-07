@@ -16,7 +16,8 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 ## Repo shape
 
 - `server.js` — Node server for static assets, health checks, and WebSocket presence
-- `public/townsquare.mjs` — reusable embeddable widget module
+- `public/townsquare.mjs` — reusable embeddable widget mount API
+- `public/widget/` — widget implementation modules (DOM, chat, presence, protocol, movement)
 - `public/widget.css` — widget and demo styling
 - `public/demo.mjs` — local demo bootstrap
 - `public/index.html` — demo host page for local development

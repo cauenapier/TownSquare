@@ -51,6 +51,7 @@ Finish v1 without reading source.
 
 - [ ] **Operator checklist**: install, health check, embed, two-browser test, common failures
 - [ ] **Stable widget + protocol**: public contract; hosted layer can sit on top later
+- [ ] **Basic Moderation**: allow admins to kick/block people
 
 ### Boundary (concept)
 
