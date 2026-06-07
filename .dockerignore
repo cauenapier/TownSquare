@@ -1,0 +1,11 @@
+node_modules
+.git
+.gitignore
+npm-debug.log*
+Dockerfile*
+README.md
+spec.md
+roadmap.md
+v1-interaction-model.md
+docs
+scripts

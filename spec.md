@@ -22,7 +22,6 @@ The goal is to make a site feel inhabited.
 ## Why it exists
 
 The web feels crowded but empty.
-
 There is content everywhere, but little felt human presence. This project is meant to bring back a small sense of shared aliveness: the feeling that other people are here too, right now.
 
 It should create presence first, conversation second.
@@ -100,6 +99,45 @@ The purpose of this slice is to answer a small number of concrete questions:
 
 If that works, the next step can add one simple prop interaction, likely a bench, without changing the basic shape of the product.
 
+## Current product shape
+
+TownSquare should support two modes eventually:
+- a clean self-hosted mode for a single site or small cluster of sites
+- a hosted shared-service mode where site owners register their site instead of running the backend themselves
+
+These are not two different products. They are two deployment shapes over the same interaction model.
+
+Even in the self-hosted shape, a site owner may choose to let their TownSquare communicate with other TownSquares.
+That means self-hosting should not imply isolation by default forever.
+A self-hosted TownSquare can still be part of a bigger network if its operator opts into shared discovery, linking, federation, or travel paths.
+
+The important boundary is:
+- the widget/embed client
+- the realtime scene service
+- the site registration and network layer
+
+Right now, the project should fully shape the first two.
+The third should influence naming and interfaces, but should not dominate implementation yet.
+
+## Recommended sequencing
+
+The right order is:
+1. Make single-site self-hosting clean.
+2. Make the embed API and runtime boundary stable.
+3. Add deployment packaging and operating guidance.
+4. Only then build the hosted multi-site layer.
+
+Why:
+- the self-hosted path keeps the product honest
+- it proves the embed and realtime contract without tenant complexity
+- it avoids prematurely designing account, billing, registration, and moderation surfaces
+- it gives a better base for a hosted service later
+
+This also leaves room for an important middle shape:
+- self-hosted TownSquares that remain independently operated
+- but optionally communicate with other TownSquares
+- and therefore participate in the wider network without giving up self-hosting
+
 ## Scene and interaction language
 
 The shared space should feel a bit like a tiny sidewalk, park strip, or town-edge scene rather than an abstract chat box.
@@ -118,6 +156,23 @@ Interaction should stay lightweight and legible rather than becoming game logic.
 - triggering a tiny visual response from an object
 
 The interaction model should remain simple enough that a new visitor understands it almost immediately, even if they never read instructions.
+
+## V1 deployment boundary
+
+For v1, a site owner should be able to:
+- run one TownSquare server
+- embed one small client module into their site
+- point that client at the server origin
+- get presence, chat, and the default scene without further infrastructure
+
+V1 does not need:
+- tenant dashboards
+- a hosted admin panel
+- per-site accounts
+- a world graph UI
+- pluggable scene packages
+
+It does need clean seams so those can be added later without rewriting the widget.
 
 ## Non-goals for v1
 
@@ -140,7 +195,6 @@ That should not turn into a full account or identity system.
 A person should be able to add it to their site and quickly get something that feels alive, playful, and understandable without reading a long manual.
 
 The default experience should already feel good.
-
 Customization is allowed, but the product should not depend on customization to be compelling.
 
 ## Product roadmap
@@ -158,25 +212,17 @@ For now, the roadmap should stay at the product and experience level, not the im
   - benches, trees, street lamps, and similar props are added
   - prop interactions make the shared space easier to read at a glance
 
-- Phase 3 — Social texture
-  - lightweight names are supported
-  - small expressive actions and ambient feedback make the scene feel more alive
-  - the balance between movement, props, and chat becomes smoother and more intuitive
+- Phase 3 — Deployable shape
+  - self-hosting feels straightforward
+  - the embed boundary is stable enough for third-party sites
+  - operating the service does not require reading the source code
 
-- Phase 4 — Neighbourhood expansion
-  - portals, gates, or similar transitions can link participating sites
-  - movement between sites starts to feel diegetic rather than link-like
-  - the product begins to resemble a small web neighbourhood rather than a single isolated widget
+- Phase 4 — Hosted expansion
+  - site owners can connect a site without self-hosting the backend
+  - the hosted path still feels like the same product, not a separate SaaS rewrite
+  - movement between participating sites can start to feel diegetic rather than link-like
 
 This roadmap is directional. The spec is the source of truth for product intent; later engineering plans can be more detailed and more disposable.
-
-## Product shape
-
-TownSquare can support both:
-- a self-hosted, open-source path
-- a hosted, shared-service path
-
-These are not two different products, just two ways the same product may exist and spread. Sequencing can be made clearer later in the roadmap if needed.
 
 ## A wider world
 
@@ -186,6 +232,9 @@ The core idea is simple:
 - each site is a place
 - movement between places is part of the experience
 - travel should feel like travel, not like clicking away
+
+That wider world does not need to be hosted from one central service only.
+Part of the long-term appeal is that independently self-hosted TownSquares could still choose to interoperate and become part of the same wider network.
 
 If this works, the web starts to feel less like isolated pages and more like a walkable neighbourhood. Small clusters can become streets, districts, and eventually a larger shared world.
 
@@ -205,7 +254,6 @@ This does not need to become a full platform story in v1, but the product should
 
 ## Open questions worth preserving
 
-- How much short-term history is useful before it starts feeling too persistent?
 - What is the minimum moderation story needed even for lightweight public chat?
 - How much customization is necessary before the product starts getting diluted?
 - How should cross-site travel work without breaking the simplicity of the widget?

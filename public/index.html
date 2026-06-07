@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TownSquare — first playable slice</title>
+    <title>TownSquare — embeddable demo</title>
     <link rel="stylesheet" href="/widget.css" />
   </head>
   <body>
     <main class="page-shell">
       <article class="page-card">
         <p class="eyebrow">TownSquare demo page</p>
-        <h1>A real page with a tiny shared place at the bottom</h1>
+        <h1>A real page with an embeddable shared place at the bottom</h1>
         <p>
-          This is the first playable TownSquare slice: real-time presence, left/right walking,
-          and lightweight chat embedded inside a normal page.
+          This page is only a host shell. The actual TownSquare widget is mounted through the
+          reusable browser module so the same code can be embedded into another website.
         </p>
         <ul>
           <li>Open this page in two windows or browsers.</li>
@@ -27,6 +27,6 @@
       <div id="townsquare-root"></div>
     </section>
 
-    <script type="module" src="/widget.js"></script>
+    <script type="module" src="/demo.mjs"></script>
   </body>
 </html>

@@ -7,22 +7,28 @@ This is directional, not a detailed implementation plan.
 ## Done
 
 - [x] A first bench prop with a simple sit interaction
+- [x] Shared visitor identity across browser tabs
+- [x] Per-character recent-message tray for lightweight short-term recovery
+- [x] Reusable embed/widget module separated from the demo bootstrap
 
 ## Now
 
 - [ ] A default TownSquare experience that already feels alive without customization
-- [ ] Lightweight real-time chat
-- [ ] Left/right movement, idling, and co-presence in a shared scene
+- [x] Lightweight real-time chat
+- [x] Left/right movement, idling, and co-presence in a shared scene
 - [ ] A small set of clear props with simple interactions
 - [ ] A scene that feels like a place rather than a UI overlay
-- [ ] Low-friction self-hosted setup
-- [ ] Short Term chat history, for improved conversation experience
+- [x] Low-friction self-hosted setup
+- [x] A deployable single-process server with a documented embed boundary
 
 ## Next
 
 - [ ] Lightweight naming
 - [ ] Small expressive actions or ambient feedback
-- [ ] Both self-hosted and hosted product paths, without splitting the product
+- [ ] Clear self-hosted deployment docs for real servers and reverse proxies
+- [ ] Stable site-facing embed API
+- [ ] A clean concept for hosted TownSquare without pulling tenant complexity into the core runtime
+- [ ] Optional inter-TownSquare communication for self-hosted sites that want to join the wider network
 - [ ] Clear room for future extensibility
 
 ## Future
@@ -32,6 +38,7 @@ This is directional, not a detailed implementation plan.
 - [ ] A first credible form of movement between places
 - [ ] A basic map or world view
 - [ ] Connected places that feel coherent enough to read as a wider world
+- [ ] Hosted site registration and multi-site management
 
 ## Ideas bucket
 

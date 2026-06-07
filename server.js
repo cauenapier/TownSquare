@@ -41,6 +41,7 @@ const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
@@ -228,6 +229,12 @@ function finalizeDisconnect(identity) {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.url === "/healthz") {
+    res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+    res.end("ok");
+    return;
+  }
+
   const filePath = resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
 
   if (!filePath) {
@@ -417,5 +424,5 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`TownSquare demo running at http://${HOST}:${PORT}`);
+  console.log(`TownSquare server running at http://${HOST}:${PORT}`);
 });

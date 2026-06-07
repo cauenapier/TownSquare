@@ -2,11 +2,11 @@
   "name": "townsquare",
   "version": "0.1.0",
   "private": true,
-  "description": "First playable TownSquare slice: embeddable presence, walking, and chat.",
+  "description": "Embeddable TownSquare slice: self-hostable realtime presence, walking, chat, and a default scene.",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/widget.js",
+    "check": "node --check server.js && node --check public/demo.mjs && node --check public/townsquare.mjs",
     "smoke": "node scripts/smoke-test.js"
   },
   "dependencies": {
