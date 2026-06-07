@@ -5,4 +5,6 @@ if (!root) {
   throw new Error("TownSquare demo root element not found");
 }
 
-mountTownSquare(root);
+mountTownSquare(root, {
+  socketPath: "/townsquare/live",
+});

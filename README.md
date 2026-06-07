@@ -99,15 +99,49 @@ A site can embed the widget by loading the CSS plus the module from the TownSqua
   import { mountTownSquare } from "https://your-townsquare-host/townsquare.mjs";
 
   mountTownSquare(document.getElementById("townsquare-root"), {
-    serverOrigin: "https://your-townsquare-host"
+    serverOrigin: "https://your-townsquare-host",
+    socketPath: "/live"
   });
 </script>
 ```
 
 Notes:
 - `serverOrigin` is the realtime/backend origin the widget should connect to.
+- `socketPath` defaults to `/live`; set it explicitly when your reverse proxy exposes TownSquare on a different websocket path such as `/townsquare/live`.
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
+
+## Deploy updates to the shared Hetzner host
+
+This repo includes a deployment helper:
+
+```bash
+cp .env.deploy.example .env.deploy.local
+scripts/deploy.sh
+```
+
+Useful flags:
+
+```bash
+scripts/deploy.sh --skip-checks
+scripts/deploy.sh --ref origin/main
+scripts/deploy.sh --env-file ./ops/my-deploy.env
+```
+
+The script:
+- runs local syntax checks unless skipped
+- archives the chosen git ref
+- uploads it to the server
+- creates a new release under `/opt/townsquare/releases`
+- runs `npm ci --omit=dev` on the server
+- flips `/opt/townsquare/current`
+- restarts `townsquare.service`
+- checks the local health endpoint
+- optionally checks a public health endpoint when `HEALTHCHECK_URL` is set
+
+It expects a machine with working `ssh` and `scp` access to the server.
+
+The checked-in `.env.deploy.example` is generic. Keep real deployment values in `.env.deploy.local` or another uncommitted env file.
 
 ## Docker
 

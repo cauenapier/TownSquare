@@ -1,6 +1,9 @@
 # Ignore local install artifacts
 node_modules/
 
+# Local deploy config
+.env.deploy.local
+
 # Logs
 npm-debug.log*
 

@@ -52,7 +52,8 @@ Serve TownSquare somewhere reachable, then add this to the host website:
   import { mountTownSquare } from "https://your-townsquare-host/townsquare.mjs";
 
   mountTownSquare(document.getElementById("townsquare-root"), {
-    serverOrigin: "https://your-townsquare-host"
+    serverOrigin: "https://your-townsquare-host",
+    socketPath: "/live"
   });
 </script>
 ```
@@ -72,6 +73,23 @@ Requirements:
 - forward normal HTTP traffic
 - support WebSocket upgrade requests on `/live`
 - keep the TownSquare origin stable so widget asset URLs and WebSocket URLs stay aligned
+
+If you expose TownSquare under a path-prefixed websocket route such as `/townsquare/live`, pass that path explicitly in `mountTownSquare(..., { socketPath: "/townsquare/live" })`.
+
+## Generic release deploy helper
+
+This repo ships a generic deploy helper at `scripts/deploy.sh`.
+
+Suggested setup:
+
+```bash
+cp .env.deploy.example .env.deploy.local
+scripts/deploy.sh
+```
+
+`deploy.sh` sources `.env.deploy.local` by default if it exists, or you can pass a custom file with `--env-file path/to/file`.
+
+Keep real deployment values out of git.
 
 ## Health checks
 
