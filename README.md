@@ -70,11 +70,12 @@ HOST=0.0.0.0 PORT=8787 npm start
 3. Open it in two windows or two browsers.
 
 4. Verify the first slice manually:
-   - both visitors appear
+   - opening the page in two tabs of the same browser still shows only one shared visitor
+   - opening it in a different browser or separate browser profile shows a second visitor
    - arrow keys move your figure left/right
    - movement is reflected in the other window
    - chat messages appear above the figure and disappear after a few seconds
-   - closing one window removes that visitor from the other window
+   - closing one window removes that visitor from the other window only when it was the last tab for that browser
 
 ## Checks
 

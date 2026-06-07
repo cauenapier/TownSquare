@@ -12,12 +12,14 @@ if (!root) {
  */
 
 const BUBBLE_TTL_MS = 6000;
+const BROWSER_ID_KEY = "townsquare-browser-id";
 const MOVEMENT_SPEED = 0.22;
 const SEND_INTERVAL_MS = 45;
 const MIN_X = 0.02;
 const MAX_X = 0.98;
 
 const socketUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/live`;
+const browserId = getBrowserId();
 const peers = new Map();
 
 const app = renderShell();
@@ -155,6 +157,24 @@ function createAvatar({ isSelf }) {
   };
 }
 
+function getBrowserId() {
+  try {
+    const existing = localStorage.getItem(BROWSER_ID_KEY);
+    if (existing) {
+      return existing;
+    }
+
+    const nextId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+    localStorage.setItem(BROWSER_ID_KEY, nextId);
+    return nextId;
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 function submitChat(input, composer) {
   const text = input.value.trim();
   if (!text || socket.readyState !== WebSocket.OPEN) return;
@@ -226,7 +246,7 @@ function removePeer(id) {
 
 function wireSocket(ws) {
   ws.addEventListener("open", () => {
-    ws.send(JSON.stringify({ type: "init", x: self.x }));
+    ws.send(JSON.stringify({ type: "init", browserId, x: self.x }));
   });
 
   ws.addEventListener("message", (event) => {
@@ -252,6 +272,19 @@ function wireSocket(ws) {
     }
 
     if (message.type === "move") {
+      if (message.id === self.id) {
+        const previousX = self.x;
+        self.x = message.x;
+        renderAvatar(self.avatar, self.x);
+        if (self.x !== previousX) {
+          setFacing(self.avatar, self.x < previousX);
+        }
+        setWalking(self.avatar, true);
+        clearTimeout(self.walkTimer);
+        self.walkTimer = setTimeout(() => setWalking(self.avatar, false), 120);
+        return;
+      }
+
       const peer = peers.get(message.id);
       if (!peer) return;
       const previousX = peer.x;
@@ -267,7 +300,11 @@ function wireSocket(ws) {
     }
 
     if (message.type === "say") {
-      if (message.id === self.id) return;
+      if (message.id === self.id) {
+        showBubble(self.avatar, message.text);
+        return;
+      }
+
       const peer = peers.get(message.id);
       if (!peer) return;
       showBubble(peer.avatar, message.text);

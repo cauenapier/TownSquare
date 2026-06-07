@@ -2,20 +2,20 @@ const WebSocket = require("ws");
 
 const SERVER_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
 
-function connect(x) {
+function connect({ x, browserId }) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(SERVER_URL);
     const seen = [];
 
     ws.on("open", () => {
-      ws.send(JSON.stringify({ type: "init", x }));
+      ws.send(JSON.stringify({ type: "init", x, browserId }));
     });
 
     ws.on("message", (buffer) => {
       const message = JSON.parse(String(buffer));
       seen.push(message);
       if (message.type === "hello") {
-        resolve({ ws, seen, id: message.id });
+        resolve({ ws, seen, id: message.id, hello: message });
       }
     });
 
@@ -34,26 +34,41 @@ function assert(condition, message) {
 }
 
 async function main() {
-  const first = await connect(0.25);
-  const second = await connect(0.75);
+  const first = await connect({ x: 0.25, browserId: "browser-a" });
+  const secondSameBrowser = await connect({ x: 0.75, browserId: "browser-a" });
 
   await delay(100);
-  second.ws.send(JSON.stringify({ type: "move", x: 0.62 }));
-  await delay(100);
-  second.ws.send(JSON.stringify({ type: "say", text: "hello from smoke test" }));
-  await delay(100);
-  second.ws.close();
+
+  assert(first.id === secondSameBrowser.id, "same-browser tabs did not reuse one shared identity");
+  assert(secondSameBrowser.hello.peers.length === 0, "same-browser tab should not see itself as a peer");
+  assert(!first.seen.some((message) => message.type === "join"), "same-browser tab incorrectly triggered a join event");
+
+  const third = await connect({ x: 0.62, browserId: "browser-b" });
+
   await delay(100);
 
-  const firstTypes = first.seen.map((message) => message.type);
-  const secondTypes = second.seen.map((message) => message.type);
+  assert(third.hello.peers.length === 1, "third client should see one existing visitor, not one per tab");
+  assert(first.seen.some((message) => message.type === "join" && message.peer.id === third.id), "first client did not observe different-browser join");
 
-  assert(firstTypes.includes("join"), "first client did not observe peer join");
-  assert(firstTypes.includes("move"), "first client did not observe peer movement");
-  assert(firstTypes.includes("say"), "first client did not observe peer chat");
-  assert(firstTypes.includes("leave"), "first client did not observe peer leave");
-  assert(secondTypes.includes("hello"), "second client did not receive initial hello");
-  assert(second.seen.some((message) => message.type === "hello" && Array.isArray(message.peers) && message.peers.length === 1), "second client did not receive expected peer snapshot");
+  secondSameBrowser.ws.send(JSON.stringify({ type: "move", x: 0.58 }));
+  await delay(100);
+  secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: "hello from shared browser" }));
+  await delay(100);
+
+  assert(first.seen.some((message) => message.type === "move" && message.id === first.id), "same-browser move did not propagate to sibling tab");
+  assert(first.seen.some((message) => message.type === "say" && message.id === first.id), "same-browser chat did not propagate to sibling tab");
+  assert(third.seen.some((message) => message.type === "move" && message.id === first.id), "different browser did not observe shared visitor movement");
+  assert(third.seen.some((message) => message.type === "say" && message.id === first.id), "different browser did not observe shared visitor chat");
+
+  secondSameBrowser.ws.close();
+  await delay(100);
+
+  assert(!first.seen.some((message) => message.type === "leave" && message.id === first.id), "closing one same-browser tab incorrectly removed the shared visitor");
+
+  third.ws.close();
+  await delay(1700);
+
+  assert(first.seen.some((message) => message.type === "leave" && message.id === third.id), "first client did not observe different-browser leave");
 
   console.log("Smoke test passed.");
   first.ws.close();

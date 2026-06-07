@@ -9,6 +9,7 @@ const { WebSocketServer } = require("ws");
  * Responsibilities:
  * - serve the demo page and widget assets from ./public
  * - keep a short-lived in-memory list of connected visitors
+ * - treat multiple tabs from the same browser as one visitor identity
  * - broadcast movement/chat/presence events over WebSocket
  *
  * Non-goals for this first slice:
@@ -21,8 +22,10 @@ const { WebSocketServer } = require("ws");
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8787);
 const PUBLIC_DIR = path.join(__dirname, "public");
+const MAX_BROWSER_ID_LEN = 80;
 const MAX_MESSAGE_LEN = 140;
 const MOVE_THROTTLE_MS = 40;
+const RECONNECT_GRACE_MS = 1500;
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -33,14 +36,28 @@ const MIME_TYPES = {
   ".svg": "image/svg+xml",
 };
 
-/** @returns {{id:number,ws:any,x:number,joined:boolean,lastMoveAt:number}} */
-function createClient(id, ws) {
+/** @returns {{connectionId:number,ws:any,browserId:string,identity:any,x:number,joined:boolean,lastMoveAt:number}} */
+function createClient(connectionId, ws) {
   return {
-    id,
+    connectionId,
     ws,
+    browserId: "",
+    identity: null,
     x: 0.5,
     joined: false,
     lastMoveAt: 0,
+  };
+}
+
+/** @returns {{id:number,browserId:string,x:number,clients:Set<any>,joined:boolean,leaveTimer:any}} */
+function createIdentity(id, browserId, x) {
+  return {
+    id,
+    browserId,
+    x,
+    clients: new Set(),
+    joined: false,
+    leaveTimer: null,
   };
 }
 
@@ -48,6 +65,11 @@ function clampPosition(x) {
   if (typeof x !== "number" || Number.isNaN(x)) return null;
   if (x < 0 || x > 1) return null;
   return x;
+}
+
+function sanitizeBrowserId(browserId) {
+  if (typeof browserId !== "string") return "";
+  return browserId.slice(0, MAX_BROWSER_ID_LEN).replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
 function sanitizeMessage(text) {
@@ -78,24 +100,63 @@ function send(ws, message) {
   ws.send(JSON.stringify(message));
 }
 
-function snapshotClient(client) {
+function snapshotIdentity(identity) {
   return {
-    id: client.id,
-    x: client.x,
+    id: identity.id,
+    x: identity.x,
   };
 }
 
-const clients = new Map();
-let nextClientId = 1;
+function clearLeaveTimer(identity) {
+  if (!identity.leaveTimer) return;
+  clearTimeout(identity.leaveTimer);
+  identity.leaveTimer = null;
+}
+
+function removeIdentity(identity) {
+  identities.delete(identity.id);
+  identityByBrowser.delete(identity.browserId);
+}
 
 function broadcast(message, options = {}) {
-  const { exceptId = null } = options;
+  const { exceptConnectionId = null } = options;
   const payload = JSON.stringify(message);
 
   for (const client of clients.values()) {
-    if (client.id === exceptId) continue;
+    if (!client.joined) continue;
+    if (client.connectionId === exceptConnectionId) continue;
     if (client.ws.readyState !== client.ws.OPEN) continue;
     client.ws.send(payload);
+  }
+}
+
+function getOrCreateIdentity(browserId, fallbackX) {
+  const key = sanitizeBrowserId(browserId) || `connection-${nextConnectionKey++}`;
+  const existing = identityByBrowser.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const identity = createIdentity(nextIdentityId++, key, fallbackX);
+  identities.set(identity.id, identity);
+  identityByBrowser.set(key, identity);
+  return identity;
+}
+
+const clients = new Map();
+const identities = new Map();
+const identityByBrowser = new Map();
+let nextIdentityId = 1;
+let nextConnectionId = 1;
+let nextConnectionKey = 1;
+
+function finalizeDisconnect(identity) {
+  if (identity.clients.size > 0) return;
+  const hadJoined = identity.joined;
+  removeIdentity(identity);
+
+  if (hadJoined) {
+    broadcast({ type: "leave", id: identity.id });
   }
 }
 
@@ -135,23 +196,37 @@ function handleInit(client, message) {
     client.x = nextX;
   }
 
-  client.joined = true;
-  clients.set(client.id, client);
+  const identity = getOrCreateIdentity(message.browserId, client.x);
+  clearLeaveTimer(identity);
 
-  const peers = Array.from(clients.values())
-    .filter((peer) => peer.id !== client.id)
-    .map(snapshotClient);
+  client.browserId = identity.browserId;
+  client.identity = identity;
+  client.joined = true;
+  client.x = identity.x;
+  identity.clients.add(client);
+
+  const peers = Array.from(identities.values())
+    .filter((peer) => peer.joined && peer.id !== identity.id)
+    .map(snapshotIdentity);
 
   send(client.ws, {
     type: "hello",
-    id: client.id,
+    id: identity.id,
+    x: identity.x,
     peers,
   });
 
-  broadcast({ type: "join", peer: snapshotClient(client) }, { exceptId: client.id });
+  if (identity.joined) {
+    return;
+  }
+
+  identity.joined = true;
+  broadcast({ type: "join", peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
 }
 
 function handleMove(client, message) {
+  if (!client.identity) return;
+
   const nextX = clampPosition(message.x);
   if (nextX === null) return;
 
@@ -160,19 +235,29 @@ function handleMove(client, message) {
 
   client.lastMoveAt = now;
   client.x = nextX;
-  broadcast({ type: "move", id: client.id, x: client.x }, { exceptId: client.id });
+  client.identity.x = nextX;
+
+  broadcast(
+    { type: "move", id: client.identity.id, x: client.identity.x },
+    { exceptConnectionId: client.connectionId },
+  );
 }
 
 function handleSay(client, message) {
+  if (!client.identity) return;
+
   const text = sanitizeMessage(message.text);
   if (!text) return;
 
-  broadcast({
-    type: "say",
-    id: client.id,
-    text,
-    at: Date.now(),
-  });
+  broadcast(
+    {
+      type: "say",
+      id: client.identity.id,
+      text,
+      at: Date.now(),
+    },
+    { exceptConnectionId: client.connectionId },
+  );
 }
 
 function handleClientMessage(client, raw) {
@@ -203,16 +288,35 @@ function handleClientMessage(client, raw) {
 }
 
 function handleClientClose(client) {
-  if (!client.joined) return;
-  clients.delete(client.id);
-  broadcast({ type: "leave", id: client.id }, { exceptId: client.id });
+  if (!client.joined || !client.identity) return;
+
+  const identity = client.identity;
+  identity.clients.delete(client);
+  client.joined = false;
+  client.identity = null;
+
+  if (identity.clients.size > 0) {
+    return;
+  }
+
+  identity.leaveTimer = setTimeout(() => {
+    identity.leaveTimer = null;
+    finalizeDisconnect(identity);
+  }, RECONNECT_GRACE_MS);
 }
 
 wss.on("connection", (ws) => {
-  const client = createClient(nextClientId++, ws);
+  const client = createClient(nextConnectionId++, ws);
+  clients.set(client.connectionId, client);
 
   ws.on("message", (raw) => handleClientMessage(client, raw));
-  ws.on("close", () => handleClientClose(client));
+  ws.on("close", () => {
+    clients.delete(client.connectionId);
+    handleClientClose(client);
+  });
+  ws.on("error", () => {
+    // close handler owns cleanup
+  });
 });
 
 server.listen(PORT, HOST, () => {
