@@ -116,14 +116,12 @@ function isKnownMessageType(type) {
   return type === "init" || type === "move" || type === "settle" || type === "say";
 }
 
-/** @returns {{connectionId:number,ws:any,browserId:string,identity:any,x:number,joined:boolean,lastMoveAt:number,lastChatAt:number}} */
+/** @returns {{connectionId:number,ws:any,identity:any,joined:boolean,lastMoveAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws) {
   return {
     connectionId,
     ws,
-    browserId: "",
     identity: null,
-    x: 0.5,
     joined: false,
     lastMoveAt: 0,
     lastChatAt: 0,
@@ -230,8 +228,8 @@ function emitIdentityState(identity, options = {}) {
   broadcast(message, { exceptConnectionId });
 }
 
-function getOrCreateIdentity(browserId, fallbackX) {
-  const key = sanitizeBrowserId(browserId) || `connection-${nextConnectionKey++}`;
+function getOrCreateIdentity(browserId, fallbackX, connectionId) {
+  const key = sanitizeBrowserId(browserId) || `connection-${connectionId}`;
   const existing = identityByBrowser.get(key);
   if (existing) {
     return existing;
@@ -279,7 +277,6 @@ const identities = new Map();
 const identityByBrowser = new Map();
 let nextIdentityId = 1;
 let nextConnectionId = 1;
-let nextConnectionKey = 1;
 
 function finalizeDisconnect(identity) {
   if (identity.clients.size > 0) return;
@@ -346,17 +343,13 @@ function handleInit(client, message) {
   if (client.joined) return;
 
   const nextX = clampPosition(message.x);
-  if (nextX !== null) {
-    client.x = nextX;
-  }
+  const fallbackX = nextX ?? 0.5;
 
-  const identity = getOrCreateIdentity(message.browserId, client.x);
+  const identity = getOrCreateIdentity(message.browserId, fallbackX, client.connectionId);
   clearLeaveTimer(identity);
 
-  client.browserId = identity.browserId;
   client.identity = identity;
   client.joined = true;
-  client.x = identity.x;
   identity.clients.add(client);
 
   const peers = Array.from(identities.values())
@@ -391,7 +384,6 @@ function handleMove(client, message) {
   if (now - client.lastMoveAt < MOVE_THROTTLE_MS) return;
 
   client.lastMoveAt = now;
-  client.x = nextX;
   client.identity.x = nextX;
   clearPose(client.identity);
 
@@ -411,7 +403,6 @@ function handleSettle(client, message) {
   identity.x = seatX;
   identity.pose = BENCH.pose;
   identity.propId = BENCH.id;
-  client.x = seatX;
 
   emitIdentityState(identity);
 }
