@@ -188,6 +188,19 @@ function getContentType(filePath) {
   return MIME_TYPES[path.extname(filePath)] || "application/octet-stream";
 }
 
+function getStaticHeaders(filePath) {
+  const headers = {
+    "cache-control": "no-store",
+    "content-type": getContentType(filePath),
+  };
+
+  if ([".css", ".mjs"].includes(path.extname(filePath))) {
+    headers["access-control-allow-origin"] = "*";
+  }
+
+  return headers;
+}
+
 function resolvePublicFile(requestUrl, hostHeader) {
   const pathname = requestUrl === "/"
     ? "/index.html"
@@ -637,10 +650,7 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    res.writeHead(200, {
-      "cache-control": "no-store",
-      "content-type": getContentType(filePath),
-    });
+    res.writeHead(200, getStaticHeaders(filePath));
     res.end(data);
   });
 });

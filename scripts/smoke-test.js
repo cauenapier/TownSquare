@@ -44,6 +44,15 @@ async function createSite(name) {
   return body;
 }
 
+async function assertEmbeddableAssetsAreCrossOriginLoadable() {
+  const response = await fetch(`${HTTP_ORIGIN}/townsquare.mjs`);
+  assert(response.ok, "townsquare module was not served");
+  assert(
+    response.headers.get("access-control-allow-origin") === "*",
+    "townsquare module is missing cross-origin embed headers",
+  );
+}
+
 async function delay(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -64,6 +73,8 @@ function findLast(messages, predicate) {
 }
 
 async function main() {
+  await assertEmbeddableAssetsAreCrossOriginLoadable();
+
   const first = await connect({ x: 0.25, browserId: "browser-a" });
   const secondSameBrowser = await connect({ x: 0.75, browserId: "browser-a" });
 
