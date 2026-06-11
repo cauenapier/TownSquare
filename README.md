@@ -135,7 +135,7 @@ TownSquare can also run as a tiny hosted service.
 Open:
 
 ```text
-https://your-townsquare-host/register.html
+https://your-townsquare-host/register
 ```
 
 The flow is intentionally accountless:

@@ -74,7 +74,7 @@ A future self-hosted TownSquare may also choose to communicate with other TownSq
 For a shared hosted server, open:
 
 ```text
-https://your-townsquare-host/register.html
+https://your-townsquare-host/register
 ```
 
 The hosted flow does not require an owner account:

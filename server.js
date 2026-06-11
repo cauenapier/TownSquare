@@ -202,9 +202,13 @@ function getStaticHeaders(filePath) {
 }
 
 function resolvePublicFile(requestUrl, hostHeader) {
-  const pathname = requestUrl === "/"
-    ? "/index.html"
-    : new URL(requestUrl, `http://${hostHeader}`).pathname;
+  const url = new URL(requestUrl, `http://${hostHeader}`);
+  const aliases = new Map([
+    ["/", "/index.html"],
+    ["/register", "/register.html"],
+    ["/admin", "/admin.html"],
+  ]);
+  const pathname = aliases.get(url.pathname) || url.pathname;
   const normalized = path.normalize(pathname).replace(/^\.+/, "");
   const filePath = path.join(PUBLIC_DIR, normalized);
 
