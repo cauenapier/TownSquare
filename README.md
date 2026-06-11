@@ -170,9 +170,19 @@ cp .env.deploy.example .env.deploy.local
 scripts/deploy.sh
 ```
 
+On the shared host checkout, `.env.deploy.local` can use local mode so redeploys do not need SSH:
+
+```bash
+DEPLOY_MODE=local
+DEPLOY_ROOT=/opt/townsquare
+DEPLOY_SERVICE=townsquare.service
+DEPLOY_PORT=8788
+```
+
 Useful flags:
 
 ```bash
+scripts/deploy.sh --local
 scripts/deploy.sh --skip-checks
 scripts/deploy.sh --ref origin/main
 scripts/deploy.sh --env-file ./ops/my-deploy.env
@@ -181,15 +191,16 @@ scripts/deploy.sh --env-file ./ops/my-deploy.env
 The script:
 - runs local syntax checks unless skipped
 - archives the chosen git ref
-- uploads it to the server
+- uploads it to the server for remote deploys, or deploys directly in local mode
 - creates a new release under `/opt/townsquare/releases`
-- runs `npm ci --omit=dev` on the server
+- runs `npm ci --omit=dev`
 - flips `/opt/townsquare/current`
 - restarts `townsquare.service`
 - checks the local health endpoint
 - optionally checks a public health endpoint when `HEALTHCHECK_URL` is set
 
-It expects a machine with working `ssh` and `scp` access to the server.
+Remote mode expects a machine with working `ssh` and `scp` access to the server.
+Local mode expects permission to write the deploy root and restart the service, usually via root or sudo.
 
 The checked-in `.env.deploy.example` is generic. Keep real deployment values in `.env.deploy.local` or another uncommitted env file.
 

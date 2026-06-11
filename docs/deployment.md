@@ -121,6 +121,8 @@ scripts/deploy.sh
 ```
 
 `deploy.sh` sources `.env.deploy.local` by default if it exists, or you can pass a custom file with `--env-file path/to/file`.
+Set `DEPLOY_MODE=local` in that file, or pass `--local`, when running directly on the host that owns `/opt/townsquare`.
+Local mode skips SSH and deploys the archive directly before restarting the configured systemd service.
 
 Keep real deployment values out of git.
 
