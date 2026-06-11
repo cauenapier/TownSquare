@@ -22,6 +22,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `public/demo.mjs` — local demo bootstrap
 - `public/index.html` — demo host page for local development
 - `public/dev.html` — local simulation page for configurable walking/talking characters
+- `public/walk-sandbox.html` — local walk-cycle inspection sandbox
 - `scripts/smoke-test.js` — automated websocket smoke test
 - `spec.md` — product truth
 - `roadmap.md` — product-facing sequencing
@@ -92,6 +93,12 @@ For local scene stress testing with one controllable local user plus simulated v
 
 ```text
 http://127.0.0.1:8787/dev.html?characters=24
+```
+
+For frame-by-frame walk-cycle review, use:
+
+```text
+http://127.0.0.1:8787/walk-sandbox.html
 ```
 
 ## Embed the widget into another site

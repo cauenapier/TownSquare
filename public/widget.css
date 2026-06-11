@@ -277,6 +277,137 @@ body {
   height: 360px;
 }
 
+.walk-page {
+  min-height: 100vh;
+}
+
+.walk-shell {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 22px 14px 28px;
+}
+
+.walk-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 4px 18px;
+}
+
+.walk-toolbar h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 4vw, 2.6rem);
+  line-height: 1;
+}
+
+.walk-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.walk-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 650 1.4rem/1 var(--font);
+  cursor: pointer;
+}
+
+.walk-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: min(68vh, 680px);
+  border-top: 1px solid var(--line);
+  border-radius: var(--r) var(--r) 0 0;
+  background: linear-gradient(
+    180deg,
+    var(--scene) 0%,
+    var(--scene) 72%,
+    var(--scene-edge) 72%,
+    var(--page) 72.4%,
+    var(--page) 100%
+  );
+  overflow: hidden;
+}
+
+.walk-preview {
+  position: relative;
+  z-index: 1;
+  width: min(300px, 54vw);
+  aspect-ratio: 20 / 44;
+  color: var(--you);
+  filter: drop-shadow(0 16px 18px rgba(0,0,0,0.12));
+}
+
+.walk-preview svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.walk-preview svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.walk-preview svg circle.head {
+  fill: currentColor;
+}
+
+.walk-figure--left {
+  transform: scaleX(-1);
+  transform-origin: 50% 50%;
+}
+
+.walk-ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 27.6%;
+  height: 1px;
+  background: var(--ground);
+}
+
+.walk-timeline {
+  display: grid;
+  gap: 12px;
+  padding: 16px 4px 0;
+}
+
+.walk-slider {
+  display: grid;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.walk-slider input {
+  width: 100%;
+  accent-color: var(--you);
+}
+
+.walk-readout {
+  min-height: 40px;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .avatar {
   --walk-cycle: 1.2s;
   position: absolute;
@@ -354,6 +485,18 @@ body {
 .avatar.walking svg g.arm-r { animation-name: presence-arm-b; }
 .avatar.walking svg g.elbow-l { animation-name: presence-forearm-a; }
 .avatar.walking svg g.elbow-r { animation-name: presence-forearm-b; }
+
+.avatar.flip.walking svg g.figure-core,
+.avatar.flip.walking svg g.leg-l,
+.avatar.flip.walking svg g.leg-r,
+.avatar.flip.walking svg g.knee-l,
+.avatar.flip.walking svg g.knee-r,
+.avatar.flip.walking svg g.arm-l,
+.avatar.flip.walking svg g.arm-r,
+.avatar.flip.walking svg g.elbow-l,
+.avatar.flip.walking svg g.elbow-r {
+  animation-direction: reverse;
+}
 
 @keyframes presence-body-bob {
   0%, 100% { transform: translateY(0.6px) rotate(-0.8deg); }
@@ -722,5 +865,15 @@ body {
   }
   .dev-host .townsquare__stage {
     height: 300px;
+  }
+  .walk-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .walk-controls {
+    flex-wrap: wrap;
+  }
+  .walk-stage {
+    min-height: 58vh;
   }
 }

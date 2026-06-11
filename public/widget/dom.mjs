@@ -264,7 +264,7 @@ export function renderAvatar(avatar, x) {
  * @param {boolean} movingLeft
  */
 export function setFacing(avatar, movingLeft) {
-  avatar.el.classList.toggle("flip", !movingLeft);
+  avatar.el.classList.toggle("flip", movingLeft);
 }
 
 /**
