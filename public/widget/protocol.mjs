@@ -15,6 +15,14 @@ import {
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
  */
 
+const WALK_BUMP_MS = 120;
+
+function bumpWalking(presence) {
+  setWalking(presence.avatar, true);
+  clearTimeout(presence.walkTimer);
+  presence.walkTimer = setTimeout(() => setWalking(presence.avatar, false), WALK_BUMP_MS);
+}
+
 /**
  * Attach realtime handlers to the widget socket.
  *
@@ -69,18 +77,14 @@ export function wireSocket(ctx) {
         const wasSitting = self.pose === "sitting";
         applySelfState(ctx, message);
         if (!self.pose && !wasSitting) {
-          setWalking(self.avatar, true);
-          clearTimeout(self.walkTimer);
-          self.walkTimer = setTimeout(() => setWalking(self.avatar, false), 120);
+          bumpWalking(self);
         }
         return;
       }
 
       const peer = applyPeerState(ctx, message);
       if (!peer.pose) {
-        setWalking(peer.avatar, true);
-        clearTimeout(peer.walkTimer);
-        peer.walkTimer = setTimeout(() => setWalking(peer.avatar, false), 120);
+        bumpWalking(peer);
       }
       return;
     }

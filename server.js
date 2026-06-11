@@ -112,9 +112,12 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isKnownMessageType(type) {
-  return type === "init" || type === "move" || type === "settle" || type === "say";
-}
+const MESSAGE_HANDLERS = {
+  init: handleInit,
+  move: handleMove,
+  settle: handleSettle,
+  say: handleSay,
+};
 
 /** @returns {{connectionId:number,ws:any,identity:any,joined:boolean,lastMoveAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws) {
@@ -440,28 +443,14 @@ function handleClientMessage(client, raw) {
   }
 
   if (!isPlainObject(message)) return;
-  if (typeof message.type !== "string" || !isKnownMessageType(message.type)) return;
+  if (typeof message.type !== "string") return;
 
-  if (message.type === "init") {
-    handleInit(client, message);
-    return;
-  }
+  const handler = MESSAGE_HANDLERS[message.type];
+  if (typeof handler !== "function") return;
 
-  if (!client.joined) return;
+  if (message.type !== "init" && !client.joined) return;
 
-  if (message.type === "move") {
-    handleMove(client, message);
-    return;
-  }
-
-  if (message.type === "settle") {
-    handleSettle(client, message);
-    return;
-  }
-
-  if (message.type === "say") {
-    handleSay(client, message);
-  }
+  handler(client, message);
 }
 
 function handleClientClose(client) {

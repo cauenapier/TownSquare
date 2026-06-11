@@ -58,12 +58,7 @@ export function mountTownSquare(root, options = {}) {
 
   root.replaceChildren();
 
-  const app = renderShell(root, options);
-  const stage = app.querySelector('[data-role="stage"]');
-  const statusEl = app.querySelector('[data-role="status"]');
-  if (!(stage instanceof HTMLElement) || !(statusEl instanceof HTMLElement)) {
-    throw new Error("TownSquare shell is missing required scene elements");
-  }
+  const { app, stage, status: statusEl } = renderShell(root, options);
 
   renderBench(stage);
 

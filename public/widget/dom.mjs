@@ -45,7 +45,7 @@ const ENTER_ICON = `
  *
  * @param {HTMLElement} container
  * @param {import("../townsquare.mjs").MountOptions} mountOptions
- * @returns {HTMLElement}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, status: HTMLElement }}
  */
 export function renderShell(container, mountOptions) {
   const element = document.createElement("section");
@@ -55,7 +55,6 @@ export function renderShell(container, mountOptions) {
   statusRow.className = "townsquare__status";
 
   const status = document.createElement("span");
-  status.dataset.role = "status";
   status.textContent = "Connecting…";
 
   const instructions = document.createElement("span");
@@ -65,7 +64,6 @@ export function renderShell(container, mountOptions) {
 
   const stageEl = document.createElement("div");
   stageEl.className = "townsquare__stage";
-  stageEl.dataset.role = "stage";
 
   const ground = document.createElement("div");
   ground.className = "townsquare__ground";
@@ -77,7 +75,7 @@ export function renderShell(container, mountOptions) {
 
   element.append(statusRow, stageEl, hint);
   container.appendChild(element);
-  return element;
+  return { app: element, stage: stageEl, status };
 }
 
 /**

@@ -194,15 +194,10 @@ function stepSelf(self, now, dt) {
 function mountDevScene(count, walking) {
   root.replaceChildren();
 
-  const app = renderShell(root, {
+  const { stage, status } = renderShell(root, {
     instructions: "Use ← and → to walk. Click your nameplate to talk. Pause by the bench to sit.",
     hint: "Use ?characters=24 to deep-link a larger crowd.",
   });
-  const stage = app.querySelector('[data-role="stage"]');
-  const status = app.querySelector('[data-role="status"]');
-  if (!(stage instanceof HTMLElement) || !(status instanceof HTMLElement)) {
-    throw new Error("Dev scene shell is missing required elements");
-  }
 
   renderBench(stage);
   status.textContent = `You plus ${count} simulated ${count === 1 ? "character" : "characters"}`;
