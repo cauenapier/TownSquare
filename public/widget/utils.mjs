@@ -5,6 +5,7 @@
 import {
   BROWSER_ID_KEY,
   CHARACTER_COLORS,
+  DEFAULT_CHARACTER_COLOR,
   DISPLAY_NAME_MAX,
   PROFILE_STORAGE_KEY,
   READING_LABEL_MAX,
@@ -38,7 +39,7 @@ export function getBrowserId() {
  * @returns {string}
  */
 export function normalizeCharacterColor(value) {
-  return CHARACTER_COLORS.includes(value) ? value : CHARACTER_COLORS[0];
+  return CHARACTER_COLORS.includes(value) ? value : DEFAULT_CHARACTER_COLOR;
 }
 
 /**
@@ -143,7 +144,7 @@ export function getStoredProfile() {
       color: normalizeCharacterColor(data.color),
     };
   } catch {
-    return { displayName: "", color: CHARACTER_COLORS[0] };
+    return { displayName: "", color: DEFAULT_CHARACTER_COLOR };
   }
 }
 

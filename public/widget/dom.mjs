@@ -2,7 +2,7 @@
  * DOM construction and avatar/scene rendering for the TownSquare widget.
  */
 
-import { DISPLAY_NAME_MAX, PROPS, READING_LABEL_MAX } from "./constants.mjs";
+import { DISPLAY_NAME_MAX, MESSAGE_MAX, PROPS, READING_LABEL_MAX } from "./constants.mjs";
 import { figureMarkup } from "./figure.mjs";
 
 /**
@@ -321,7 +321,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   const profileInput = document.createElement("input");
   profileInput.className = "avatar__profile-input";
   profileInput.type = "text";
-  profileInput.maxLength = 18;
+  profileInput.maxLength = DISPLAY_NAME_MAX;
   profileInput.placeholder = "Display name";
   profileInput.autocomplete = "off";
   profileInput.setAttribute("aria-label", "Display name");
@@ -356,7 +356,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   const input = document.createElement("input");
   input.className = "avatar__input";
   input.type = "text";
-  input.maxLength = 140;
+  input.maxLength = MESSAGE_MAX;
   input.placeholder = "Say something…";
   input.setAttribute("aria-label", "Say something");
 

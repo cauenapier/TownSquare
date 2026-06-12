@@ -43,31 +43,30 @@ const DEFAULT_DEV_ORIGINS = new Set([
 const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 100);
 const MAX_BROWSER_ID_LEN = 80;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
-const MAX_MESSAGE_LEN = 140;
-const MAX_DISPLAY_NAME_LEN = 18;
-const MAX_READING_LABEL_LEN = 42;
 const MAX_READING_URL_LEN = 240;
-const MAX_RECENT_MESSAGES = 5;
 const MAX_SITE_NAME_LEN = 80;
 const MAX_ORIGIN_LEN = 240;
 const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
-const MIN_X = 0.02;
-const MAX_X = 0.98;
 const MOVE_THROTTLE_MS = 40;
 const CHAT_THROTTLE_MS = 1500;
 const RECONNECT_GRACE_MS = 1500;
 const HEARTBEAT_INTERVAL_MS = 30000;
 const TELEGRAM_API_TIMEOUT_MS = 5000;
-const CHARACTER_COLORS = new Set([
-  "#c8641f",
-  "#3f7f63",
-  "#3f6fb5",
-  "#8a5fb1",
-  "#b44f6f",
-  "#5f6b73",
-]);
+
+// Wire-protocol limits and the character palette, shared with the widget.
+// Populated from public/shared-constants.mjs in startServer (the server is
+// CommonJS, so the shared ES module is loaded via dynamic import).
+let MIN_X;
+let MAX_X;
+let MAX_MESSAGE_LEN;
+let MAX_DISPLAY_NAME_LEN;
+let MAX_READING_LABEL_LEN;
+let MAX_RECENT_MESSAGES;
+let DEFAULT_CHARACTER_COLOR;
+/** @type {Set<string>} */
+let CHARACTER_COLORS = new Set();
 
 function loadEnvFile(filePath = path.join(__dirname, ".env")) {
   try {
@@ -195,7 +194,7 @@ function createIdentity(id, browserId, x) {
     pose: null,
     propId: null,
     displayName: "",
-    color: "#5f6b73",
+    color: DEFAULT_CHARACTER_COLOR,
     readingLabel: "",
     readingUrl: "",
     clients: new Set(),
@@ -246,7 +245,7 @@ function sanitizeReadingUrl(readingUrl) {
 }
 
 function sanitizeCharacterColor(color) {
-  return CHARACTER_COLORS.has(color) ? color : "#5f6b73";
+  return CHARACTER_COLORS.has(color) ? color : DEFAULT_CHARACTER_COLOR;
 }
 
 function sanitizeSiteName(name, origin) {
@@ -1382,6 +1381,16 @@ wss.on("close", () => {
 async function startServer() {
   const { PROPS } = await import("./public/scene-props.mjs");
   PROPS_BY_ID = new Map(PROPS.map((prop) => [prop.id, prop]));
+
+  const shared = await import("./public/shared-constants.mjs");
+  MIN_X = shared.MIN_X;
+  MAX_X = shared.MAX_X;
+  MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
+  MAX_DISPLAY_NAME_LEN = shared.DISPLAY_NAME_MAX;
+  MAX_READING_LABEL_LEN = shared.READING_LABEL_MAX;
+  MAX_RECENT_MESSAGES = shared.MAX_RECENT_MESSAGES;
+  DEFAULT_CHARACTER_COLOR = shared.DEFAULT_CHARACTER_COLOR;
+  CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);
 
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
