@@ -5,6 +5,7 @@ import {
   renderAvatar,
   renderProps,
   renderShell,
+  wireHelpPanel,
   setFacing,
   setWalking,
   updatePose,
@@ -209,7 +210,8 @@ function stepSelf(self, now, dt) {
 function mountDevScene(count, walking) {
   root.replaceChildren();
 
-  const { stage, status } = renderShell(root);
+  const { stage, status, helpButton, helpPanel } = renderShell(root);
+  const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
 
   renderProps(stage);
   status.textContent = `You plus ${count} simulated ${count === 1 ? "character" : "characters"}`;
@@ -258,6 +260,7 @@ function mountDevScene(count, walking) {
       if (frame !== null) cancelAnimationFrame(frame);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      unwireHelpPanel();
       root.replaceChildren();
     },
   };

@@ -63,7 +63,7 @@ const TOWNSQUARE_URL = "https://townsquare.cauenapier.com/";
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpPanel: HTMLElement }}
  */
 export function renderShell(container) {
   const element = document.createElement("section");
@@ -88,17 +88,19 @@ export function renderShell(container) {
   expandButton.setAttribute("aria-pressed", "false");
   expandButton.title = "Expand";
 
-  const help = document.createElement("details");
-  help.className = "townsquare__help";
-
-  const helpButton = document.createElement("summary");
+  const helpButton = document.createElement("button");
   helpButton.className = "townsquare__control townsquare__help-button";
+  helpButton.type = "button";
   helpButton.setAttribute("aria-label", "About TownSquare");
+  helpButton.setAttribute("aria-expanded", "false");
+  helpButton.setAttribute("aria-controls", "townsquare-help-panel");
   helpButton.title = "About TownSquare";
   helpButton.textContent = "?";
 
   const helpPanel = document.createElement("div");
   helpPanel.className = "townsquare__help-panel";
+  helpPanel.id = "townsquare-help-panel";
+  helpPanel.hidden = true;
 
   const helpTitle = document.createElement("strong");
   helpTitle.textContent = "TownSquare";
@@ -116,9 +118,8 @@ export function renderShell(container) {
   link.textContent = "townsquare.cauenapier.com";
 
   helpPanel.append(helpTitle, description, instructions, link);
-  help.append(helpButton, helpPanel);
 
-  controls.append(quietButton, expandButton, help);
+  controls.append(quietButton, expandButton, helpButton, helpPanel);
 
   const statusRow = document.createElement("div");
   statusRow.className = "townsquare__status";
@@ -137,7 +138,47 @@ export function renderShell(container) {
 
   element.append(controls, statusRow, stageEl);
   container.appendChild(element);
-  return { app: element, stage: stageEl, statusRow, status, quietButton, expandButton };
+  return {
+    app: element,
+    stage: stageEl,
+    statusRow,
+    status,
+    quietButton,
+    expandButton,
+    helpButton,
+    helpPanel,
+  };
+}
+
+/**
+ * Toggle the About panel from the help button; closes on outside click.
+ *
+ * @param {HTMLButtonElement} helpButton
+ * @param {HTMLElement} helpPanel
+ * @returns {() => void}
+ */
+export function wireHelpPanel(helpButton, helpPanel) {
+  const setHelpOpen = (open) => {
+    helpPanel.hidden = !open;
+    helpButton.setAttribute("aria-expanded", String(open));
+  };
+
+  const onHelpClick = () => setHelpOpen(helpPanel.hidden);
+  const onHelpPointerDown = (event) => {
+    if (helpPanel.hidden) return;
+    const target = event.target;
+    if (target instanceof Node && (helpButton.contains(target) || helpPanel.contains(target))) return;
+    setHelpOpen(false);
+  };
+
+  helpButton.addEventListener("click", onHelpClick);
+  document.addEventListener("pointerdown", onHelpPointerDown, true);
+
+  return () => {
+    helpButton.removeEventListener("click", onHelpClick);
+    document.removeEventListener("pointerdown", onHelpPointerDown, true);
+    setHelpOpen(false);
+  };
 }
 
 /**

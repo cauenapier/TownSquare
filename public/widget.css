@@ -30,6 +30,8 @@
   top: 8px;
   right: 4px;
   display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 
@@ -38,6 +40,8 @@
   place-items: center;
   width: 30px;
   height: 30px;
+  margin: 0;
+  padding: 0;
   border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
   border-radius: 8px;
   background: color-mix(in oklab, var(--surface) 78%, transparent);
@@ -70,17 +74,8 @@
   height: 16px;
 }
 
-.townsquare__help {
-  position: relative;
-}
-
 .townsquare__help-button {
-  list-style: none;
   font: 650 0.92rem/1 var(--font);
-}
-
-.townsquare__help-button::-webkit-details-marker {
-  display: none;
 }
 
 .townsquare__help-panel {
@@ -94,6 +89,10 @@
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--tray-shadow);
+}
+
+.townsquare__help-panel[hidden] {
+  display: none;
 }
 
 .townsquare__help-panel strong {

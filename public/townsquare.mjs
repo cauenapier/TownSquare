@@ -12,6 +12,7 @@ import {
   renderAvatar,
   renderProps,
   renderShell,
+  wireHelpPanel,
   updatePose,
 } from "./widget/dom.mjs";
 import { startGameLoop, stopGameLoop, unwireKeyboard, wireKeyboard } from "./widget/movement.mjs";
@@ -65,6 +66,8 @@ export function mountTownSquare(root, options = {}) {
     status: statusEl,
     quietButton,
     expandButton,
+    helpButton,
+    helpPanel,
   } = renderShell(root);
 
   renderProps(stage);
@@ -139,6 +142,7 @@ export function mountTownSquare(root, options = {}) {
   expandButton.addEventListener("click", () => {
     setExpanded(!ctx.expanded);
   });
+  const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
 
   stage.appendChild(ctx.self.avatar.el);
   renderAvatar(ctx.self.avatar, ctx.self.x);
@@ -154,6 +158,7 @@ export function mountTownSquare(root, options = {}) {
       ctx.disposed = true;
       stopGameLoop(ctx);
       unwireKeyboard(ctx);
+      unwireHelpPanel();
       setExpanded(false);
       ctx.socket.close();
       root.replaceChildren();
