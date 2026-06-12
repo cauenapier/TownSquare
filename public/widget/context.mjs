@@ -49,6 +49,7 @@
  * @property {string} socketUrl
  * @property {string} browserId
  * @property {Map<string, PeerState>} peers
+ * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
  * @property {HTMLElement} app
  * @property {HTMLElement} stage
  * @property {HTMLElement} statusRowEl

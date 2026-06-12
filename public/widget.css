@@ -613,12 +613,16 @@
   bottom: calc(100% + 12px);
   z-index: 3;
   width: max-content;
-  min-width: 200px;
-  max-width: min(260px, 76vw);
+  min-width: min(220px, 88vw);
+  max-width: min(360px, 88vw);
+  max-height: min(280px, 58vh);
   padding: 5px 4px;
   border-radius: 16px;
   background: var(--surface);
   box-shadow: var(--tray-shadow);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 4px);
@@ -644,9 +648,11 @@
 }
 
 .avatar__tray-row {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 14px;
+  row-gap: 3px;
   padding: 8px 13px;
 }
 
@@ -655,23 +661,32 @@
 }
 
 .avatar__tray-msg {
-  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.28;
   font-size: var(--fs-history);
   font-weight: var(--fw-history);
   color: var(--ink);
 }
 
 .avatar__tray-time {
-  flex: 0 0 auto;
   font-size: var(--fs-time);
   font-weight: var(--fw-time);
+  line-height: 1.28;
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+}
+
+@media (max-width: 420px) {
+  .avatar__tray-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .avatar__tray-time {
+    justify-self: start;
+  }
 }
 
 /* ── Nameplate / composer: the persistent way in, below your figure ── */

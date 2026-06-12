@@ -132,6 +132,7 @@ export function mountTownSquare(root, options = {}) {
       walkTimer: null,
     },
     socket: new WebSocket(socketUrl),
+    reconnectTimer: null,
     quiet: false,
     expanded: false,
     disposed: false,
@@ -228,6 +229,8 @@ export function mountTownSquare(root, options = {}) {
         viewport.removeEventListener("scroll", onViewportChange);
       }
       setExpanded(false);
+      clearTimeout(ctx.reconnectTimer);
+      ctx.reconnectTimer = null;
       ctx.socket.close();
       root.replaceChildren();
     },
