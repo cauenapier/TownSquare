@@ -135,7 +135,7 @@ export function wireSocket(ctx) {
           recordMessage(self.avatar, { text: message.text, at: message.at });
           return;
         }
-        sayMessage(self.avatar, { text: message.text, at: message.at });
+        sayMessage(self.avatar, { text: message.text, at: message.at }, ctx);
         return;
       }
 
@@ -145,7 +145,7 @@ export function wireSocket(ctx) {
         recordMessage(peer.avatar, { text: message.text, at: message.at });
         return;
       }
-      sayMessage(peer.avatar, { text: message.text, at: message.at });
+      sayMessage(peer.avatar, { text: message.text, at: message.at }, ctx);
     }
   });
 

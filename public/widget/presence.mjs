@@ -4,6 +4,7 @@
 
 import { recordMessage } from "./chat.mjs";
 import { createAvatar, renderAvatar, setFacing, updatePose, updatePropEffects } from "./dom.mjs";
+import { markLayoutDirty } from "./movement.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -77,6 +78,7 @@ export function removePeer(ctx, id) {
   peer.avatar.el.remove();
   ctx.peers.delete(id);
   updateStatus(ctx);
+  markLayoutDirty(ctx);
 }
 
 /**
@@ -117,5 +119,6 @@ export function applyPeerState(ctx, peerState) {
   }
   updatePose(peer.avatar, peer.pose);
   updatePropEffects(peer.avatar, peer.x, peer.propId);
+  markLayoutDirty(ctx);
   return peer;
 }

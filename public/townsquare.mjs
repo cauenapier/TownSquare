@@ -108,6 +108,8 @@ export function mountTownSquare(root, options = {}) {
     quiet: false,
     expanded: false,
     disposed: false,
+    layoutDirty: true,
+    stageResizeObserver: null,
     lastFrameAt: performance.now(),
     frameHandle: null,
     onKeyDown: () => {},
@@ -151,6 +153,10 @@ export function mountTownSquare(root, options = {}) {
 
   wireSocket(ctx);
   wireKeyboard(ctx);
+  ctx.stageResizeObserver = new ResizeObserver(() => {
+    ctx.layoutDirty = true;
+  });
+  ctx.stageResizeObserver.observe(stage);
   startGameLoop(ctx);
 
   return {
@@ -159,6 +165,8 @@ export function mountTownSquare(root, options = {}) {
       stopGameLoop(ctx);
       unwireKeyboard(ctx);
       unwireHelpPanel();
+      ctx.stageResizeObserver?.disconnect();
+      ctx.stageResizeObserver = null;
       setExpanded(false);
       ctx.socket.close();
       root.replaceChildren();

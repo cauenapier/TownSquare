@@ -52,20 +52,32 @@ docker run --rm -p 8787:8787 -e HOST=0.0.0.0 townsquare
 
 ## Embed on another site
 
-Serve TownSquare somewhere reachable, then add this to the host website:
+Serve TownSquare somewhere reachable, then add this to the host website.
+CSS and JS load without blocking the host page's first paint; the widget mounts after its stylesheet arrives:
 
 ```html
-<link rel="stylesheet" href="https://your-townsquare-host/widget.css" />
+<link rel="preconnect" href="https://your-townsquare-host" crossorigin>
 <div id="townsquare-root"></div>
 <script type="module">
-  import { mountTownSquare } from "https://your-townsquare-host/townsquare.mjs";
-
+  const origin = "https://your-townsquare-host";
+  const css = document.createElement("link");
+  css.rel = "stylesheet";
+  css.href = `${origin}/widget.css`;
+  document.head.appendChild(css);
+  await new Promise((resolve, reject) => {
+    css.addEventListener("load", resolve, { once: true });
+    css.addEventListener("error", () => reject(new Error("TownSquare CSS failed to load")), { once: true });
+  });
+  const { mountTownSquare } = await import(`${origin}/townsquare.mjs`);
   mountTownSquare(document.getElementById("townsquare-root"), {
-    serverOrigin: "https://your-townsquare-host",
+    serverOrigin: origin,
     socketPath: "/live"
   });
 </script>
 ```
+
+Widget static assets (`widget.css`, `townsquare.mjs`, and related files) are served with a one-day browser cache.
+Repeat visitors may keep cached copies for up to 24 hours after a deploy unless they hard-refresh.
 
 This is the core self-hosting contract:
 - the website decides where the widget appears

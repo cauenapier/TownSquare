@@ -258,13 +258,30 @@ function getContentType(filePath) {
   return MIME_TYPES[path.extname(filePath)] || "application/octet-stream";
 }
 
+const CACHEABLE_STATIC_EXTENSIONS = new Set([".css", ".mjs", ".png", ".svg"]);
+const WIDGET_CSS_PATH = path.join(PUBLIC_DIR, "widget.css");
+const TOKENS_CSS_PATH = path.join(PUBLIC_DIR, "tokens.css");
+/** @type {string | null} */
+let widgetCssBundle = null;
+
+function getWidgetCssBundle() {
+  if (widgetCssBundle) return widgetCssBundle;
+
+  const tokens = fs.readFileSync(TOKENS_CSS_PATH, "utf8");
+  const widget = fs.readFileSync(WIDGET_CSS_PATH, "utf8");
+  const body = widget.replace(/^@import\s+url\([^)]*tokens\.css[^)]*\)\s*;\s*/m, "");
+  widgetCssBundle = `${tokens}\n${body}`;
+  return widgetCssBundle;
+}
+
 function getStaticHeaders(filePath) {
+  const ext = path.extname(filePath);
   const headers = {
-    "cache-control": "no-store",
+    "cache-control": CACHEABLE_STATIC_EXTENSIONS.has(ext) ? "public, max-age=86400" : "no-store",
     "content-type": getContentType(filePath),
   };
 
-  if ([".css", ".mjs"].includes(path.extname(filePath))) {
+  if ([".css", ".mjs"].includes(ext)) {
     headers["access-control-allow-origin"] = "*";
   }
 
@@ -353,13 +370,21 @@ function getPublicOrigin(req) {
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
 
-  return `<link rel="stylesheet" href="${serverOrigin}/widget.css" />
+  return `<link rel="preconnect" href="${serverOrigin}" crossorigin>
 <div id="townsquare-root"></div>
 <script type="module">
-  import { mountTownSquare } from "${serverOrigin}/townsquare.mjs";
-
+  const origin = "${serverOrigin}";
+  const css = document.createElement("link");
+  css.rel = "stylesheet";
+  css.href = \`\${origin}/widget.css\`;
+  document.head.appendChild(css);
+  await new Promise((resolve, reject) => {
+    css.addEventListener("load", resolve, { once: true });
+    css.addEventListener("error", () => reject(new Error("TownSquare CSS failed to load")), { once: true });
+  });
+  const { mountTownSquare } = await import(\`\${origin}/townsquare.mjs\`);
   mountTownSquare(document.getElementById("townsquare-root"), {
-    serverOrigin: "${serverOrigin}",
+    serverOrigin: origin,
     siteKey: "${site.siteKey}"
   });
 </script>`;
@@ -990,6 +1015,12 @@ const server = http.createServer((req, res) => {
   if (!filePath) {
     res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
     res.end("forbidden");
+    return;
+  }
+
+  if (filePath === WIDGET_CSS_PATH) {
+    res.writeHead(200, getStaticHeaders(filePath));
+    res.end(getWidgetCssBundle());
     return;
   }
 

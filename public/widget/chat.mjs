@@ -9,6 +9,7 @@
 
 import { BUBBLE_TTL_MS, GHOST_STACK_MAX, MAX_RECENT_MESSAGES } from "./constants.mjs";
 import { createBubble, createTrayRow } from "./dom.mjs";
+import { markLayoutDirty } from "./movement.mjs";
 
 /**
  * @typedef {import("./dom.mjs").AvatarView} AvatarView
@@ -46,13 +47,15 @@ function renderGhostStack(avatar) {
  *
  * @param {AvatarView} avatar
  * @param {GhostMessage} message
+ * @param {WidgetContext} [ctx]
  */
-function expire(avatar, message) {
+function expire(avatar, message, ctx) {
   const index = avatar.messages.indexOf(message);
   if (index !== -1) avatar.messages.splice(index, 1);
   message.el.classList.add("avatar__bubble--expiring");
   setTimeout(() => message.el.remove(), FADE_MS);
   renderGhostStack(avatar);
+  if (ctx) markLayoutDirty(ctx);
 }
 
 /**
@@ -80,8 +83,9 @@ export function recordMessage(avatar, message) {
  *
  * @param {AvatarView} avatar
  * @param {{ text: string, at?: number }} message
+ * @param {WidgetContext} [ctx]
  */
-export function sayMessage(avatar, message) {
+export function sayMessage(avatar, message, ctx) {
   recordMessage(avatar, message);
 
   for (const existing of avatar.messages) existing.solid = false;
@@ -102,8 +106,9 @@ export function sayMessage(avatar, message) {
     dropped.el.remove();
   }
 
-  entry.timer = setTimeout(() => expire(avatar, entry), BUBBLE_TTL_MS);
+  entry.timer = setTimeout(() => expire(avatar, entry, ctx), BUBBLE_TTL_MS);
   renderGhostStack(avatar);
+  if (ctx) markLayoutDirty(ctx);
 }
 
 /**
@@ -121,6 +126,6 @@ export function submitChat(ctx) {
   if (!text || ctx.socket.readyState !== WebSocket.OPEN) return;
 
   ctx.socket.send(JSON.stringify({ type: "say", text }));
-  sayMessage(ctx.self.avatar, { text, at: Date.now() });
+  sayMessage(ctx.self.avatar, { text, at: Date.now() }, ctx);
   input.value = "";
 }

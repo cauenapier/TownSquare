@@ -171,11 +171,36 @@ async function assertServiceAdminCanManageSites(hostedA, hostedB) {
 }
 
 async function assertEmbeddableAssetsAreCrossOriginLoadable() {
-  const response = await fetch(`${HTTP_ORIGIN}/townsquare.mjs`);
-  assert(response.ok, "townsquare module was not served");
+  const moduleResponse = await fetch(`${HTTP_ORIGIN}/townsquare.mjs`);
+  assert(moduleResponse.ok, "townsquare module was not served");
   assert(
-    response.headers.get("access-control-allow-origin") === "*",
+    moduleResponse.headers.get("access-control-allow-origin") === "*",
     "townsquare module is missing cross-origin embed headers",
+  );
+  assert(
+    moduleResponse.headers.get("cache-control") === "public, max-age=86400",
+    "townsquare module is missing long-lived cache headers",
+  );
+
+  const cssResponse = await fetch(`${HTTP_ORIGIN}/widget.css`);
+  assert(cssResponse.ok, "widget css was not served");
+  assert(
+    cssResponse.headers.get("access-control-allow-origin") === "*",
+    "widget css is missing cross-origin embed headers",
+  );
+  assert(
+    cssResponse.headers.get("cache-control") === "public, max-age=86400",
+    "widget css is missing long-lived cache headers",
+  );
+
+  const cssBody = await cssResponse.text();
+  assert(
+    !cssBody.includes("fonts.googleapis.com"),
+    "widget css should not pull Google Fonts into embeds",
+  );
+  assert(
+    cssBody.includes("--scene:") || cssBody.includes("--scene: #"),
+    "widget css bundle should include design tokens",
   );
 }
 

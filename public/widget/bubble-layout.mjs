@@ -47,6 +47,8 @@ const SCALE_FLOOR = 0.75;
  * @property {number} anchor Figure centre in stage px — where the column wants to sit.
  * @property {number} width Visual width in stage px (layout width × prominence scale).
  * @property {number} scale Prominence scale applied to the column.
+ * @property {number} fade Prominence opacity for the column.
+ * @property {number} liveHalfWidth Measured half-width of the live bubble in px.
  */
 
 /**
@@ -55,6 +57,13 @@ const SCALE_FLOOR = 0.75;
  * @property {number} count
  * @property {number} sumIdealLeft Sum of each member's ideal cluster-left; mean gives the spot minimizing displacement.
  * @property {Array<{ column: Column, centerOffset: number }>} items Member columns with centres relative to cluster left.
+ */
+
+/**
+ * @typedef {Object} ShiftResult
+ * @property {number} shift
+ * @property {number} tailShift
+ * @property {number} tailTip
  */
 
 /**
@@ -94,66 +103,13 @@ function clusterLeft(cluster, minLeft, maxRight) {
 }
 
 /**
- * Apply final shifts for one cluster. Past the point where the stage can hold
- * every column side by side, non-overlap is unwinnable — so the cluster
- * compresses: member centres squeeze proportionally until the run spans
- * exactly the stage, trading even partial overlap for keeping every bubble
- * visible and near its speaker.
- *
- * @param {Cluster} cluster
- * @param {number} minLeft
- * @param {number} maxRight
- */
-function placeCluster(cluster, minLeft, maxRight) {
-  const left = clusterLeft(cluster, minLeft, maxRight);
-  const span = maxRight - minLeft;
-  if (cluster.width <= span) {
-    for (const item of cluster.items) {
-      applyShift(item.column, left + item.centerOffset - item.column.anchor);
-    }
-    return;
-  }
-
-  // Squeeze centres between the half-widths of the outermost members so the
-  // cluster's edges land on the stage edges.
-  const { items } = cluster;
-  const firstHalf = items[0].column.width / 2;
-  const lastHalf = items[items.length - 1].column.width / 2;
-  const scale = (span - firstHalf - lastHalf) / Math.max(1, cluster.width - firstHalf - lastHalf);
-  for (const item of items) {
-    const center = minLeft + firstHalf + (item.centerOffset - firstHalf) * scale;
-    applyShift(item.column, center - item.column.anchor);
-  }
-}
-
-/**
- * Join two adjacent clusters into one, keeping member offsets and the
- * running ideal-left sum consistent.
- *
- * @param {Cluster} a
- * @param {Cluster} b Must sit to the right of `a`.
- * @returns {Cluster}
- */
-function mergeClusters(a, b) {
-  const offsetDelta = a.width + COLUMN_GAP;
-  for (const item of b.items) {
-    item.centerOffset += offsetDelta;
-  }
-  return {
-    width: a.width + COLUMN_GAP + b.width,
-    count: a.count + b.count,
-    sumIdealLeft: a.sumIdealLeft + b.sumIdealLeft - b.count * offsetDelta,
-    items: a.items.concat(b.items),
-  };
-}
-
-/**
  * Push the resolved shift to the DOM as CSS variables, skipping writes when
  * nothing moved beyond sub-pixel noise.
  *
  * @param {AvatarView} avatar
  * @param {number} shift
  * @param {number} tailShift
+ * @param {number} tailTip
  */
 function setShiftVars(avatar, shift, tailShift, tailTip) {
   if (Math.abs((avatar.bubbleShift ?? 0) - shift) > SHIFT_EPSILON) {
@@ -191,28 +147,77 @@ function setProminenceVars(avatar, scale, fade) {
 /**
  * @param {Column} column
  * @param {number} shift
+ * @returns {ShiftResult}
  */
-function applyShift(column, shift) {
-  const { avatar, scale } = column;
-  // The tail must always land on its speaker: its base slides along the
-  // bubble's flat bottom, and its tip leans the remaining distance. The
-  // column shift itself is bounded by that combined reach, so when the
-  // solver wants more, this column yields separation (overlap is handled by
-  // speak-order stacking) rather than orphan its bubble from the speaker.
-  // Tail movement happens inside the scaled column, so the maths run in
-  // pre-scale units.
-  const live = avatar.messages[avatar.messages.length - 1];
+function computeShift(column, shift) {
+  const { scale, liveHalfWidth } = column;
   let tailShift = 0;
   let tailTip = 0;
-  if (live) {
-    const reach = Math.max(0, live.el.offsetWidth / 2 - TAIL_INSET);
+  if (liveHalfWidth > 0) {
+    const reach = Math.max(0, liveHalfWidth - TAIL_INSET);
     const bound = (reach + TAIL_TIP_REACH) * scale;
     shift = clamp(shift, -bound, bound);
     const target = -shift / scale;
     tailShift = clamp(target, -reach, reach);
     tailTip = target - tailShift;
   }
-  setShiftVars(avatar, shift, tailShift, tailTip);
+  return { shift, tailShift, tailTip };
+}
+
+/**
+ * Apply final shifts for one cluster. Past the point where the stage can hold
+ * every column side by side, non-overlap is unwinnable — so the cluster
+ * compresses: member centres squeeze proportionally until the run spans
+ * exactly the stage, trading even partial overlap for keeping every bubble
+ * visible and near its speaker.
+ *
+ * @param {Cluster} cluster
+ * @param {number} minLeft
+ * @param {number} maxRight
+ * @param {Map<AvatarView, ShiftResult>} shifts
+ */
+function placeCluster(cluster, minLeft, maxRight, shifts) {
+  const left = clusterLeft(cluster, minLeft, maxRight);
+  const span = maxRight - minLeft;
+  if (cluster.width <= span) {
+    for (const item of cluster.items) {
+      shifts.set(
+        item.column.avatar,
+        computeShift(item.column, left + item.centerOffset - item.column.anchor),
+      );
+    }
+    return;
+  }
+
+  const { items } = cluster;
+  const firstHalf = items[0].column.width / 2;
+  const lastHalf = items[items.length - 1].column.width / 2;
+  const scale = (span - firstHalf - lastHalf) / Math.max(1, cluster.width - firstHalf - lastHalf);
+  for (const item of items) {
+    const center = minLeft + firstHalf + (item.centerOffset - firstHalf) * scale;
+    shifts.set(item.column.avatar, computeShift(item.column, center - item.column.anchor));
+  }
+}
+
+/**
+ * Join two adjacent clusters into one, keeping member offsets and the
+ * running ideal-left sum consistent.
+ *
+ * @param {Cluster} a
+ * @param {Cluster} b Must sit to the right of `a`.
+ * @returns {Cluster}
+ */
+function mergeClusters(a, b) {
+  const offsetDelta = a.width + COLUMN_GAP;
+  for (const item of b.items) {
+    item.centerOffset += offsetDelta;
+  }
+  return {
+    width: a.width + COLUMN_GAP + b.width,
+    count: a.count + b.count,
+    sumIdealLeft: a.sumIdealLeft + b.sumIdealLeft - b.count * offsetDelta,
+    items: a.items.concat(b.items),
+  };
 }
 
 /**
@@ -230,55 +235,82 @@ export function layoutBubbleColumns(stage, presences, selfX) {
   const stageWidth = stage.clientWidth;
   if (!stageWidth) return;
 
-  /** @type {Array<Column>} */
-  const columns = [];
+  /** @type {AvatarView[]} */
+  const emptyAvatars = [];
+  /** @type {Array<{ presence: { x: number, avatar: AvatarView }, aboveWidth: number, liveHalfWidth: number }>} */
+  const measured = [];
+
   for (const presence of presences) {
     const { avatar } = presence;
-    // Expiring bubbles are out of `messages` but still fading in the DOM, so
-    // visibility is judged by children: keep their column pinned until they
-    // finish, and re-centre the empty column for the next fresh line.
     if (avatar.above.childElementCount === 0) {
-      setShiftVars(avatar, 0, 0);
+      emptyAvatars.push(avatar);
       continue;
     }
-    const width = avatar.above.offsetWidth;
-    if (!width) continue;
+    const aboveWidth = avatar.above.offsetWidth;
+    if (!aboveWidth) continue;
+    const live = avatar.messages[avatar.messages.length - 1];
+    measured.push({
+      presence,
+      aboveWidth,
+      liveHalfWidth: live ? live.el.offsetWidth / 2 : 0,
+    });
+  }
 
+  /** @type {Array<Column>} */
+  const columns = [];
+  for (const { presence, aboveWidth, liveHalfWidth } of measured) {
     const prominence = proximity(presence.x, selfX);
     const scale = SCALE_FLOOR + (1 - SCALE_FLOOR) * prominence;
-    setProminenceVars(avatar, scale, FADE_FLOOR + (1 - FADE_FLOOR) * prominence);
-    columns.push({ avatar, anchor: presence.x * stageWidth, width: width * scale, scale });
+    columns.push({
+      avatar: presence.avatar,
+      anchor: presence.x * stageWidth,
+      width: aboveWidth * scale,
+      scale,
+      fade: FADE_FLOOR + (1 - FADE_FLOOR) * prominence,
+      liveHalfWidth,
+    });
   }
-  if (columns.length === 0) return;
 
-  columns.sort((a, b) => a.anchor - b.anchor);
+  /** @type {Map<AvatarView, ShiftResult>} */
+  const shifts = new Map();
+  for (const avatar of emptyAvatars) {
+    shifts.set(avatar, { shift: 0, tailShift: 0, tailTip: 0 });
+  }
 
-  const minLeft = EDGE_MARGIN;
-  const maxRight = stageWidth - EDGE_MARGIN;
+  if (columns.length > 0) {
+    columns.sort((a, b) => a.anchor - b.anchor);
 
-  // Classic 1D label placement: seed one cluster per column, and while a new
-  // cluster would overlap the one before it, merge them. Each merge re-centres
-  // the group on the mean of its anchors, which can cascade further left.
-  /** @type {Array<Cluster>} */
-  const clusters = [];
-  for (const column of columns) {
-    /** @type {Cluster} */
-    let cluster = {
-      width: column.width,
-      count: 1,
-      sumIdealLeft: column.anchor - column.width / 2,
-      items: [{ column, centerOffset: column.width / 2 }],
-    };
-    while (clusters.length > 0) {
-      const previous = clusters[clusters.length - 1];
-      const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
-      if (previousRight + COLUMN_GAP <= clusterLeft(cluster, minLeft, maxRight)) break;
-      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster);
+    const minLeft = EDGE_MARGIN;
+    const maxRight = stageWidth - EDGE_MARGIN;
+
+    /** @type {Array<Cluster>} */
+    const clusters = [];
+    for (const column of columns) {
+      /** @type {Cluster} */
+      let cluster = {
+        width: column.width,
+        count: 1,
+        sumIdealLeft: column.anchor - column.width / 2,
+        items: [{ column, centerOffset: column.width / 2 }],
+      };
+      while (clusters.length > 0) {
+        const previous = clusters[clusters.length - 1];
+        const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
+        if (previousRight + COLUMN_GAP <= clusterLeft(cluster, minLeft, maxRight)) break;
+        cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster);
+      }
+      clusters.push(cluster);
     }
-    clusters.push(cluster);
+
+    for (const cluster of clusters) {
+      placeCluster(cluster, minLeft, maxRight, shifts);
+    }
   }
 
-  for (const cluster of clusters) {
-    placeCluster(cluster, minLeft, maxRight);
+  for (const column of columns) {
+    setProminenceVars(column.avatar, column.scale, column.fade);
+  }
+  for (const [avatar, result] of shifts) {
+    setShiftVars(avatar, result.shift, result.tailShift, result.tailTip);
   }
 }

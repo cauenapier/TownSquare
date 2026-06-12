@@ -108,16 +108,25 @@ http://127.0.0.1:8787/walk-sandbox.html
 ## Embed the widget into another site
 
 TownSquare is now split into a reusable widget module and a demo bootstrap.
-A site can embed the widget by loading the CSS plus the module from the TownSquare server:
+A site can embed the widget by loading the CSS plus the module from the TownSquare server.
+The snippet loads CSS asynchronously so it does not block the host page's first paint:
 
 ```html
-<link rel="stylesheet" href="https://your-townsquare-host/widget.css" />
+<link rel="preconnect" href="https://your-townsquare-host" crossorigin>
 <div id="townsquare-root"></div>
 <script type="module">
-  import { mountTownSquare } from "https://your-townsquare-host/townsquare.mjs";
-
+  const origin = "https://your-townsquare-host";
+  const css = document.createElement("link");
+  css.rel = "stylesheet";
+  css.href = `${origin}/widget.css`;
+  document.head.appendChild(css);
+  await new Promise((resolve, reject) => {
+    css.addEventListener("load", resolve, { once: true });
+    css.addEventListener("error", () => reject(new Error("TownSquare CSS failed to load")), { once: true });
+  });
+  const { mountTownSquare } = await import(`${origin}/townsquare.mjs`);
   mountTownSquare(document.getElementById("townsquare-root"), {
-    serverOrigin: "https://your-townsquare-host",
+    serverOrigin: origin,
     socketPath: "/live"
   });
 </script>

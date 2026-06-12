@@ -78,6 +78,13 @@ export function maybeSendMove(ctx) {
 
 /**
  * @param {WidgetContext} ctx
+ */
+export function markLayoutDirty(ctx) {
+  ctx.layoutDirty = true;
+}
+
+/**
+ * @param {WidgetContext} ctx
  * @param {number} now
  */
 export function tick(ctx, now) {
@@ -112,7 +119,13 @@ export function tick(ctx, now) {
     maybeRequestPropSettle(ctx, now);
   }
 
-  layoutBubbleColumns(ctx.stage, [ctx.self, ...ctx.peers.values()], ctx.self.x);
+  const presences = [ctx.self, ...ctx.peers.values()];
+  const moving = ctx.self.movingLeft || ctx.self.movingRight;
+  const hasBubbles = presences.some((presence) => presence.avatar.above.childElementCount > 0);
+  if (hasBubbles && (moving || ctx.layoutDirty)) {
+    layoutBubbleColumns(ctx.stage, presences, ctx.self.x);
+    ctx.layoutDirty = false;
+  }
 
   ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
 }

@@ -55,6 +55,8 @@
  * @property {boolean} quiet
  * @property {boolean} expanded
  * @property {boolean} disposed
+ * @property {boolean} layoutDirty
+ * @property {ResizeObserver | null} stageResizeObserver
  * @property {number} lastFrameAt
  * @property {number | null} frameHandle
  * @property {(event: KeyboardEvent) => void} onKeyDown

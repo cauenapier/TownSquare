@@ -4,6 +4,7 @@
  * Loaded only on TownSquare host pages (demo, admin, dev tools). Not part of
  * the embed snippet — external sites should load widget.css only.
  */
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,460;0,500;0,600;0,650;1,460&display=swap");
 @import url("./tokens.css");
 
 :root {
