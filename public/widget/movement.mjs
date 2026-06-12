@@ -186,6 +186,7 @@ export function unwireKeyboard(ctx) {
 export function closeTrays(ctx) {
   for (const peer of ctx.peers.values()) {
     peer.avatar.el.classList.remove("avatar--tray-open");
+    peer.avatar.el.classList.remove("avatar--label-open");
   }
 }
 
@@ -206,8 +207,12 @@ export function wireStagePointer(ctx) {
     if (avatarEl) {
       // Self taps are handled by the nameplate/composer; peers toggle the tray.
       if (avatarEl.classList.contains("avatar--self")) return;
-      const open = !avatarEl.classList.contains("avatar--tray-open");
+      const open = !avatarEl.classList.contains("avatar--tray-open")
+        && !avatarEl.classList.contains("avatar--label-open");
       closeTrays(ctx);
+      if (open) {
+        avatarEl.classList.add("avatar--label-open");
+      }
       if (open && avatarEl.classList.contains("avatar--has-history")) {
         avatarEl.classList.add("avatar--tray-open");
       }

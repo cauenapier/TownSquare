@@ -796,8 +796,15 @@
 }
 
 .avatar__reading-prefix {
+  display: none;
   flex: 0 0 auto;
   font-weight: 520;
+}
+
+.avatar--peer:hover .avatar__reading-prefix,
+.avatar--peer:focus-within .avatar__reading-prefix,
+.avatar--label-open .avatar__reading-prefix {
+  display: inline;
 }
 
 .avatar__reading-label {
