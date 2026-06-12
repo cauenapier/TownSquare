@@ -24,7 +24,9 @@ Still thin: scene feels like a demo strip; anonymous visitors; deployment docs l
 
 ## Now
 
-Focus: **scene legibility** and **credible self-host on a real site**.
+### Mobile (high priority)
+
+- [ ] **Mobile optimization**: touch-friendly movement and prop interaction; scene, bubbles, and tray readable on small screens; acceptable performance on phones
 
 ### Scene
 
@@ -38,11 +40,16 @@ Focus: **scene legibility** and **credible self-host on a real site**.
 - [ ] **Production proxy examples**: copy-paste nginx/Caddy configs with WebSocket on `/live`
 - [ ] **Documented embed contract**: `mountTownSquare` options documented; breaking changes versioned
 
+### Safety
+
+- [ ] **Safe chat text**: reject or strip HTML/script payloads in messages (e.g. `<script>alert("hmmm")</script>`); chat always treated and rendered as plain text end-to-end
+
 ## Next
 
 ### Visitors
 
 - [ ] **Optional display name**: short ephemeral name on own character; no accounts
+- [ ] **Currently reading tag**: short label of the page each visitor is on (e.g. article or page title); visible to others; updates on navigation; readable in the scene without crowding
 - [ ] **Click/tap props**: intentional interaction where proximity isn't enough
 - [ ] **Arrival clarity**: live place, who's here, can move and chat: obvious in seconds
 
@@ -67,6 +74,7 @@ Post-v1, roughly ordered.
 - [ ] **Map / world view**: nearby linked places (websites) without clutter
 - [ ] **Connected neighbourhoods**: sites read as one wider world
 - [ ] **Hosted registration**: same product, hosted deployment
+- [ ] **Site owner tag**: distinct in-scene label for the site owner; visitors can spot who's running the place at a glance; stays lightweight, not a full profile or account system
 - [ ] **Custom props and interactions**
 - [ ] **Open interfaces**: maps, visualizations, related tools
 
@@ -76,6 +84,7 @@ Post-v1, roughly ordered.
 - [ ] **Minimum moderation story**: lightest viable public-chat surface
 - [ ] **Expandable Area**: Click to expand or full-screen
 - [ ] **Highlight character**: CLick to highlight character, keep history or chat focused.
+- [ ] **Jump ability**: Add a keyboard shortcut to make your character jump
 
 ## Open questions
 
