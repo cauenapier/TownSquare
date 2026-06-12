@@ -16,16 +16,25 @@ TownSquare currently has three practical surfaces:
    - serves static assets
    - accepts WebSocket connections
    - owns ephemeral scene state and prop arbitration
-   - currently runs as one simple Node process with in-memory state
+   - routes either the default self-hosted scene or registered hosted site scenes
+   - currently runs as one simple Node process with in-memory scene state
 
 3. **Demo host page**
    - exists only for development and manual testing
    - should stay separate from the reusable widget boundary
 
+4. **Hosted registration/admin surface**
+   - accountless site registration
+   - public site key for embed routing
+   - private admin token for moderation/settings, stored as a hash
+   - service admin password for operator-level site management
+   - small JSON site registry
+
 That separation is now reflected directly in the repo:
 - `public/townsquare.mjs` = reusable widget mount API
 - `public/widget/` = widget implementation split by concern (DOM, chat, presence, protocol, movement)
 - `public/demo.mjs` + `public/index.html` = demo shell
+- `public/register.html` + `public/admin.html` + `public/service-admin.html` = hosted setup/admin shells
 - `server.js` = static + realtime service
 
 ## Why this boundary matters
@@ -58,12 +67,13 @@ Do not front-load yet:
 
 ## Hosted path, later
 
-The likely hosted shape is:
+The first hosted shape is:
 
-1. Site owner registers a site with the main TownSquare service.
-2. The service issues an embed snippet and site key.
-3. The widget connects to the main service using that site identity.
-4. The runtime keeps site-level scene separation while optionally allowing curated cross-site travel.
+1. Site owner registers a URL with the main TownSquare service.
+2. The service issues an embed snippet with a public site key.
+3. The service issues a private admin link with an admin token.
+4. The widget connects to the main service using that site identity.
+5. The runtime keeps site-level scene separation while optionally allowing curated cross-site travel later.
 
 That suggests a future fourth surface:
 
@@ -71,7 +81,7 @@ That suggests a future fourth surface:
    - site metadata
    - site allowlists / origin checks
    - site config
-   - hosted administration
+   - hosted administration through admin tokens first, accounts later if needed
    - world/neighbourhood linking
 
 Important: this layer should sit **around** the current widget/runtime contract, not leak deeply into it.
@@ -102,10 +112,9 @@ Near-term changes should preserve these rules:
 Deliberate current limits:
 - one process
 - in-memory state
-- one shared scene
-- no persistence
-- no tenant model
-- no auth
+- JSON-backed site registry, not a database-backed control plane
+- no user accounts
+- no admin-link recovery
 
 These are fine for now.
 The mistake would be pretending they are already the hosted product.

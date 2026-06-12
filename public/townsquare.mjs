@@ -23,6 +23,7 @@ import { buildSocketUrl, getBrowserId, normalizeOrigin } from "./widget/utils.mj
  * @typedef {Object} MountOptions
  * @property {string} [serverOrigin] TownSquare server origin for static assets and WebSocket traffic.
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
+ * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
  * @property {string} [instructions] Status-row helper text shown beside the visitor count.
  * @property {string} [hint] Footer hint shown below the scene.
  */
@@ -52,7 +53,8 @@ export function mountTownSquare(root, options = {}) {
     || root.dataset.townsquareServerOrigin
     || window.location.origin,
   );
-  const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live");
+  const siteKey = options.siteKey || root.dataset.townsquareSiteKey || "";
+  const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey);
   const browserId = getBrowserId();
   const peers = new Map();
 

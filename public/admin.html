@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare admin</title>
+    <link rel="stylesheet" href="/widget.css" />
+  </head>
+  <body>
+    <main class="hosted-shell">
+      <section class="hosted-panel" id="login-view" aria-labelledby="login-title" hidden>
+        <p class="eyebrow">TownSquare admin</p>
+        <h1 id="login-title">Open your site admin</h1>
+        <p class="hosted-copy">Paste the admin token you saved when you registered your site.</p>
+
+        <form class="hosted-form" id="login-form">
+          <label>
+            <span>Admin token</span>
+            <input
+              id="login-token"
+              name="adminToken"
+              type="password"
+              placeholder="admin_..."
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <button type="submit" id="login-submit">Open admin</button>
+        </form>
+
+        <p class="hosted-status" id="login-status" role="status" hidden></p>
+
+        <p class="hosted-note hosted-footnote">
+          No TownSquare yet? <a href="/register">Register your website</a>.
+        </p>
+      </section>
+
+      <section class="hosted-panel" id="admin-view" aria-labelledby="admin-title" hidden>
+        <div class="hosted-head">
+          <div>
+            <p class="eyebrow">TownSquare admin</p>
+            <h1 id="admin-title">Site settings</h1>
+          </div>
+          <button type="button" class="hosted-quiet-button" id="sign-out">Sign out</button>
+        </div>
+        <p class="hosted-status" id="admin-status" role="status"></p>
+
+        <section class="hosted-meta" id="site-meta"></section>
+
+        <section class="hosted-section" id="install-section">
+          <h2>Embed snippet</h2>
+          <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
+          <div class="hosted-actions">
+            <button type="button" id="copy-snippet">Copy snippet</button>
+          </div>
+        </section>
+
+        <section class="hosted-section" id="moderation-section">
+          <div class="hosted-section-head">
+            <h2>Moderation</h2>
+            <label class="hosted-toggle">
+              <input type="checkbox" id="chat-disabled" />
+              <span>Disable chat</span>
+            </label>
+          </div>
+          <div class="hosted-actions">
+            <button type="button" id="clear-messages">Clear recent messages</button>
+            <button type="button" id="disable-site">Disable site</button>
+          </div>
+          <div class="visitor-list" id="visitor-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/hosted-admin.mjs"></script>
+  </body>
+</html>

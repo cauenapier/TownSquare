@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Add TownSquare to your website</title>
+    <link rel="stylesheet" href="/widget.css" />
+  </head>
+  <body>
+    <main class="hosted-shell">
+      <section class="hosted-panel" id="register-view" aria-labelledby="register-title">
+        <p class="eyebrow">Hosted TownSquare</p>
+        <h1 id="register-title">Add TownSquare to your website</h1>
+        <p class="hosted-copy">
+          Enter your site URL, get a snippet, paste it into your page. No account required.
+        </p>
+
+        <form class="hosted-form" id="register-form">
+          <label>
+            <span>Website URL</span>
+            <input
+              id="site-origin"
+              name="origin"
+              type="url"
+              placeholder="https://example.com"
+              autocomplete="url"
+              required
+            />
+          </label>
+          <label>
+            <span>Site name <small>optional</small></span>
+            <input id="site-name" name="name" type="text" placeholder="My site" maxlength="80" />
+          </label>
+          <button type="submit" id="register-submit">Create my TownSquare</button>
+        </form>
+
+        <p class="hosted-status" id="register-status" role="status" hidden></p>
+
+        <p class="hosted-note hosted-footnote">
+          Already registered? <a href="/admin">Open your admin page</a> with your admin token.
+        </p>
+      </section>
+
+      <section class="hosted-panel" id="success-view" aria-labelledby="success-title" hidden>
+        <p class="eyebrow">Hosted TownSquare</p>
+        <h1 id="success-title">Your TownSquare is ready</h1>
+        <p class="hosted-copy" id="success-site"></p>
+
+        <ol class="hosted-steps">
+          <li>
+            <h2>Save your admin token</h2>
+            <p class="hosted-note">
+              This token is the only key to moderation and settings. There is no account and no
+              recovery — keep it somewhere safe.
+            </p>
+            <div class="hosted-copy-row">
+              <input id="admin-token" type="text" readonly />
+              <button type="button" id="copy-token">Copy</button>
+            </div>
+          </li>
+          <li>
+            <h2>Paste this snippet into your page</h2>
+            <p class="hosted-note">Anywhere in your HTML works. The square appears where you put it.</p>
+            <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
+            <div class="hosted-actions">
+              <button type="button" id="copy-snippet">Copy snippet</button>
+            </div>
+          </li>
+          <li>
+            <h2>Watch it come alive</h2>
+            <p class="hosted-note">
+              Your admin page shows install status, live visitors, and moderation tools.
+            </p>
+            <div class="hosted-actions">
+              <a class="hosted-button" id="admin-link" href="/admin">Open admin</a>
+            </div>
+          </li>
+        </ol>
+
+        <p class="hosted-note hosted-footnote">
+          <a href="/register">Register another site</a>
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="/hosted-register.mjs"></script>
+  </body>
+</html>

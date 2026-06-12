@@ -2,6 +2,7 @@
 node_modules/
 
 # Local deploy config
+.env
 .env.deploy.local
 
 # Logs
@@ -9,3 +10,6 @@ npm-debug.log*
 
 # OS/editor noise
 .DS_Store
+
+# Local hosted-site registry
+.data/

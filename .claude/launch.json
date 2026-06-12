@@ -3,10 +3,9 @@
   "configurations": [
     {
       "name": "townsquare",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js"],
-      "port": 8787,
-      "autoPort": true
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 8787
     }
   ]
 }

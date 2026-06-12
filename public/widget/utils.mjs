@@ -46,10 +46,14 @@ export function normalizeOrigin(origin) {
  *
  * @param {string} serverOrigin
  * @param {string} socketPath
+ * @param {string} [siteKey]
  * @returns {string}
  */
-export function buildSocketUrl(serverOrigin, socketPath) {
+export function buildSocketUrl(serverOrigin, socketPath, siteKey = "") {
   const url = new URL(socketPath, `${serverOrigin}/`);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  if (siteKey) {
+    url.searchParams.set("siteKey", siteKey);
+  }
   return url.toString();
 }
