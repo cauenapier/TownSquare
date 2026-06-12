@@ -76,12 +76,13 @@ export function normalizeReadingUrl(value) {
 
 /**
  * @param {string} title
+ * @param {string} headingLabel
  * @returns {string}
  */
-function cleanDocumentTitle(title) {
+function cleanDocumentTitle(title, headingLabel) {
   const siteNames = new Set([
     window.location.hostname.replace(/^www\./, ""),
-    document.querySelector("article h1, main h1, h1")?.textContent?.trim().toLowerCase() || "",
+    headingLabel.toLowerCase(),
   ]);
   const parts = title.split(/\s+(?:[|–—-]|·)\s+/).map((part) => normalizeReadingLabel(part));
   return parts.find((part) => part && !siteNames.has(part.toLowerCase())) || "";
@@ -109,13 +110,13 @@ function labelFromPath() {
  */
 export function readCurrentPage(root, options = {}) {
   const explicit = normalizeReadingLabel(options.readingLabel || root.dataset.townsquareReadingLabel || "");
-  const documentTitle = cleanDocumentTitle(document.title);
+  const heading = document.querySelector("article h1, main h1, h1");
+  const headingLabel = normalizeReadingLabel(heading?.textContent || "");
+  const documentTitle = cleanDocumentTitle(document.title, headingLabel);
   const pathLabel = labelFromPath();
   const metaTitle = normalizeReadingLabel(
     document.querySelector('meta[property="og:title"], meta[name="twitter:title"]')?.getAttribute("content") || "",
   );
-  const heading = document.querySelector("article h1, main h1, h1");
-  const headingLabel = normalizeReadingLabel(heading?.textContent || "");
 
   return {
     readingLabel: explicit || documentTitle || pathLabel || metaTitle || headingLabel || normalizeReadingLabel(document.title),
