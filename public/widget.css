@@ -794,6 +794,11 @@
   text-decoration: none;
 }
 
+.avatar__reading::before {
+  content: "visiting ";
+  font-weight: 520;
+}
+
 .avatar__reading:hover,
 .avatar__reading:focus-visible {
   color: currentColor;
