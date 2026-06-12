@@ -528,6 +528,8 @@ export function setAvatarProfile(avatar, profile = {}) {
   const readingUrl = typeof profile.readingUrl === "string" ? profile.readingUrl : avatar.readingEl?.href || "";
   avatar.el.dataset.color = color;
   avatar.el.style.color = color || "";
+  avatar.el.classList.toggle("avatar--has-display-name", Boolean(displayName));
+  avatar.el.classList.toggle("avatar--has-reading", Boolean(readingLabel));
   if (avatar.dot) {
     avatar.dot.style.background = color || "";
   }
@@ -549,6 +551,7 @@ export function setAvatarProfile(avatar, profile = {}) {
     } else {
       avatar.readingEl.removeAttribute("href");
     }
+    avatar.readingEl.classList.toggle("avatar__reading--available", Boolean(readingLabel));
     avatar.readingEl.toggleAttribute("hidden", !readingLabel);
   }
   if (avatar.below && avatar.el.classList.contains("avatar--peer")) {

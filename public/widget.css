@@ -709,6 +709,10 @@
   pointer-events: auto;
 }
 
+.avatar--peer.avatar--has-reading:not(.avatar--has-display-name):not(:hover):not(:focus-within):not(.avatar--label-open) .avatar__below {
+  display: none;
+}
+
 .avatar__plate-row {
   display: inline-flex;
   align-items: center;
@@ -782,7 +786,7 @@
 .avatar__peer-name[hidden] { display: none; }
 
 .avatar__reading {
-  display: inline-flex;
+  display: none;
   align-items: baseline;
   gap: 3px;
   max-width: 170px;
@@ -795,16 +799,15 @@
   text-decoration: none;
 }
 
-.avatar__reading-prefix {
-  display: none;
-  flex: 0 0 auto;
-  font-weight: 520;
+.avatar--peer:hover .avatar__reading--available,
+.avatar--peer:focus-within .avatar__reading--available,
+.avatar--label-open .avatar__reading--available {
+  display: inline-flex;
 }
 
-.avatar--peer:hover .avatar__reading-prefix,
-.avatar--peer:focus-within .avatar__reading-prefix,
-.avatar--label-open .avatar__reading-prefix {
-  display: inline;
+.avatar__reading-prefix {
+  flex: 0 0 auto;
+  font-weight: 520;
 }
 
 .avatar__reading-label {
