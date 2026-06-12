@@ -28,6 +28,7 @@ import { figureMarkup } from "./figure.mjs";
  * @property {HTMLElement} [below] Container for the nameplate / composer.
  * @property {HTMLElement} [nameEl] Visible name label.
  * @property {HTMLAnchorElement} [readingEl] Visible current page link.
+ * @property {HTMLElement} [readingLabelEl] Page label text inside the link.
  * @property {HTMLButtonElement} [plate] The "you · say something" way-in.
  * @property {HTMLElement} [dot]
  * @property {HTMLButtonElement} [profileButton]
@@ -273,7 +274,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     below.appendChild(label);
     el.appendChild(below);
 
-    const peerAvatar = { ...avatar, below, nameEl, readingEl };
+    const peerAvatar = { ...avatar, below, nameEl, readingEl, readingLabelEl };
     setAvatarProfile(peerAvatar, profile);
     return peerAvatar;
   }
@@ -521,11 +522,10 @@ export function setAvatarProfile(avatar, profile = {}) {
     ? profile.displayName.trim().replace(/\s+/g, " ").slice(0, DISPLAY_NAME_MAX)
     : "";
   const color = typeof profile.color === "string" ? profile.color : "";
-  const hasReadingLabel = Object.hasOwn(profile, "readingLabel");
-  const readingLabel = hasReadingLabel && typeof profile.readingLabel === "string"
+  const readingLabel = typeof profile.readingLabel === "string"
     ? profile.readingLabel.trim().replace(/\s+/g, " ").slice(0, READING_LABEL_MAX)
-    : avatar.readingEl?.querySelector(".avatar__reading-label")?.textContent || "";
-  const readingUrl = typeof profile.readingUrl === "string" ? profile.readingUrl : avatar.readingEl?.href || "";
+    : "";
+  const readingUrl = typeof profile.readingUrl === "string" ? profile.readingUrl : "";
   avatar.el.dataset.color = color;
   avatar.el.style.color = color || "";
   avatar.el.classList.toggle("avatar--has-display-name", Boolean(displayName));
@@ -538,13 +538,8 @@ export function setAvatarProfile(avatar, profile = {}) {
     avatar.nameEl.dataset.value = displayName;
     avatar.nameEl.toggleAttribute("hidden", !displayName && avatar.el.classList.contains("avatar--peer"));
   }
-  if (avatar.readingEl) {
-    const readingLabelEl = avatar.readingEl.querySelector(".avatar__reading-label");
-    if (readingLabelEl) {
-      readingLabelEl.textContent = readingLabel;
-    } else {
-      avatar.readingEl.textContent = readingLabel;
-    }
+  if (avatar.readingEl && avatar.readingLabelEl) {
+    avatar.readingLabelEl.textContent = readingLabel;
     avatar.readingEl.title = readingLabel;
     if (readingUrl) {
       avatar.readingEl.href = readingUrl;
