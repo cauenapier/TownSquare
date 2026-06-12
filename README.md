@@ -22,7 +22,9 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `server.js` — Node server for static assets, health checks, and WebSocket presence
 - `public/townsquare.mjs` — reusable embeddable widget mount API
 - `public/widget/` — widget implementation modules (DOM, chat, presence, protocol, movement)
-- `public/widget.css` — widget and demo styling
+- `public/widget.css` — embeddable widget styling (scoped to `#townsquare-root`)
+- `public/page.css` — full-page chrome for TownSquare host pages only
+- `public/tokens.css` — shared design tokens (imported by widget.css and page.css)
 - `public/demo.mjs` — local demo bootstrap
 - `public/index.html` — demo host page for local development
 - `public/register.html` — no-account hosted site registration page

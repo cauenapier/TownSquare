@@ -1,0 +1,62 @@
+/*
+ * TownSquare design tokens.
+ *
+ * Shared palette and type scale for the widget and TownSquare host pages.
+ * Custom properties are inert on external hosts unless something reads them.
+ */
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,460;0,500;0,600;0,650;1,460&display=swap");
+
+#townsquare-root,
+:root {
+  /* Surfaces — warm gray scene, cream chrome */
+  --scene: #e4e2dd;
+  --scene-edge: #dad8d1;
+  --page: #efede9;
+  --surface: #fdf8f4;
+  --surface-2: #f4eee6;
+
+  /* Ink — near-black down to faint labels */
+  --ink: #2a2926;
+  --ink-soft: #7c766c;
+  --ink-faint: #aba59b;
+
+  /* Hairlines */
+  --hair: rgba(42, 41, 38, 0.1);
+  --hair-2: rgba(42, 41, 38, 0.16);
+
+  /* Accent — terracotta marks "you", used sparingly */
+  --you: #c8641f;
+  --you-deep: #a8521a;
+  --you-tint: rgba(200, 100, 31, 0.13);
+
+  /* Cast + ground */
+  --other: #26241f;
+  --ground: rgba(42, 41, 38, 0.16);
+
+  /* Radii */
+  --r: 20px;
+  --r-sm: 13px;
+
+  /* Elevation */
+  --bshadow: 0 9px 16px -10px rgba(60, 40, 20, 0.3), 0 2px 5px -2px rgba(60, 40, 20, 0.16);
+  --tray-shadow: 0 14px 30px -16px rgba(60, 40, 20, 0.42), 0 3px 8px -4px rgba(60, 40, 20, 0.2);
+
+  /* Type */
+  --font: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --fs-speech: 12px;
+  --fw-speech: 480;
+  --fs-history: 12px;
+  --fw-history: 460;
+  --fs-name: 13.5px;
+  --fw-name: 600;
+  --fs-time: 12px;
+  --fw-time: 500;
+
+  /* Legacy aliases — host page chrome uses the same palette */
+  --bg: var(--page);
+  --text: var(--ink);
+  --muted: var(--ink-soft);
+  --line: var(--hair-2);
+  --accent: var(--you);
+  --shadow: var(--bshadow);
+}
