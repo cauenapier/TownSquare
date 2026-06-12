@@ -50,7 +50,7 @@ Focus: **scene legibility** and **credible self-host on a real site**.
 - [ ] **Operator checklist**: install, health check, embed, two-browser test, common failures
 - [ ] **Stable widget + protocol**: public contract; hosted layer can sit on top later
 - [ ] **Basic Moderation**: allow admins to kick/block people
-- [ ] **Customizable appearance**: site owner can set background color, border, accent collor and basic widget styling
+- [ ] **Style overrides**: site owners can overwrite TownSquare's default look — background, border, accent color, and other basic widget styling
 
 
 ### Boundary (concept)

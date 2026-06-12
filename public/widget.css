@@ -269,14 +269,7 @@ body {
   position: relative;
   height: 180px;
   border-radius: var(--r) var(--r) 0 0;
-  background: linear-gradient(
-    180deg,
-    var(--scene) 0%,
-    var(--scene) 71%,
-    var(--scene-edge) 71%,
-    var(--page) 71.4%,
-    var(--page) 100%
-  );
+  background: transparent;
 }
 
 .townsquare__ground {
@@ -333,7 +326,7 @@ body {
   padding: 0 18px 18px;
   border-top: 0;
   border-radius: 0;
-  background: var(--page);
+  background: transparent;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
