@@ -7,6 +7,7 @@ import {
   CHARACTER_COLORS,
   DISPLAY_NAME_MAX,
   PROFILE_STORAGE_KEY,
+  READING_LABEL_MAX,
 } from "./constants.mjs";
 
 /**
@@ -47,6 +48,31 @@ export function normalizeCharacterColor(value) {
 export function normalizeDisplayName(value) {
   if (typeof value !== "string") return "";
   return value.trim().replace(/\s+/g, " ").slice(0, DISPLAY_NAME_MAX);
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function normalizeReadingLabel(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, " ").slice(0, READING_LABEL_MAX);
+}
+
+/**
+ * @param {HTMLElement} root
+ * @param {{ readingLabel?: string }} options
+ * @returns {string}
+ */
+export function readCurrentPageLabel(root, options = {}) {
+  const explicit = normalizeReadingLabel(options.readingLabel || root.dataset.townsquareReadingLabel || "");
+  if (explicit) return explicit;
+
+  const heading = document.querySelector("article h1, main h1, h1");
+  const headingLabel = normalizeReadingLabel(heading?.textContent || "");
+  if (headingLabel) return headingLabel;
+
+  return normalizeReadingLabel(document.title);
 }
 
 /**

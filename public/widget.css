@@ -7,7 +7,7 @@
 @import url("./tokens.css");
 
 #townsquare-root {
-  color-scheme: light;
+  color-scheme: light dark;
   font-family: var(--font);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
@@ -756,20 +756,42 @@
   text-transform: lowercase;
 }
 
-.avatar__peer-name {
-  display: inline-block;
+.avatar__peer-label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   max-width: 140px;
   padding: 4px 9px;
   border-radius: 8px;
   background: color-mix(in oklab, var(--surface) 82%, transparent);
   color: currentColor;
   box-shadow: 0 6px 12px -10px rgba(60, 40, 20, 0.34);
+}
+
+.avatar__peer-name {
+  display: inline-block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12.5px;
   font-weight: var(--fw-name);
   text-transform: lowercase;
 }
+
+.avatar__reading {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  font-weight: 620;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.avatar__reading[hidden] { display: none; }
 
 .avatar__plate-hint {
   font-size: 12.5px;

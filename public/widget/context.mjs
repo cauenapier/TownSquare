@@ -22,6 +22,7 @@
  * @property {string | null} propId
  * @property {string} displayName
  * @property {string} color
+ * @property {string} readingLabel
  * @property {number} propZoneEnteredAt
  * @property {string | null} settlePropId
  * @property {boolean} settleRequested
@@ -37,6 +38,7 @@
  * @property {string | null} propId
  * @property {string} displayName
  * @property {string} color
+ * @property {string} readingLabel
  * @property {AvatarView} avatar
  * @property {ReturnType<typeof setTimeout> | null} walkTimer
  */

@@ -45,6 +45,7 @@ const MAX_BROWSER_ID_LEN = 80;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
 const MAX_MESSAGE_LEN = 140;
 const MAX_DISPLAY_NAME_LEN = 18;
+const MAX_READING_LABEL_LEN = 42;
 const MAX_RECENT_MESSAGES = 5;
 const MAX_SITE_NAME_LEN = 80;
 const MAX_ORIGIN_LEN = 240;
@@ -165,6 +166,7 @@ const MESSAGE_HANDLERS = {
   init: handleInit,
   move: handleMove,
   profile: handleProfile,
+  reading: handleReading,
   settle: handleSettle,
   say: handleSay,
 };
@@ -183,7 +185,7 @@ function createClient(connectionId, ws, scene, site) {
   };
 }
 
-/** @returns {{id:number,browserId:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,clients:Set<any>,joined:boolean,leaveTimer:any,messages:Array<{text:string,at:number}>}} */
+/** @returns {{id:number,browserId:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,clients:Set<any>,joined:boolean,leaveTimer:any,messages:Array<{text:string,at:number}>}} */
 function createIdentity(id, browserId, x) {
   return {
     id,
@@ -193,6 +195,7 @@ function createIdentity(id, browserId, x) {
     propId: null,
     displayName: "",
     color: "#c8641f",
+    readingLabel: "",
     clients: new Set(),
     joined: false,
     leaveTimer: null,
@@ -223,6 +226,11 @@ function sanitizeMessage(text) {
 function sanitizeDisplayName(displayName) {
   if (typeof displayName !== "string") return "";
   return displayName.trim().replace(/\s+/g, " ").slice(0, MAX_DISPLAY_NAME_LEN);
+}
+
+function sanitizeReadingLabel(readingLabel) {
+  if (typeof readingLabel !== "string") return "";
+  return readingLabel.trim().replace(/\s+/g, " ").slice(0, MAX_READING_LABEL_LEN);
 }
 
 function sanitizeCharacterColor(color) {
@@ -786,6 +794,7 @@ function snapshotIdentity(identity) {
     propId: identity.propId,
     displayName: identity.displayName,
     color: identity.color,
+    readingLabel: identity.readingLabel,
     messages: identity.messages,
   };
 }
@@ -824,6 +833,7 @@ function emitIdentityState(identity, options = {}) {
     propId: identity.propId,
     displayName: identity.displayName,
     color: identity.color,
+    readingLabel: identity.readingLabel,
   };
 
   broadcast(scene, message, { exceptConnectionId });
@@ -1100,6 +1110,10 @@ function handleInit(client, message) {
 
   const identity = getOrCreateIdentity(scene, message.browserId, fallbackX, client.connectionId);
   clearLeaveTimer(identity);
+  const previousReadingLabel = identity.readingLabel;
+  if (Object.hasOwn(message, "readingLabel")) {
+    identity.readingLabel = sanitizeReadingLabel(message.readingLabel);
+  }
 
   if (!identity.joined) {
     identity.displayName = sanitizeDisplayName(message.displayName);
@@ -1122,11 +1136,19 @@ function handleInit(client, message) {
     propId: identity.propId,
     displayName: identity.displayName,
     color: identity.color,
+    readingLabel: identity.readingLabel,
     messages: identity.messages,
     peers,
   });
 
   if (identity.joined) {
+    if (identity.readingLabel !== previousReadingLabel) {
+      broadcast(scene, {
+        type: "reading",
+        id: identity.id,
+        readingLabel: identity.readingLabel,
+      }, { exceptConnectionId: client.connectionId });
+    }
     return;
   }
 
@@ -1174,6 +1196,20 @@ function handleProfile(client, message) {
     id: client.identity.id,
     displayName: client.identity.displayName,
     color: client.identity.color,
+  });
+}
+
+function handleReading(client, message) {
+  if (!client.identity) return;
+
+  const readingLabel = sanitizeReadingLabel(message.readingLabel);
+  if (readingLabel === client.identity.readingLabel) return;
+
+  client.identity.readingLabel = readingLabel;
+  broadcast(client.scene, {
+    type: "reading",
+    id: client.identity.id,
+    readingLabel,
   });
 }
 

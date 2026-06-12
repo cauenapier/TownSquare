@@ -13,6 +13,7 @@ import {
   renderAvatar,
   renderProps,
   renderShell,
+  setAvatarProfile,
   wireHelpPanel,
   updatePose,
 } from "./widget/dom.mjs";
@@ -27,13 +28,21 @@ import {
 } from "./widget/movement.mjs";
 import { updateStatus } from "./widget/presence.mjs";
 import { wireSocket } from "./widget/protocol.mjs";
-import { buildSocketUrl, getBrowserId, getStoredProfile, normalizeOrigin, saveStoredProfile } from "./widget/utils.mjs";
+import {
+  buildSocketUrl,
+  getBrowserId,
+  getStoredProfile,
+  normalizeOrigin,
+  readCurrentPageLabel,
+  saveStoredProfile,
+} from "./widget/utils.mjs";
 
 /**
  * @typedef {Object} MountOptions
  * @property {string} [serverOrigin] TownSquare server origin for static assets and WebSocket traffic.
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
  * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
+ * @property {string} [readingLabel] Explicit page label. Defaults to the page heading, then document title.
  */
 
 /**
@@ -65,6 +74,7 @@ export function mountTownSquare(root, options = {}) {
   const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey);
   const browserId = getBrowserId();
   const profile = getStoredProfile();
+  const readingLabel = readCurrentPageLabel(root, options);
   const spawnX = randomSpawnX();
   const peers = new Map();
   const coarsePointer = typeof window.matchMedia === "function"
@@ -111,12 +121,13 @@ export function mountTownSquare(root, options = {}) {
       propId: null,
       displayName: profile.displayName,
       color: profile.color,
+      readingLabel,
       propZoneEnteredAt: 0,
       settlePropId: null,
       settleRequested: false,
       avatar: createAvatar({
         isSelf: true,
-        profile,
+        profile: { ...profile, readingLabel },
         colors: CHARACTER_COLORS,
         onProfileChange: (nextProfile) => {
           const saved = saveStoredProfile(nextProfile);
@@ -192,6 +203,48 @@ export function mountTownSquare(root, options = {}) {
   };
   window.addEventListener("keydown", onWindowKeyDown);
 
+  let readingUpdateTimer = null;
+  const sendReadingLabel = () => {
+    readingUpdateTimer = null;
+    const nextLabel = readCurrentPageLabel(root, options);
+    if (nextLabel === ctx.self.readingLabel) return;
+
+    ctx.self.readingLabel = nextLabel;
+    setAvatarProfile(ctx.self.avatar, ctx.self);
+    if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
+      ctx.socket.send(JSON.stringify({ type: "reading", readingLabel: nextLabel }));
+    }
+  };
+  const queueReadingUpdate = () => {
+    clearTimeout(readingUpdateTimer);
+    readingUpdateTimer = setTimeout(sendReadingLabel, 80);
+  };
+  let readingRefreshTimer = null;
+  const scheduleReadingUpdate = () => {
+    queueReadingUpdate();
+    clearTimeout(readingRefreshTimer);
+    readingRefreshTimer = setTimeout(queueReadingUpdate, 400);
+  };
+  const originalPushState = history.pushState;
+  const originalReplaceState = history.replaceState;
+  const wrappedPushState = function townsquarePushState(...args) {
+    const result = originalPushState.apply(this, args);
+    window.dispatchEvent(new Event("townsquare:navigation"));
+    return result;
+  };
+  const wrappedReplaceState = function townsquareReplaceState(...args) {
+    const result = originalReplaceState.apply(this, args);
+    window.dispatchEvent(new Event("townsquare:navigation"));
+    return result;
+  };
+  history.pushState = wrappedPushState;
+  history.replaceState = wrappedReplaceState;
+  window.addEventListener("popstate", scheduleReadingUpdate);
+  window.addEventListener("hashchange", scheduleReadingUpdate);
+  window.addEventListener("pageshow", scheduleReadingUpdate);
+  document.addEventListener("visibilitychange", scheduleReadingUpdate);
+  window.addEventListener("townsquare:navigation", scheduleReadingUpdate);
+
   // While the virtual keyboard is up, expose how much of the layout viewport it
   // hides so the docked composer can ride above it in expanded mode.
   const viewport = window.visualViewport;
@@ -224,6 +277,15 @@ export function mountTownSquare(root, options = {}) {
       unwireHelpPanel();
       closeTrays(ctx);
       window.removeEventListener("keydown", onWindowKeyDown);
+      window.removeEventListener("popstate", scheduleReadingUpdate);
+      window.removeEventListener("hashchange", scheduleReadingUpdate);
+      window.removeEventListener("pageshow", scheduleReadingUpdate);
+      document.removeEventListener("visibilitychange", scheduleReadingUpdate);
+      window.removeEventListener("townsquare:navigation", scheduleReadingUpdate);
+      clearTimeout(readingUpdateTimer);
+      clearTimeout(readingRefreshTimer);
+      if (history.pushState === wrappedPushState) history.pushState = originalPushState;
+      if (history.replaceState === wrappedReplaceState) history.replaceState = originalReplaceState;
       if (coarsePointer && viewport) {
         viewport.removeEventListener("resize", onViewportChange);
         viewport.removeEventListener("scroll", onViewportChange);

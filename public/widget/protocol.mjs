@@ -7,6 +7,7 @@ import { setWalking } from "./dom.mjs";
 import {
   applyPeerState,
   applyProfileState,
+  applyReadingState,
   applySelfState,
   removePeer,
   setStatusMessage,
@@ -97,6 +98,7 @@ export function wireSocket(ctx) {
         x: self.x,
         displayName: self.displayName,
         color: self.color,
+        readingLabel: self.readingLabel,
       }));
     });
 
@@ -182,6 +184,11 @@ export function wireSocket(ctx) {
 
       if (message.type === "profile") {
         applyProfileState(ctx, message);
+        return;
+      }
+
+      if (message.type === "reading") {
+        applyReadingState(ctx, message);
       }
     });
 

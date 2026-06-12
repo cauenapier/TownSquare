@@ -16,13 +16,15 @@ function siteSocketUrl(siteKey) {
   return url.toString();
 }
 
-function connect({ x, browserId, siteKey = "", origin = "", displayName = "", color = "" }) {
+function connect({ x, browserId, siteKey = "", origin = "", displayName = "", color = "", readingLabel }) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(siteSocketUrl(siteKey), origin ? { headers: { Origin: origin } } : undefined);
     const seen = [];
 
     ws.on("open", () => {
-      ws.send(JSON.stringify({ type: "init", x, browserId, displayName, color }));
+      const init = { type: "init", x, browserId, displayName, color };
+      if (typeof readingLabel === "string") init.readingLabel = readingLabel;
+      ws.send(JSON.stringify(init));
     });
 
     ws.on("message", (buffer) => {
@@ -206,6 +208,7 @@ async function main() {
     browserId: "browser-a",
     displayName: "  Ada    Lovelace  ",
     color: "#3f7f63",
+    readingLabel: "  Launch    notes  ",
   });
   const secondSameBrowser = await connect({ x: 0.75, browserId: "browser-a" });
 
@@ -214,8 +217,10 @@ async function main() {
   assert(first.id === secondSameBrowser.id, "same-browser tabs did not reuse one shared identity");
   assert(first.hello.displayName === "Ada Lovelace", "display name was not normalized on init");
   assert(first.hello.color === "#3f7f63", "character color was not accepted on init");
+  assert(first.hello.readingLabel === "Launch notes", "reading label was not normalized on init");
   assert(secondSameBrowser.hello.displayName === "Ada Lovelace", "same-browser tab did not inherit display name");
   assert(secondSameBrowser.hello.color === "#3f7f63", "same-browser tab did not inherit character color");
+  assert(secondSameBrowser.hello.readingLabel === "Launch notes", "same-browser tab did not inherit reading label");
   assert(secondSameBrowser.hello.peers.length === 0, "same-browser tab should not see itself as a peer");
   assert(!first.seen.some((message) => message.type === "join"), "same-browser tab incorrectly triggered a join event");
 
@@ -226,7 +231,28 @@ async function main() {
   assert(third.hello.peers.length === 1, "third client should see one existing visitor, not one per tab");
   assert(third.hello.peers[0].displayName === "Ada Lovelace", "peer snapshot did not include display name");
   assert(third.hello.peers[0].color === "#3f7f63", "peer snapshot did not include character color");
+  assert(third.hello.peers[0].readingLabel === "Launch notes", "peer snapshot did not include reading label");
   assert(first.seen.some((message) => message.type === "join" && message.peer.id === third.id), "first client did not observe different-browser join");
+
+  secondSameBrowser.ws.send(JSON.stringify({ type: "reading", readingLabel: "API reference" }));
+  await delay(100);
+
+  assert(
+    first.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.readingLabel === "API reference"
+    )),
+    "reading update did not propagate to same-browser sibling",
+  );
+  assert(
+    third.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.readingLabel === "API reference"
+    )),
+    "reading update did not propagate to other visitors",
+  );
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "profile", displayName: "Ada", color: "#3f6fb5" }));
   await delay(100);

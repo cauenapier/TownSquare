@@ -2,7 +2,7 @@
  * DOM construction and avatar/scene rendering for the TownSquare widget.
  */
 
-import { PROPS } from "./constants.mjs";
+import { DISPLAY_NAME_MAX, PROPS, READING_LABEL_MAX } from "./constants.mjs";
 import { figureMarkup } from "./figure.mjs";
 
 /**
@@ -27,6 +27,7 @@ import { figureMarkup } from "./figure.mjs";
  * @property {number} [bubbleFade] Applied proximity opacity (see bubble-layout.mjs).
  * @property {HTMLElement} [below] Container for the nameplate / composer.
  * @property {HTMLElement} [nameEl] Visible name label.
+ * @property {HTMLElement} [readingEl] Visible current page label.
  * @property {HTMLButtonElement} [plate] The "you · say something" way-in.
  * @property {HTMLElement} [dot]
  * @property {HTMLButtonElement} [profileButton]
@@ -205,7 +206,7 @@ export function wireHelpPanel(helpButton, helpPanel) {
  *
  * @param {{
  *   isSelf: boolean,
- *   profile?: { displayName?: string, color?: string },
+ *   profile?: { displayName?: string, color?: string, readingLabel?: string },
  *   colors?: Array<string>,
  *   onProfileChange?: (profile: { displayName: string, color: string }) => void,
  *   onSubmitChat?: () => void,
@@ -248,12 +249,20 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     const below = document.createElement("div");
     below.className = "avatar__below avatar__below--peer";
 
+    const label = document.createElement("div");
+    label.className = "avatar__peer-label";
+
     const nameEl = document.createElement("span");
     nameEl.className = "avatar__peer-name";
-    below.appendChild(nameEl);
+
+    const readingEl = document.createElement("span");
+    readingEl.className = "avatar__reading avatar__reading--peer";
+
+    label.append(nameEl, readingEl);
+    below.appendChild(label);
     el.appendChild(below);
 
-    const peerAvatar = { ...avatar, below, nameEl };
+    const peerAvatar = { ...avatar, below, nameEl, readingEl };
     setAvatarProfile(peerAvatar, profile);
     return peerAvatar;
   }
@@ -494,22 +503,32 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
 
 /**
  * @param {AvatarView} avatar
- * @param {{ displayName?: string, color?: string }} profile
+ * @param {{ displayName?: string, color?: string, readingLabel?: string }} profile
  */
 export function setAvatarProfile(avatar, profile = {}) {
   const displayName = typeof profile.displayName === "string"
-    ? profile.displayName.trim().replace(/\s+/g, " ").slice(0, 18)
+    ? profile.displayName.trim().replace(/\s+/g, " ").slice(0, DISPLAY_NAME_MAX)
     : "";
   const color = typeof profile.color === "string" ? profile.color : "";
+  const hasReadingLabel = Object.hasOwn(profile, "readingLabel");
+  const readingLabel = hasReadingLabel && typeof profile.readingLabel === "string"
+    ? profile.readingLabel.trim().replace(/\s+/g, " ").slice(0, READING_LABEL_MAX)
+    : avatar.readingEl?.textContent || "";
   avatar.el.dataset.color = color;
   avatar.el.style.color = color || "";
   if (avatar.dot) {
     avatar.dot.style.background = color || "";
   }
   if (avatar.nameEl) {
-    avatar.nameEl.textContent = displayName || "you";
+    avatar.nameEl.textContent = displayName || (readingLabel && avatar.el.classList.contains("avatar--peer") ? "visitor" : "you");
     avatar.nameEl.dataset.value = displayName;
-    avatar.nameEl.parentElement?.toggleAttribute("hidden", !displayName && avatar.el.classList.contains("avatar--peer"));
+  }
+  if (avatar.readingEl) {
+    avatar.readingEl.textContent = readingLabel;
+    avatar.readingEl.toggleAttribute("hidden", !readingLabel);
+  }
+  if (avatar.below && avatar.el.classList.contains("avatar--peer")) {
+    avatar.below.toggleAttribute("hidden", !displayName && !readingLabel);
   }
   for (const swatch of avatar.colorSwatches || []) {
     swatch.setAttribute("aria-pressed", String(swatch.dataset.color === color));

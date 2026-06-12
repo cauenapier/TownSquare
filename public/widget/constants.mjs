@@ -12,6 +12,7 @@ export const PROFILE_STORAGE_KEY = "townsquare-profile";
 export const PROP_SETTLE_MS = 700;
 export const MAX_RECENT_MESSAGES = 5;
 export const DISPLAY_NAME_MAX = 18;
+export const READING_LABEL_MAX = 42;
 /** Most bubbles kept visible in a figure's ghost stack (live + lingering ghosts). */
 export const GHOST_STACK_MAX = 4;
 export const MOVEMENT_SPEED = 0.22;

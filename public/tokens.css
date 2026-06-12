@@ -60,3 +60,30 @@
   --accent: var(--you);
   --shadow: var(--bshadow);
 }
+
+@media (prefers-color-scheme: dark) {
+  #townsquare-root {
+    --scene: #242521;
+    --scene-edge: #31322d;
+    --page: #181917;
+    --surface: #24231f;
+    --surface-2: #2d2b25;
+
+    --ink: #f2eee6;
+    --ink-soft: #beb7aa;
+    --ink-faint: #898276;
+
+    --hair: rgba(242, 238, 230, 0.11);
+    --hair-2: rgba(242, 238, 230, 0.18);
+
+    --you: #df8a43;
+    --you-deep: #f0ad72;
+    --you-tint: rgba(223, 138, 67, 0.17);
+
+    --other: #ddd7cc;
+    --ground: rgba(242, 238, 230, 0.18);
+
+    --bshadow: 0 9px 18px -12px rgba(0, 0, 0, 0.78), 0 2px 5px -2px rgba(0, 0, 0, 0.5);
+    --tray-shadow: 0 16px 34px -18px rgba(0, 0, 0, 0.82), 0 3px 8px -4px rgba(0, 0, 0, 0.58);
+  }
+}
