@@ -20,12 +20,12 @@ export const SEND_INTERVAL_MS = 45;
 export const MIN_X = 0.02;
 export const MAX_X = 0.98;
 export const CHARACTER_COLORS = [
+  "#5f6b73",
   "#c8641f",
   "#3f7f63",
   "#3f6fb5",
   "#8a5fb1",
   "#b44f6f",
-  "#5f6b73",
 ];
 
 /** @returns {number} */

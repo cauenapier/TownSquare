@@ -195,7 +195,7 @@ function createIdentity(id, browserId, x) {
     pose: null,
     propId: null,
     displayName: "",
-    color: "#c8641f",
+    color: "#5f6b73",
     readingLabel: "",
     readingUrl: "",
     clients: new Set(),
@@ -246,7 +246,7 @@ function sanitizeReadingUrl(readingUrl) {
 }
 
 function sanitizeCharacterColor(color) {
-  return CHARACTER_COLORS.has(color) ? color : "#c8641f";
+  return CHARACTER_COLORS.has(color) ? color : "#5f6b73";
 }
 
 function sanitizeSiteName(name, origin) {
