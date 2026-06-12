@@ -24,6 +24,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `public/index.html` — demo host page for local development
 - `public/register.html` — no-account hosted site registration page
 - `public/admin.html` — token-protected hosted site admin page
+- `public/service-admin.html` — service-level registered site management page
 - `public/dev.html` — local simulation page for configurable walking/talking characters
 - `public/walk-sandbox.html` — local walk-cycle inspection sandbox
 - `scripts/smoke-test.js` — automated websocket smoke test
@@ -161,6 +162,8 @@ The admin page can:
 Registered sites are stored in `.data/sites.json` by default.
 Set `DATA_DIR` if the registry should live somewhere else.
 Set `PUBLIC_ORIGIN` in production so generated snippets use the public HTTPS origin.
+Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can list registered sites, reset site admin tokens, disable sites or chat, and delete site records.
+For local runs, `server.js` also reads `.env` if it exists; real environment variables win over `.env` values.
 
 ## Deploy updates to the shared Hetzner host
 

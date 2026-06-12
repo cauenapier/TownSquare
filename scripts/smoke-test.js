@@ -6,6 +6,7 @@ const SERVER_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
 const HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
+const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
 
 function siteSocketUrl(siteKey) {
   if (!siteKey) return SERVER_URL;
@@ -63,6 +64,26 @@ async function loginWithAdminToken(adminToken) {
   return body;
 }
 
+async function loginShouldFailWithAdminToken(adminToken) {
+  const response = await fetch(`${HTTP_ORIGIN}/api/admin/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ adminToken }),
+  });
+  assert(response.status === 403, "old admin token still worked after reset");
+}
+
+async function serviceAdminApi(pathname, payload = {}) {
+  const response = await fetch(`${HTTP_ORIGIN}${pathname}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: SERVICE_ADMIN_PASSWORD, ...payload }),
+  });
+  const body = await response.json();
+  assert(response.ok, body.error || "service admin request failed");
+  return body;
+}
+
 function assertAdminTokenStoredAsHash(siteKey, adminToken) {
   const raw = fs.readFileSync(SITES_FILE, "utf8");
   assert(!raw.includes(adminToken), "site registry persisted the plaintext admin token");
@@ -74,6 +95,41 @@ function assertAdminTokenStoredAsHash(siteKey, adminToken) {
   assert(
     typeof site.adminTokenHash === "string" && site.adminTokenHash.startsWith("sha256:"),
     "site registry did not store an admin token hash",
+  );
+}
+
+async function assertServiceAdminCanManageSites(hostedA, hostedB) {
+  if (!SERVICE_ADMIN_PASSWORD) return;
+
+  const listed = await serviceAdminApi("/api/service-admin/sites");
+  assert(
+    listed.sites.some((site) => site.siteKey === hostedA.site.siteKey),
+    "service admin did not list hosted site A",
+  );
+  assert(
+    listed.sites.some((site) => site.siteKey === hostedB.site.siteKey),
+    "service admin did not list hosted site B",
+  );
+
+  const reset = await serviceAdminApi("/api/service-admin/action", {
+    action: "resetAdminToken",
+    siteKey: hostedB.site.siteKey,
+  });
+  assert(reset.adminToken && reset.adminToken !== hostedB.adminToken, "service admin did not issue a new token");
+  assert(reset.adminUrl.includes("#adminToken="), "service admin reset did not return a fragment admin URL");
+  await loginShouldFailWithAdminToken(hostedB.adminToken);
+  const resetLogin = await loginWithAdminToken(reset.adminToken);
+  assert(resetLogin.site.siteKey === hostedB.site.siteKey, "service admin reset token opened the wrong site");
+  assertAdminTokenStoredAsHash(hostedB.site.siteKey, reset.adminToken);
+
+  await serviceAdminApi("/api/service-admin/action", {
+    action: "deleteSite",
+    siteKey: hostedB.site.siteKey,
+  });
+  const afterDelete = await serviceAdminApi("/api/service-admin/sites");
+  assert(
+    !afterDelete.sites.some((site) => site.siteKey === hostedB.site.siteKey),
+    "service admin did not delete hosted site B",
   );
 }
 
@@ -206,6 +262,7 @@ async function main() {
 
   siteAVisitor.ws.close();
   siteBVisitor.ws.close();
+  await assertServiceAdminCanManageSites(hostedA, hostedB);
 
   console.log("Smoke test passed.");
   first.ws.close();

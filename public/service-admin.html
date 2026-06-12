@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare service admin</title>
+    <link rel="stylesheet" href="/widget.css" />
+  </head>
+  <body>
+    <main class="hosted-shell hosted-shell--wide">
+      <section class="hosted-panel" id="login-view" aria-labelledby="login-title" hidden>
+        <p class="eyebrow">TownSquare service admin</p>
+        <h1 id="login-title">Manage registered websites</h1>
+        <p class="hosted-copy">Enter the service admin password configured on this server.</p>
+
+        <form class="hosted-form" id="login-form">
+          <label>
+            <span>Service admin password</span>
+            <input
+              id="login-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <button type="submit" id="login-submit">Open service admin</button>
+        </form>
+
+        <p class="hosted-status" id="login-status" role="status" hidden></p>
+      </section>
+
+      <section class="hosted-panel" id="admin-view" aria-labelledby="admin-title" hidden>
+        <div class="hosted-head">
+          <div>
+            <p class="eyebrow">TownSquare service admin</p>
+            <h1 id="admin-title">Registered websites</h1>
+          </div>
+          <button type="button" class="hosted-quiet-button" id="sign-out">Sign out</button>
+        </div>
+
+        <p class="hosted-status" id="admin-status" role="status"></p>
+
+        <section class="hosted-section" id="token-result" hidden>
+          <h2>New admin token</h2>
+          <p class="hosted-note">Save this now. It will not be shown again.</p>
+          <div class="hosted-copy-row">
+            <input id="new-admin-token" type="text" readonly />
+            <button type="button" id="copy-token">Copy token</button>
+          </div>
+          <div class="hosted-actions">
+            <a class="hosted-button" id="new-admin-link" href="/admin">Open site admin</a>
+          </div>
+        </section>
+
+        <section class="service-sites" id="site-list" aria-live="polite"></section>
+      </section>
+    </main>
+
+    <script type="module" src="/service-admin.mjs"></script>
+  </body>
+</html>

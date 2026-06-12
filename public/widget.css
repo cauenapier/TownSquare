@@ -900,6 +900,10 @@ body {
   padding: 36px 16px;
 }
 
+.hosted-shell--wide {
+  width: min(1120px, 100%);
+}
+
 .hosted-panel {
   padding: 26px;
   border: 1px solid var(--line);
@@ -1010,7 +1014,8 @@ body {
 .hosted-actions button,
 .hosted-button,
 .hosted-copy-row button,
-.visitor-row button {
+.visitor-row button,
+.service-site-actions button {
   min-height: 40px;
   border: 0;
   border-radius: 10px;
@@ -1030,7 +1035,8 @@ body {
 .hosted-button,
 .hosted-actions button:nth-child(n + 2),
 .hosted-copy-row button,
-.visitor-row button {
+.visitor-row button,
+.service-site-actions button {
   display: inline-flex;
   align-items: center;
   flex: none;
@@ -1174,11 +1180,88 @@ body {
   font-size: 0.86rem;
 }
 
+.service-sites {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.service-site-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(280px, 1.7fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+}
+
+.service-site-main {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.service-site-main strong,
+.service-site-main span,
+.service-site-main code {
+  overflow-wrap: anywhere;
+}
+
+.service-site-main span,
+.service-site-main code {
+  color: var(--ink-soft);
+}
+
+.service-site-main code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+}
+
+.service-site-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.service-site-meta div {
+  min-width: 0;
+}
+
+.service-site-meta dt {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.service-site-meta dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.service-site-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.service-site-actions .service-danger {
+  color: #a8431f;
+}
+
 @media (max-width: 640px) {
   .page-card { padding: 20px; border-radius: 20px; }
   .hosted-panel { padding: 20px; }
   .hosted-meta dl { grid-template-columns: 1fr; }
   .hosted-copy-row { flex-wrap: wrap; }
+  .service-site-row,
+  .service-site-meta {
+    grid-template-columns: 1fr;
+  }
   .hosted-section-head,
   .visitor-row {
     align-items: stretch;

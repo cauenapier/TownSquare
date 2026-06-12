@@ -4,6 +4,8 @@ const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
 
+loadEnvFile();
+
 /**
  * Tiny demo server for the first playable TownSquare slice.
  *
@@ -23,6 +25,7 @@ const { WebSocketServer } = require("ws");
 
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8787);
+const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
@@ -48,6 +51,35 @@ const MOVE_THROTTLE_MS = 40;
 const CHAT_THROTTLE_MS = 1500;
 const RECONNECT_GRACE_MS = 1500;
 const HEARTBEAT_INTERVAL_MS = 30000;
+
+function loadEnvFile(filePath = path.join(__dirname, ".env")) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+
+      const separator = trimmed.indexOf("=");
+      if (separator === -1) continue;
+
+      const key = trimmed.slice(0, separator).trim();
+      let value = trimmed.slice(separator + 1).trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || Object.hasOwn(process.env, key)) continue;
+
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn(`Could not load .env: ${error.message}`);
+    }
+  }
+}
 
 const BENCH = {
   id: "bench",
@@ -234,6 +266,7 @@ function resolvePublicFile(requestUrl, hostHeader) {
     ["/", "/index.html"],
     ["/register", "/register.html"],
     ["/admin", "/admin.html"],
+    ["/service-admin", "/service-admin.html"],
   ]);
   const pathname = aliases.get(url.pathname) || url.pathname;
   const normalized = path.normalize(pathname).replace(/^\.+/, "");
@@ -479,6 +512,118 @@ function handleAdminAction(req, res) {
         }
       }
       sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene) });
+      return;
+    }
+
+    sendJson(res, 400, { error: "Unknown action." });
+  });
+}
+
+function serviceAdminPasswordMatches(password) {
+  const expected = SERVICE_ADMIN_PASSWORD.trim();
+  const provided = typeof password === "string" ? password.trim() : "";
+  if (!expected || !provided) return false;
+  return tokensMatch(expected, provided);
+}
+
+function isServiceAdminAuthorized(body, res) {
+  if (!SERVICE_ADMIN_PASSWORD.trim()) {
+    sendJson(res, 403, { error: "Service admin is not configured." });
+    return false;
+  }
+
+  if (!serviceAdminPasswordMatches(body.password)) {
+    sendJson(res, 403, { error: "Invalid service admin password." });
+    return false;
+  }
+
+  return true;
+}
+
+function serviceAdminSite(site) {
+  const scene = scenes.get(site.siteKey);
+  const sceneStats = scene ? getSceneStats(scene) : { activeVisitors: 0 };
+
+  return {
+    ...publicSite(site),
+    updatedAt: site.updatedAt,
+    activeVisitors: sceneStats.activeVisitors,
+  };
+}
+
+function sendServiceAdminSites(res) {
+  sendJson(res, 200, {
+    sites: Array.from(sitesByKey.values()).map((site) => serviceAdminSite(site)),
+  });
+}
+
+function closeSiteScene(siteKey, code, reason) {
+  const scene = scenes.get(siteKey);
+  if (!scene) return;
+
+  for (const client of Array.from(scene.clients.values())) {
+    client.ws.close(code, reason);
+  }
+  scenes.delete(siteKey);
+}
+
+function handleServiceAdminSites(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(body, res)) return;
+    sendServiceAdminSites(res);
+  });
+}
+
+function handleServiceAdminAction(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(body, res)) return;
+
+    const siteKey = String(body.siteKey || "");
+    const site = sitesByKey.get(siteKey);
+    if (!site) {
+      sendJson(res, 404, { error: "Site not found." });
+      return;
+    }
+
+    const action = String(body.action || "");
+
+    if (action === "resetAdminToken") {
+      const adminToken = createToken("admin", 24);
+      site.adminTokenHash = hashAdminToken(adminToken);
+      site.updatedAt = Date.now();
+      saveSites();
+      sendJson(res, 200, {
+        site: serviceAdminSite(site),
+        adminToken,
+        adminUrl: buildAdminUrl(req, adminToken),
+      });
+      return;
+    }
+
+    if (action === "setSiteDisabled") {
+      site.disabled = Boolean(body.disabled);
+      site.updatedAt = Date.now();
+      saveSites();
+      if (site.disabled) {
+        closeSiteScene(site.siteKey, 4003, "site disabled");
+      }
+      sendJson(res, 200, { site: serviceAdminSite(site) });
+      return;
+    }
+
+    if (action === "setChatDisabled") {
+      site.chatDisabled = Boolean(body.disabled);
+      site.updatedAt = Date.now();
+      saveSites();
+      sendJson(res, 200, { site: serviceAdminSite(site) });
+      return;
+    }
+
+    if (action === "deleteSite") {
+      closeSiteScene(site.siteKey, 4003, "site deleted");
+      sitesByKey.delete(site.siteKey);
+      saveSites();
+      sendJson(res, 200, { deletedSiteKey: site.siteKey });
       return;
     }
 
@@ -749,6 +894,16 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/admin/action") {
     handleAdminAction(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/sites") {
+    handleServiceAdminSites(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/action") {
+    handleServiceAdminAction(req, res);
     return;
   }
 

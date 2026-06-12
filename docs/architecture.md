@@ -27,13 +27,14 @@ TownSquare currently has three practical surfaces:
    - accountless site registration
    - public site key for embed routing
    - private admin token for moderation/settings, stored as a hash
+   - service admin password for operator-level site management
    - small JSON site registry
 
 That separation is now reflected directly in the repo:
 - `public/townsquare.mjs` = reusable widget mount API
 - `public/widget/` = widget implementation split by concern (DOM, chat, presence, protocol, movement)
 - `public/demo.mjs` + `public/index.html` = demo shell
-- `public/register.html` + `public/admin.html` = hosted setup/admin shell
+- `public/register.html` + `public/admin.html` + `public/service-admin.html` = hosted setup/admin shells
 - `server.js` = static + realtime service
 
 ## Why this boundary matters

@@ -23,6 +23,10 @@ Configure with environment variables:
 - `DATA_DIR` for hosted site registry storage
 - `PUBLIC_ORIGIN` for generated hosted snippets/admin links
 - `REGISTRATIONS_PER_HOUR` per-IP registration rate limit (default 20, `0` disables)
+- `SERVICE_ADMIN_PASSWORD` to enable the service admin page
+
+For local runs, `server.js` also reads `.env` if it exists.
+Real environment variables take precedence over `.env` values.
 
 ## Local run
 
@@ -99,6 +103,18 @@ The admin page supports the first hosted operations:
 
 Registered site records are stored in `.data/sites.json` by default.
 For production, set `DATA_DIR` to a persistent directory and `PUBLIC_ORIGIN` to the public HTTPS origin.
+
+## Service admin
+
+Set `SERVICE_ADMIN_PASSWORD` and open:
+
+```text
+https://your-townsquare-host/service-admin
+```
+
+The service admin page is for the operator of the shared TownSquare server.
+It can list registered sites, reset a site's admin token, disable a site or its chat, and delete site records.
+Reset tokens are shown once and then stored only as hashes.
 
 ## Reverse proxy notes
 
