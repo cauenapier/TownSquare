@@ -194,9 +194,7 @@ function stepSelf(self, now, dt) {
 function mountDevScene(count, walking) {
   root.replaceChildren();
 
-  const { stage, status } = renderShell(root, {
-    hint: "Use ?characters=24 to deep-link a larger crowd.",
-  });
+  const { stage, status } = renderShell(root);
 
   renderBench(stage);
   status.textContent = `You plus ${count} simulated ${count === 1 ? "character" : "characters"}`;

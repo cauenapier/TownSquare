@@ -310,20 +310,13 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-.townsquare__hint {
-  padding: 10px 4px 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
 .townsquare--quiet {
   min-height: 46px;
   overflow: visible;
 }
 
 .townsquare--quiet .townsquare__status,
-.townsquare--quiet .townsquare__stage,
-.townsquare--quiet .townsquare__hint {
+.townsquare--quiet .townsquare__stage {
   display: none;
 }
 

@@ -7,5 +7,4 @@ if (!root) {
 
 mountTownSquare(root, {
   socketPath: "/live",
-  hint: "This same square can live on your website with one pasted snippet.",
 });

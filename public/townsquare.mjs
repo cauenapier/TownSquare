@@ -25,7 +25,6 @@ import { buildSocketUrl, getBrowserId, normalizeOrigin } from "./widget/utils.mj
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
  * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
  * @property {string} [instructions] Status-row helper text shown beside the visitor count.
- * @property {string} [hint] Footer hint shown below the scene.
  */
 
 /**
@@ -66,7 +65,7 @@ export function mountTownSquare(root, options = {}) {
     status: statusEl,
     quietButton,
     expandButton,
-  } = renderShell(root, options);
+  } = renderShell(root);
 
   renderBench(stage);
 

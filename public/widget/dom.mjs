@@ -63,10 +63,9 @@ const TOWNSQUARE_URL = "https://townsquare.cauenapier.com/";
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @param {import("../townsquare.mjs").MountOptions} mountOptions
  * @returns {{ app: HTMLElement, stage: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement }}
  */
-export function renderShell(container, mountOptions) {
+export function renderShell(container) {
   const element = document.createElement("section");
   element.className = "townsquare";
 
@@ -136,11 +135,7 @@ export function renderShell(container, mountOptions) {
   ground.className = "townsquare__ground";
   stageEl.appendChild(ground);
 
-  const hint = document.createElement("div");
-  hint.className = "townsquare__hint";
-  hint.textContent = mountOptions.hint || "Embedded into a normal page instead of running as a disconnected mockup.";
-
-  element.append(controls, statusRow, stageEl, hint);
+  element.append(controls, statusRow, stageEl);
   container.appendChild(element);
   return { app: element, stage: stageEl, status, quietButton, expandButton };
 }
