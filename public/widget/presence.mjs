@@ -78,6 +78,7 @@ export function getOrCreatePeer(ctx, peer) {
 export function removePeer(ctx, id) {
   const peer = ctx.peers.get(id);
   if (!peer) return;
+  clearTimeout(peer.walkTimer);
   peer.avatar.el.remove();
   ctx.peers.delete(id);
   updateStatus(ctx);
