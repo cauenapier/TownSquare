@@ -34,7 +34,7 @@ export function resetPropSettle(ctx) {
 export function maybeRequestPropSettle(ctx, now) {
   const { self, socket } = ctx;
   if (self.pose) return;
-  if (socket.readyState !== WebSocket.OPEN) return;
+  if (socket?.readyState !== WebSocket.OPEN) return;
 
   const prop = INTERACTIVE_PROPS.find((candidate) => (
     Math.abs(self.x - candidate.x) < candidate.zoneRadius
@@ -67,7 +67,7 @@ export function maybeSendMove(ctx) {
   const movedEnough = Math.abs(self.x - self.lastSentX) > 0.002;
   const waitedLongEnough = now - self.lastSendAt > SEND_INTERVAL_MS;
 
-  if (socket.readyState !== WebSocket.OPEN || !movedEnough || !waitedLongEnough) {
+  if (socket?.readyState !== WebSocket.OPEN || !movedEnough || !waitedLongEnough) {
     return;
   }
 

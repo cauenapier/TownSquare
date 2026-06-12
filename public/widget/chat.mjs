@@ -118,7 +118,7 @@ export function submitChat(ctx) {
   if (!input) return;
 
   const text = input.value.trim();
-  if (!text || ctx.socket.readyState !== WebSocket.OPEN) return;
+  if (!text || ctx.socket?.readyState !== WebSocket.OPEN) return;
 
   ctx.socket.send(JSON.stringify({ type: "say", text }));
   sayMessage(ctx.self.avatar, { text, at: Date.now() });

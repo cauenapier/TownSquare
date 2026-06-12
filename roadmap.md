@@ -52,6 +52,7 @@ Still thin: scene feels like a demo strip; anonymous visitors; deployment docs l
 - [ ] **Currently reading tag**: short label of the page each visitor is on (e.g. article or page title); visible to others; updates on navigation; readable in the scene without crowding
 - [ ] **Click/tap props**: intentional interaction where proximity isn't enough
 - [ ] **Arrival clarity**: live place, who's here, can move and chat: obvious in seconds
+- [ ] **Copy and paste text**: paste into the chat composer without breaking focus or movement; copy message text from the tray (and bubbles where feasible); works on desktop and mobile where the platform allows
 
 ### Site owners
 

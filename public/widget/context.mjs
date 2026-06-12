@@ -51,10 +51,11 @@
  * @property {HTMLButtonElement} quietButton
  * @property {HTMLButtonElement} expandButton
  * @property {SelfState} self
- * @property {WebSocket} socket
+ * @property {WebSocket | null} socket
  * @property {boolean} quiet
  * @property {boolean} expanded
  * @property {boolean} disposed
+ * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
  * @property {number} lastFrameAt
  * @property {number | null} frameHandle
  * @property {(event: KeyboardEvent) => void} onKeyDown

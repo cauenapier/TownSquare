@@ -106,10 +106,11 @@ export function mountTownSquare(root, options = {}) {
       }),
       walkTimer: null,
     },
-    socket: new WebSocket(socketUrl),
+    socket: null,
     quiet: false,
     expanded: false,
     disposed: false,
+    reconnectTimer: null,
     lastFrameAt: performance.now(),
     frameHandle: null,
     onKeyDown: () => {},
@@ -158,11 +159,15 @@ export function mountTownSquare(root, options = {}) {
   return {
     destroy() {
       ctx.disposed = true;
+      if (ctx.reconnectTimer) {
+        clearTimeout(ctx.reconnectTimer);
+        ctx.reconnectTimer = null;
+      }
       stopGameLoop(ctx);
       unwireKeyboard(ctx);
       unwireHelpPanel();
       setExpanded(false);
-      ctx.socket.close();
+      ctx.socket?.close();
       root.replaceChildren();
     },
   };
