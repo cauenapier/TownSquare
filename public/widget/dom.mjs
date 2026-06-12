@@ -40,16 +40,86 @@ const ENTER_ICON = `
   </svg>
 `;
 
+const QUIET_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M19 12.8A7.2 7.2 0 0 1 11.2 5 6.8 6.8 0 1 0 19 12.8Z"></path>
+  </svg>
+`;
+
+const EXPAND_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M8 4H4v4"></path>
+    <path d="M16 4h4v4"></path>
+    <path d="M20 16v4h-4"></path>
+    <path d="M4 16v4h4"></path>
+  </svg>
+`;
+
+const TOWNSQUARE_URL = "https://townsquare.cauenapier.com/";
+
 /**
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
  * @param {import("../townsquare.mjs").MountOptions} mountOptions
- * @returns {{ app: HTMLElement, stage: HTMLElement, status: HTMLElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement }}
  */
 export function renderShell(container, mountOptions) {
   const element = document.createElement("section");
   element.className = "townsquare";
+
+  const controls = document.createElement("div");
+  controls.className = "townsquare__controls";
+
+  const quietButton = document.createElement("button");
+  quietButton.className = "townsquare__control";
+  quietButton.type = "button";
+  quietButton.innerHTML = QUIET_ICON;
+  quietButton.setAttribute("aria-label", "Turn quiet mode on");
+  quietButton.setAttribute("aria-pressed", "false");
+  quietButton.title = "Quiet mode";
+
+  const expandButton = document.createElement("button");
+  expandButton.className = "townsquare__control townsquare__control--expand";
+  expandButton.type = "button";
+  expandButton.innerHTML = EXPAND_ICON;
+  expandButton.setAttribute("aria-label", "Expand widget");
+  expandButton.setAttribute("aria-pressed", "false");
+  expandButton.title = "Expand";
+
+  const help = document.createElement("details");
+  help.className = "townsquare__help";
+
+  const helpButton = document.createElement("summary");
+  helpButton.className = "townsquare__control townsquare__help-button";
+  helpButton.setAttribute("aria-label", "About TownSquare");
+  helpButton.title = "About TownSquare";
+  helpButton.textContent = "?";
+
+  const helpPanel = document.createElement("div");
+  helpPanel.className = "townsquare__help-panel";
+
+  const helpTitle = document.createElement("strong");
+  helpTitle.textContent = "TownSquare";
+
+  const description = document.createElement("p");
+  description.textContent = "A tiny shared place for people visiting this site.";
+
+  const instructions = document.createElement("p");
+  instructions.textContent = "Move with the left and right arrow keys. Click your nameplate to chat.";
+
+  const link = document.createElement("a");
+  link.href = TOWNSQUARE_URL;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "townsquare.cauenapier.com";
+
+  helpPanel.append(helpTitle, description, instructions, link);
+  help.append(helpButton, helpPanel);
+
+  controls.append(quietButton, expandButton, help);
 
   const statusRow = document.createElement("div");
   statusRow.className = "townsquare__status";
@@ -57,10 +127,7 @@ export function renderShell(container, mountOptions) {
   const status = document.createElement("span");
   status.textContent = "Connecting…";
 
-  const instructions = document.createElement("span");
-  instructions.textContent = mountOptions.instructions || "Use ← and → to walk. Pause by the bench to sit.";
-
-  statusRow.append(status, instructions);
+  statusRow.append(status);
 
   const stageEl = document.createElement("div");
   stageEl.className = "townsquare__stage";
@@ -73,9 +140,9 @@ export function renderShell(container, mountOptions) {
   hint.className = "townsquare__hint";
   hint.textContent = mountOptions.hint || "Embedded into a normal page instead of running as a disconnected mockup.";
 
-  element.append(statusRow, stageEl, hint);
+  element.append(controls, statusRow, stageEl, hint);
   container.appendChild(element);
-  return { app: element, stage: stageEl, status };
+  return { app: element, stage: stageEl, status, quietButton, expandButton };
 }
 
 /**

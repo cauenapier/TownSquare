@@ -81,6 +81,14 @@ export function tick(ctx, now) {
   const dt = Math.min(0.05, (now - ctx.lastFrameAt) / 1000);
   ctx.lastFrameAt = now;
 
+  if (ctx.quiet) {
+    ctx.self.movingLeft = false;
+    ctx.self.movingRight = false;
+    setWalking(ctx.self.avatar, false);
+    ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
+    return;
+  }
+
   const direction = Number(ctx.self.movingRight) - Number(ctx.self.movingLeft);
   if (direction !== 0) {
     resetBenchSettle(ctx);
@@ -125,6 +133,7 @@ export function stopGameLoop(ctx) {
  */
 export function wireKeyboard(ctx) {
   ctx.onKeyDown = (event) => {
+    if (ctx.quiet) return;
     if (event.target instanceof HTMLInputElement) return;
     if (event.key === "ArrowLeft") ctx.self.movingLeft = true;
     if (event.key === "ArrowRight") ctx.self.movingRight = true;

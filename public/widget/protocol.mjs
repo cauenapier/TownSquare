@@ -91,12 +91,20 @@ export function wireSocket(ctx) {
 
     if (message.type === "say") {
       if (message.id === self.id) {
+        if (ctx.quiet) {
+          recordMessage(self.avatar, { text: message.text, at: message.at });
+          return;
+        }
         sayMessage(self.avatar, { text: message.text, at: message.at });
         return;
       }
 
       const peer = peers.get(message.id);
       if (!peer) return;
+      if (ctx.quiet) {
+        recordMessage(peer.avatar, { text: message.text, at: message.at });
+        return;
+      }
       sayMessage(peer.avatar, { text: message.text, at: message.at });
     }
   });

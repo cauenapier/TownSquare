@@ -46,8 +46,12 @@
  * @property {HTMLElement} app
  * @property {HTMLElement} stage
  * @property {HTMLElement} statusEl
+ * @property {HTMLButtonElement} quietButton
+ * @property {HTMLButtonElement} expandButton
  * @property {SelfState} self
  * @property {WebSocket} socket
+ * @property {boolean} quiet
+ * @property {boolean} expanded
  * @property {boolean} disposed
  * @property {number} lastFrameAt
  * @property {number | null} frameHandle

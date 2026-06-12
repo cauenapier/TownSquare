@@ -112,6 +112,8 @@ export function sayMessage(avatar, message) {
  * @param {WidgetContext} ctx
  */
 export function submitChat(ctx) {
+  if (ctx.quiet) return;
+
   const { input } = ctx.self.avatar;
   if (!input) return;
 

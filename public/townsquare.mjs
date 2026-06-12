@@ -23,7 +23,6 @@ import { buildSocketUrl, getBrowserId, normalizeOrigin } from "./widget/utils.mj
  * @typedef {Object} MountOptions
  * @property {string} [serverOrigin] TownSquare server origin for static assets and WebSocket traffic.
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
- * @property {string} [instructions] Status-row helper text shown beside the visitor count.
  * @property {string} [hint] Footer hint shown below the scene.
  */
 
@@ -58,7 +57,13 @@ export function mountTownSquare(root, options = {}) {
 
   root.replaceChildren();
 
-  const { app, stage, status: statusEl } = renderShell(root, options);
+  const {
+    app,
+    stage,
+    status: statusEl,
+    quietButton,
+    expandButton,
+  } = renderShell(root, options);
 
   renderBench(stage);
 
@@ -73,6 +78,8 @@ export function mountTownSquare(root, options = {}) {
     app,
     stage,
     statusEl,
+    quietButton,
+    expandButton,
     self: {
       id: null,
       x: 0.5,
@@ -91,12 +98,43 @@ export function mountTownSquare(root, options = {}) {
       walkTimer: null,
     },
     socket: new WebSocket(socketUrl),
+    quiet: false,
+    expanded: false,
     disposed: false,
     lastFrameAt: performance.now(),
     frameHandle: null,
     onKeyDown: () => {},
     onKeyUp: () => {},
   };
+
+  const setExpanded = (expanded) => {
+    ctx.expanded = expanded;
+    ctx.app.classList.toggle("townsquare--expanded", expanded);
+    ctx.expandButton.classList.toggle("townsquare__control--active", expanded);
+    ctx.expandButton.setAttribute("aria-pressed", String(expanded));
+    ctx.expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
+  };
+
+  const setQuiet = (quiet) => {
+    ctx.quiet = quiet;
+    if (quiet) setExpanded(false);
+    ctx.app.classList.toggle("townsquare--quiet", quiet);
+    ctx.quietButton.classList.toggle("townsquare__control--active", quiet);
+    ctx.quietButton.setAttribute("aria-pressed", String(quiet));
+    ctx.quietButton.setAttribute("aria-label", quiet ? "Turn quiet mode off" : "Turn quiet mode on");
+    ctx.self.movingLeft = false;
+    ctx.self.movingRight = false;
+    ctx.self.avatar.composer?.reset();
+    if (ctx.self.avatar.composer && ctx.self.avatar.plate) {
+      ctx.self.avatar.composer.hidden = true;
+      ctx.self.avatar.plate.hidden = false;
+    }
+  };
+
+  quietButton.addEventListener("click", () => setQuiet(!ctx.quiet));
+  expandButton.addEventListener("click", () => {
+    setExpanded(!ctx.expanded);
+  });
 
   stage.appendChild(ctx.self.avatar.el);
   renderAvatar(ctx.self.avatar, ctx.self.x);
@@ -112,6 +150,7 @@ export function mountTownSquare(root, options = {}) {
       ctx.disposed = true;
       stopGameLoop(ctx);
       unwireKeyboard(ctx);
+      setExpanded(false);
       ctx.socket.close();
       root.replaceChildren();
     },

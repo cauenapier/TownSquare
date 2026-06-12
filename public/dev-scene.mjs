@@ -195,7 +195,6 @@ function mountDevScene(count, walking) {
   root.replaceChildren();
 
   const { stage, status } = renderShell(root, {
-    instructions: "Use ← and → to walk. Click your nameplate to talk. Pause by the bench to sit.",
     hint: "Use ?characters=24 to deep-link a larger crowd.",
   });
 
