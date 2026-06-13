@@ -13,10 +13,10 @@ import {
   renderAvatar,
   renderProps,
   renderShell,
-  setAvatarProfile,
   wireHelpPanel,
   updatePose,
 } from "./widget/dom.mjs";
+import { watchCurrentPage } from "./widget/page-watch.mjs";
 import {
   closeTrays,
   startGameLoop,
@@ -205,48 +205,7 @@ export function mountTownSquare(root, options = {}) {
   };
   window.addEventListener("keydown", onWindowKeyDown);
 
-  let readingUpdateTimer = null;
-  const sendReadingLabel = () => {
-    readingUpdateTimer = null;
-    const nextPage = readCurrentPage(root, options);
-    if (nextPage.readingLabel === ctx.self.readingLabel && nextPage.readingUrl === ctx.self.readingUrl) return;
-
-    ctx.self.readingLabel = nextPage.readingLabel;
-    ctx.self.readingUrl = nextPage.readingUrl;
-    setAvatarProfile(ctx.self.avatar, ctx.self);
-    if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
-      ctx.socket.send(JSON.stringify({ type: "reading", ...nextPage }));
-    }
-  };
-  const queueReadingUpdate = () => {
-    clearTimeout(readingUpdateTimer);
-    readingUpdateTimer = setTimeout(sendReadingLabel, 80);
-  };
-  let readingRefreshTimer = null;
-  const scheduleReadingUpdate = () => {
-    queueReadingUpdate();
-    clearTimeout(readingRefreshTimer);
-    readingRefreshTimer = setTimeout(queueReadingUpdate, 400);
-  };
-  const originalPushState = history.pushState;
-  const originalReplaceState = history.replaceState;
-  const wrappedPushState = function townsquarePushState(...args) {
-    const result = originalPushState.apply(this, args);
-    window.dispatchEvent(new Event("townsquare:navigation"));
-    return result;
-  };
-  const wrappedReplaceState = function townsquareReplaceState(...args) {
-    const result = originalReplaceState.apply(this, args);
-    window.dispatchEvent(new Event("townsquare:navigation"));
-    return result;
-  };
-  history.pushState = wrappedPushState;
-  history.replaceState = wrappedReplaceState;
-  window.addEventListener("popstate", scheduleReadingUpdate);
-  window.addEventListener("hashchange", scheduleReadingUpdate);
-  window.addEventListener("pageshow", scheduleReadingUpdate);
-  document.addEventListener("visibilitychange", scheduleReadingUpdate);
-  window.addEventListener("townsquare:navigation", scheduleReadingUpdate);
+  const unwatchPage = watchCurrentPage(ctx);
 
   // While the virtual keyboard is up, expose how much of the layout viewport it
   // hides so the docked composer can ride above it in expanded mode.
@@ -280,15 +239,7 @@ export function mountTownSquare(root, options = {}) {
       unwireHelpPanel();
       closeTrays(ctx);
       window.removeEventListener("keydown", onWindowKeyDown);
-      window.removeEventListener("popstate", scheduleReadingUpdate);
-      window.removeEventListener("hashchange", scheduleReadingUpdate);
-      window.removeEventListener("pageshow", scheduleReadingUpdate);
-      document.removeEventListener("visibilitychange", scheduleReadingUpdate);
-      window.removeEventListener("townsquare:navigation", scheduleReadingUpdate);
-      clearTimeout(readingUpdateTimer);
-      clearTimeout(readingRefreshTimer);
-      if (history.pushState === wrappedPushState) history.pushState = originalPushState;
-      if (history.replaceState === wrappedReplaceState) history.replaceState = originalReplaceState;
+      unwatchPage();
       if (coarsePointer && viewport) {
         viewport.removeEventListener("resize", onViewportChange);
         viewport.removeEventListener("scroll", onViewportChange);

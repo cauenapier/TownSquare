@@ -21,53 +21,19 @@ import {
 const WALK_BUMP_MS = 120;
 const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 8000;
-const PERMANENT_CLOSE_REASONS = new Set([
-  "kicked",
-  "blocked",
-  "site disabled",
-  "site disabled or unknown",
-  "origin not allowed",
+// Server-initiated closes that no amount of retrying will fix.
+const PERMANENT_CLOSE_MESSAGES = new Map([
+  ["kicked", "You were removed from the square."],
+  ["blocked", "You can't join this square right now."],
+  ["site disabled", "This TownSquare isn't available right now."],
+  ["site disabled or unknown", "This TownSquare isn't available right now."],
+  ["origin not allowed", "This page isn't registered to TownSquare yet."],
 ]);
-
-/**
- * @param {CloseEvent} event
- * @param {{ joined: boolean, opened: boolean }} state
- * @returns {string}
- */
-function describeDisconnectMessage(event, { joined, opened }) {
-  const reason = event.reason || "";
-
-  if (reason === "full") {
-    return "Square is full right now. Try again later.";
-  }
-  if (reason === "kicked") {
-    return "You were removed from the square.";
-  }
-  if (reason === "blocked") {
-    return "You can't join this square right now.";
-  }
-  if (reason === "site disabled" || reason === "site disabled or unknown") {
-    return "This TownSquare isn't available right now.";
-  }
-  if (reason === "origin not allowed") {
-    return "This page isn't registered to TownSquare yet.";
-  }
-
-  if (!opened || (!joined && event.code === 1006)) {
-    return "Couldn't connect to TownSquare. Check your connection and try again.";
-  }
-
-  return "Disconnected. Refresh to rejoin the square.";
-}
 
 function bumpWalking(presence) {
   setWalking(presence.avatar, true);
   clearTimeout(presence.walkTimer);
   presence.walkTimer = setTimeout(() => setWalking(presence.avatar, false), WALK_BUMP_MS);
-}
-
-function isPermanentDisconnect(event) {
-  return PERMANENT_CLOSE_REASONS.has(event.reason || "");
 }
 
 function clearPeers(ctx) {
@@ -86,11 +52,9 @@ export function wireSocket(ctx) {
   let reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
 
   const connect = (socket = new WebSocket(ctx.socketUrl)) => {
-    let opened = false;
     ctx.socket = socket;
 
     socket.addEventListener("open", () => {
-      opened = true;
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
       socket.send(JSON.stringify({
         type: "init",
@@ -200,15 +164,17 @@ export function wireSocket(ctx) {
       self.id = null;
       clearPeers(ctx);
 
-      if (isPermanentDisconnect(event)) {
-        setStatusMessage(ctx, describeDisconnectMessage(event, {
-          joined: wasJoined,
-          opened,
-        }));
+      const permanentMessage = PERMANENT_CLOSE_MESSAGES.get(event.reason || "");
+      if (permanentMessage) {
+        setStatusMessage(ctx, permanentMessage);
         return;
       }
 
-      setStatusMessage(ctx, wasJoined ? "Disconnected. Reconnecting…" : "Connecting…");
+      if (event.reason === "full") {
+        setStatusMessage(ctx, "Square is full right now. Retrying…");
+      } else {
+        setStatusMessage(ctx, wasJoined ? "Disconnected. Reconnecting…" : "Connecting…");
+      }
       const delay = reconnectDelay;
       reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
       clearTimeout(ctx.reconnectTimer);

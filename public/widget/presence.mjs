@@ -78,6 +78,7 @@ export function getOrCreatePeer(ctx, peer) {
 export function removePeer(ctx, id) {
   const peer = ctx.peers.get(id);
   if (!peer) return;
+  clearTimeout(peer.walkTimer);
   peer.avatar.el.remove();
   ctx.peers.delete(id);
   updateStatus(ctx);
@@ -139,22 +140,28 @@ export function applyPeerState(ctx, peerState) {
 }
 
 /**
+ * Copy the given string fields from a server message onto the matching
+ * presence (self or peer) and re-render that figure's profile.
+ *
+ * @param {WidgetContext} ctx
+ * @param {{ id: string }} state
+ * @param {Array<string>} fields
+ */
+function applyPresenceFields(ctx, state, fields) {
+  const presence = state.id === ctx.self.id ? ctx.self : ctx.peers.get(state.id);
+  if (!presence) return;
+  for (const field of fields) {
+    if (typeof state[field] === "string") presence[field] = state[field];
+  }
+  setAvatarProfile(presence.avatar, presence);
+}
+
+/**
  * @param {WidgetContext} ctx
  * @param {{ id: string, displayName?: string, color?: string }} profile
  */
 export function applyProfileState(ctx, profile) {
-  if (profile.id === ctx.self.id) {
-    if (typeof profile.displayName === "string") ctx.self.displayName = profile.displayName;
-    if (typeof profile.color === "string") ctx.self.color = profile.color;
-    setAvatarProfile(ctx.self.avatar, ctx.self);
-    return;
-  }
-
-  const peer = ctx.peers.get(profile.id);
-  if (!peer) return;
-  if (typeof profile.displayName === "string") peer.displayName = profile.displayName;
-  if (typeof profile.color === "string") peer.color = profile.color;
-  setAvatarProfile(peer.avatar, peer);
+  applyPresenceFields(ctx, profile, ["displayName", "color"]);
 }
 
 /**
@@ -162,16 +169,5 @@ export function applyProfileState(ctx, profile) {
  * @param {{ id: string, readingLabel?: string, readingUrl?: string }} state
  */
 export function applyReadingState(ctx, state) {
-  if (state.id === ctx.self.id) {
-    if (typeof state.readingLabel === "string") ctx.self.readingLabel = state.readingLabel;
-    if (typeof state.readingUrl === "string") ctx.self.readingUrl = state.readingUrl;
-    setAvatarProfile(ctx.self.avatar, ctx.self);
-    return;
-  }
-
-  const peer = ctx.peers.get(state.id);
-  if (!peer) return;
-  if (typeof state.readingLabel === "string") peer.readingLabel = state.readingLabel;
-  if (typeof state.readingUrl === "string") peer.readingUrl = state.readingUrl;
-  setAvatarProfile(peer.avatar, peer);
+  applyPresenceFields(ctx, state, ["readingLabel", "readingUrl"]);
 }
