@@ -5,7 +5,8 @@
       "name": "townsquare",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
-      "port": 8787
+      "port": 8787,
+      "autoPort": true
     }
   ]
 }

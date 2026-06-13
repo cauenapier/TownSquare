@@ -28,6 +28,61 @@
         </form>
       </header>
 
+      <section class="dev-tuning" aria-label="Reading-experience tuning">
+        <div class="dev-tuning__group" role="group" aria-label="Frame">
+          <span class="dev-tuning__title">Frame</span>
+          <div class="dev-frames">
+            <button class="dev-chip" type="button" data-frame="full" aria-pressed="true">Full</button>
+            <button class="dev-chip" type="button" data-frame="414" aria-pressed="false">414</button>
+            <button class="dev-chip" type="button" data-frame="390" aria-pressed="false">390</button>
+            <button class="dev-chip" type="button" data-frame="375" aria-pressed="false">375</button>
+            <button class="dev-chip" type="button" data-frame="320" aria-pressed="false">320</button>
+          </div>
+        </div>
+
+        <div class="dev-tuning__group dev-tuning__group--wide" role="group" aria-label="Reading dials">
+          <span class="dev-tuning__title">Reading</span>
+          <div class="dev-sliders">
+            <label class="dev-slider">
+              <span>Chattiness <em data-tune-value></em>×</span>
+              <input type="range" data-tune="talkRate" min="0.25" max="6" step="0.25" />
+            </label>
+            <label class="dev-slider">
+              <span>Near <em data-tune-value></em></span>
+              <input type="range" data-tune="nearX" min="0" max="0.3" step="0.01" />
+            </label>
+            <label class="dev-slider">
+              <span>Far <em data-tune-value></em></span>
+              <input type="range" data-tune="farX" min="0.1" max="0.8" step="0.01" />
+            </label>
+            <label class="dev-slider">
+              <span>Fade floor <em data-tune-value></em></span>
+              <input type="range" data-tune="fadeFloor" min="0" max="1" step="0.05" />
+            </label>
+            <label class="dev-slider">
+              <span>Scale floor <em data-tune-value></em></span>
+              <input type="range" data-tune="scaleFloor" min="0.3" max="1" step="0.05" />
+            </label>
+            <label class="dev-slider">
+              <span>Column gap <em data-tune-value></em></span>
+              <input type="range" data-tune="columnGap" min="0" max="40" step="1" />
+            </label>
+            <label class="dev-slider">
+              <span>Edge margin <em data-tune-value></em></span>
+              <input type="range" data-tune="edgeMargin" min="0" max="40" step="1" />
+            </label>
+          </div>
+        </div>
+
+        <div class="dev-tuning__group" role="group" aria-label="Values">
+          <div class="dev-tuning__actions">
+            <button class="dev-chip" type="button" id="tune-reset">Reset</button>
+            <button class="dev-chip" type="button" id="tune-copy">Copy values</button>
+          </div>
+          <pre class="dev-readout" id="tune-readout" aria-live="polite"></pre>
+        </div>
+      </section>
+
       <section class="townsquare-host dev-host" aria-label="TownSquare simulated scene">
         <div id="dev-scene-root"></div>
       </section>

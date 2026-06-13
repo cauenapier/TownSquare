@@ -19,10 +19,31 @@
  * @typedef {import("./dom.mjs").AvatarView} AvatarView
  */
 
-/** Breathing room kept between neighbouring columns. */
-const COLUMN_GAP = 10;
-/** Columns never get pushed closer than this to the stage edges. */
-const EDGE_MARGIN = 8;
+/**
+ * The reading-experience dials. These govern how a crowded scene packs and how
+ * proximity emphasis falls off — exactly the knobs you tune by feel. The live
+ * widget runs on the defaults; the dev scene passes overrides so they can be
+ * adjusted with sliders and read back off to bake in.
+ *
+ * @typedef {Object} LayoutConfig
+ * @property {number} columnGap Breathing room kept between neighbouring columns.
+ * @property {number} edgeMargin Columns never get pushed closer than this to the stage edges.
+ * @property {number} nearX Within this distance of your figure (normalized x) bubbles stay full prominence.
+ * @property {number} farX Beyond this distance bubbles rest at the floor prominence.
+ * @property {number} fadeFloor Opacity floor for the farthest columns — a murmur, never silence.
+ * @property {number} scaleFloor Scale floor for the farthest columns.
+ */
+
+/** @type {LayoutConfig} */
+export const DEFAULT_LAYOUT_CONFIG = {
+  columnGap: 10,
+  edgeMargin: 8,
+  nearX: 0.08,
+  farX: 0.4,
+  fadeFloor: 0.3,
+  scaleFloor: 0.75,
+};
+
 /** The tail's base stays clear of the live bubble's rounded corners by this much. */
 const TAIL_INSET = 22;
 /** How far the tail's tip can lean past its base toward the speaker. */
@@ -31,15 +52,6 @@ const TAIL_TIP_REACH = 56;
 const SHIFT_EPSILON = 0.5;
 /** Prominence changes smaller than this aren't worth a style write. */
 const PROMINENCE_EPSILON = 0.01;
-
-/** Within this distance of your figure (normalized x) bubbles stay full prominence. */
-const NEAR_X = 0.08;
-/** Beyond this distance bubbles rest at the floor prominence. */
-const FAR_X = 0.4;
-/** Opacity floor for the farthest columns — a murmur, never silence. */
-const FADE_FLOOR = 0.3;
-/** Scale floor for the farthest columns. */
-const SCALE_FLOOR = 0.75;
 
 /**
  * @typedef {Object} Column
@@ -72,9 +84,10 @@ function clamp(value, min, max) {
  *
  * @param {number} x Speaker position, normalized.
  * @param {number} selfX Your figure's position, normalized.
+ * @param {LayoutConfig} cfg
  */
-function proximity(x, selfX) {
-  const t = clamp((Math.abs(x - selfX) - NEAR_X) / (FAR_X - NEAR_X), 0, 1);
+function proximity(x, selfX, cfg) {
+  const t = clamp((Math.abs(x - selfX) - cfg.nearX) / (cfg.farX - cfg.nearX), 0, 1);
   return 1 - t * t * (3 - 2 * t);
 }
 
@@ -132,15 +145,16 @@ function placeCluster(cluster, minLeft, maxRight) {
  *
  * @param {Cluster} a
  * @param {Cluster} b Must sit to the right of `a`.
+ * @param {number} gap Breathing room kept between the joined columns.
  * @returns {Cluster}
  */
-function mergeClusters(a, b) {
-  const offsetDelta = a.width + COLUMN_GAP;
+function mergeClusters(a, b, gap) {
+  const offsetDelta = a.width + gap;
   for (const item of b.items) {
     item.centerOffset += offsetDelta;
   }
   return {
-    width: a.width + COLUMN_GAP + b.width,
+    width: a.width + gap + b.width,
     count: a.count + b.count,
     sumIdealLeft: a.sumIdealLeft + b.sumIdealLeft - b.count * offsetDelta,
     items: a.items.concat(b.items),
@@ -225,8 +239,10 @@ function applyShift(column, shift) {
  * @param {HTMLElement} stage
  * @param {Iterable<{ x: number, avatar: AvatarView }>} presences
  * @param {number} selfX Your figure's position, normalized — the focus point.
+ * @param {Partial<LayoutConfig>} [config] Tuning overrides; defaults fill the rest.
  */
-export function layoutBubbleColumns(stage, presences, selfX) {
+export function layoutBubbleColumns(stage, presences, selfX, config) {
+  const cfg = config ? { ...DEFAULT_LAYOUT_CONFIG, ...config } : DEFAULT_LAYOUT_CONFIG;
   const stageWidth = stage.clientWidth;
   if (!stageWidth) return;
 
@@ -244,17 +260,17 @@ export function layoutBubbleColumns(stage, presences, selfX) {
     const width = avatar.above.offsetWidth;
     if (!width) continue;
 
-    const prominence = proximity(presence.x, selfX);
-    const scale = SCALE_FLOOR + (1 - SCALE_FLOOR) * prominence;
-    setProminenceVars(avatar, scale, FADE_FLOOR + (1 - FADE_FLOOR) * prominence);
+    const prominence = proximity(presence.x, selfX, cfg);
+    const scale = cfg.scaleFloor + (1 - cfg.scaleFloor) * prominence;
+    setProminenceVars(avatar, scale, cfg.fadeFloor + (1 - cfg.fadeFloor) * prominence);
     columns.push({ avatar, anchor: presence.x * stageWidth, width: width * scale, scale });
   }
   if (columns.length === 0) return;
 
   columns.sort((a, b) => a.anchor - b.anchor);
 
-  const minLeft = EDGE_MARGIN;
-  const maxRight = stageWidth - EDGE_MARGIN;
+  const minLeft = cfg.edgeMargin;
+  const maxRight = stageWidth - cfg.edgeMargin;
 
   // Classic 1D label placement: seed one cluster per column, and while a new
   // cluster would overlap the one before it, merge them. Each merge re-centres
@@ -272,8 +288,8 @@ export function layoutBubbleColumns(stage, presences, selfX) {
     while (clusters.length > 0) {
       const previous = clusters[clusters.length - 1];
       const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
-      if (previousRight + COLUMN_GAP <= clusterLeft(cluster, minLeft, maxRight)) break;
-      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster);
+      if (previousRight + cfg.columnGap <= clusterLeft(cluster, minLeft, maxRight)) break;
+      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster, cfg.columnGap);
     }
     clusters.push(cluster);
   }

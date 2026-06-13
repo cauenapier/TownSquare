@@ -1,4 +1,4 @@
-import { layoutBubbleColumns } from "./widget/bubble-layout.mjs";
+import { DEFAULT_LAYOUT_CONFIG, layoutBubbleColumns } from "./widget/bubble-layout.mjs";
 import { sayMessage } from "./widget/chat.mjs";
 import {
   createAvatar,
@@ -30,6 +30,16 @@ const LINES = [
   "Meet by the bench.",
   "This feels more alive.",
 ];
+
+/**
+ * Live tuning state, read every frame by the running scene. Sliders mutate this
+ * in place so changes land without rebuilding (and resetting) the scene.
+ */
+const tuning = {
+  layout: { ...DEFAULT_LAYOUT_CONFIG },
+  /** Multiplier on how often actors speak; 1 = baseline, higher = chattier. */
+  talkRate: 1,
+};
 
 const root = document.getElementById("dev-scene-root");
 const form = document.getElementById("dev-controls");
@@ -123,7 +133,7 @@ function stepActor(actor, now, dt, random, walking) {
   if (now >= actor.nextSayAt) {
     const line = LINES[Math.floor(random() * LINES.length)];
     sayMessage(actor.avatar, { text: line, at: Date.now() });
-    actor.nextSayAt = now + 2500 + random() * 8500;
+    actor.nextSayAt = now + (2500 + random() * 8500) / tuning.talkRate;
   }
 }
 
@@ -239,7 +249,7 @@ function mountDevScene(count, walking) {
     for (const actor of actors) {
       stepActor(actor, now, dt, random, actorsWalking);
     }
-    layoutBubbleColumns(stage, [self, ...actors], self.x);
+    layoutBubbleColumns(stage, [self, ...actors], self.x, tuning.layout);
     frame = requestAnimationFrame(tick);
   };
 
@@ -281,5 +291,86 @@ form.addEventListener("submit", (event) => {
 walkingInput.addEventListener("change", () => {
   handle?.setActorsWalking(walkingInput.checked);
 });
+
+// --- Live tuning panel: proximity dials, talk rate, mobile frame -----------
+// Sliders mutate `tuning` in place, so the running scene picks changes up on
+// its next frame — no rebuild, no reset. The readout mirrors the current
+// values so good settings can be read off and baked into DEFAULT_LAYOUT_CONFIG.
+
+const host = document.querySelector(".dev-host");
+const tuneInputs = /** @type {HTMLInputElement[]} */ (Array.from(document.querySelectorAll("[data-tune]")));
+const frameButtons = /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll("[data-frame]")));
+const readout = document.getElementById("tune-readout");
+const resetButton = document.getElementById("tune-reset");
+const copyButton = document.getElementById("tune-copy");
+
+function currentValue(key) {
+  return key === "talkRate" ? tuning.talkRate : tuning.layout[key];
+}
+
+function setTuning(key, value) {
+  if (key === "talkRate") tuning.talkRate = value;
+  else tuning.layout[key] = value;
+}
+
+function refreshReadout() {
+  if (!readout) return;
+  const lines = Object.entries(tuning.layout).map(([key, value]) => `  ${key}: ${value},`);
+  readout.textContent = `talkRate: ${tuning.talkRate}\nlayout {\n${lines.join("\n")}\n}`;
+}
+
+function syncInput(input) {
+  const key = input.dataset.tune;
+  if (!key) return;
+  input.value = String(currentValue(key));
+  const label = input.parentElement?.querySelector("[data-tune-value]");
+  if (label) label.textContent = String(currentValue(key));
+}
+
+for (const input of tuneInputs) {
+  syncInput(input);
+  input.addEventListener("input", () => {
+    const key = input.dataset.tune;
+    if (!key) return;
+    setTuning(key, Number(input.value));
+    syncInput(input);
+    refreshReadout();
+  });
+}
+
+function setFrame(width, button) {
+  if (host instanceof HTMLElement) {
+    host.style.maxWidth = width === "full" ? "" : `${width}px`;
+    host.classList.toggle("dev-host--framed", width !== "full");
+  }
+  for (const candidate of frameButtons) {
+    candidate.setAttribute("aria-pressed", String(candidate === button));
+  }
+}
+
+for (const button of frameButtons) {
+  button.addEventListener("click", () => setFrame(button.dataset.frame || "full", button));
+}
+
+resetButton?.addEventListener("click", () => {
+  tuning.layout = { ...DEFAULT_LAYOUT_CONFIG };
+  tuning.talkRate = 1;
+  for (const input of tuneInputs) syncInput(input);
+  refreshReadout();
+});
+
+copyButton?.addEventListener("click", async () => {
+  if (!readout) return;
+  try {
+    await navigator.clipboard.writeText(readout.textContent || "");
+    copyButton.textContent = "Copied";
+    setTimeout(() => { copyButton.textContent = "Copy values"; }, 1200);
+  } catch {
+    copyButton.textContent = "Copy failed";
+    setTimeout(() => { copyButton.textContent = "Copy values"; }, 1200);
+  }
+});
+
+refreshReadout();
 
 applyCount(readCount());
