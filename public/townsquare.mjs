@@ -119,6 +119,7 @@ export function mountTownSquare(root, options = {}) {
       targetX: null,
       lastSentX: spawnX,
       lastSendAt: 0,
+      lastJumpAt: 0,
       pose: null,
       propId: null,
       displayName: profile.displayName,

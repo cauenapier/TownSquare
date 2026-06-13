@@ -24,6 +24,10 @@
   overflow: hidden;
 }
 
+.townsquare:has(.townsquare__help-panel:not([hidden])) {
+  overflow: visible;
+}
+
 .townsquare__controls {
   position: absolute;
   z-index: 2147483001;
@@ -106,6 +110,10 @@
   color: var(--ink-soft);
   font-size: 0.84rem;
   line-height: 1.35;
+}
+
+.townsquare__help-panel p:last-of-type {
+  margin-bottom: 6px;
 }
 
 .townsquare__help-panel a {
@@ -330,6 +338,9 @@
   filter: var(--avatar-shade-filter) var(--avatar-walk-filter) var(--avatar-light-filter);
 }
 .avatar.walking { --avatar-walk-filter: drop-shadow(0 2px 5px rgba(0,0,0,0.12)); }
+.avatar--jumping {
+  animation: presence-jump 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
 .avatar--reading-away > svg,
 .avatar--reading-away .avatar__below {
   opacity: 0.52;
@@ -402,6 +413,22 @@
 .avatar.walking svg g.arm-r { animation-name: presence-arm-b; }
 .avatar.walking svg g.elbow-l { animation-name: presence-forearm-a; }
 .avatar.walking svg g.elbow-r { animation-name: presence-forearm-b; }
+
+.avatar--jumping svg :is(g.figure-core, g.joint) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation-iteration-count: 1;
+}
+
+.avatar--jumping svg g.figure-core { animation-name: presence-jump-body; }
+.avatar--jumping svg g.leg-l { animation-name: presence-jump-leg-a; }
+.avatar--jumping svg g.leg-r { animation-name: presence-jump-leg-b; }
+.avatar--jumping svg g.knee-l { animation-name: presence-jump-knee-a; }
+.avatar--jumping svg g.knee-r { animation-name: presence-jump-knee-b; }
+.avatar--jumping svg g.arm-l { animation-name: presence-jump-arm-a; }
+.avatar--jumping svg g.arm-r { animation-name: presence-jump-arm-b; }
+.avatar--jumping svg g.elbow-l { animation-name: presence-jump-forearm-a; }
+.avatar--jumping svg g.elbow-r { animation-name: presence-jump-forearm-b; }
 
 /*
   Walk cycle, figure facing right (the .flip scaleX(-1) mirrors it for left —
@@ -511,6 +538,76 @@
   50% { transform: rotate(-6deg); }
   65% { transform: rotate(-7deg); }
   85% { transform: rotate(-10deg); }
+}
+
+@keyframes presence-jump {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  12% { transform: translateX(-50%) translateY(1px) scaleY(0.96); }
+  45% { transform: translateX(-50%) translateY(-30px) scaleY(1.03); }
+  78% { transform: translateX(-50%) translateY(-6px); }
+}
+
+@keyframes presence-jump-body {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  12% { transform: translateY(1.8px) rotate(-2deg); }
+  36%, 62% { transform: translateY(-0.8px) rotate(2deg); }
+  82% { transform: translateY(1px) rotate(-1deg); }
+}
+
+@keyframes presence-jump-leg-a {
+  0%, 100% { transform: rotate(-4deg); }
+  12% { transform: rotate(20deg); }
+  38%, 62% { transform: rotate(-28deg); }
+  82% { transform: rotate(12deg); }
+}
+
+@keyframes presence-jump-leg-b {
+  0%, 100% { transform: rotate(4deg); }
+  12% { transform: rotate(24deg); }
+  38%, 62% { transform: rotate(24deg); }
+  82% { transform: rotate(14deg); }
+}
+
+@keyframes presence-jump-knee-a {
+  0%, 100% { transform: rotate(6deg); }
+  12% { transform: rotate(34deg); }
+  38%, 62% { transform: rotate(48deg); }
+  82% { transform: rotate(18deg); }
+}
+
+@keyframes presence-jump-knee-b {
+  0%, 100% { transform: rotate(6deg); }
+  12% { transform: rotate(38deg); }
+  38%, 62% { transform: rotate(42deg); }
+  82% { transform: rotate(18deg); }
+}
+
+@keyframes presence-jump-arm-a {
+  0%, 100% { transform: rotate(6deg); }
+  12% { transform: rotate(24deg); }
+  38%, 62% { transform: rotate(118deg); }
+  82% { transform: rotate(28deg); }
+}
+
+@keyframes presence-jump-arm-b {
+  0%, 100% { transform: rotate(-6deg); }
+  12% { transform: rotate(-24deg); }
+  38%, 62% { transform: rotate(-118deg); }
+  82% { transform: rotate(-28deg); }
+}
+
+@keyframes presence-jump-forearm-a {
+  0%, 100% { transform: rotate(-8deg); }
+  12% { transform: rotate(-18deg); }
+  38%, 62% { transform: rotate(10deg); }
+  82% { transform: rotate(-14deg); }
+}
+
+@keyframes presence-jump-forearm-b {
+  0%, 100% { transform: rotate(-8deg); }
+  12% { transform: rotate(-18deg); }
+  38%, 62% { transform: rotate(10deg); }
+  82% { transform: rotate(-14deg); }
 }
 
 .avatar--sitting svg :is(g.figure-core, g.joint),

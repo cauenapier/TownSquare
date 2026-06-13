@@ -364,6 +364,12 @@ async function main() {
     "chat rate limit did not suppress a rapid second message",
   );
 
+  secondSameBrowser.ws.send(JSON.stringify({ type: "action", action: "jump" }));
+  await delay(100);
+
+  assert(first.seen.some((message) => message.type === "action" && message.id === first.id && message.action === "jump"), "same-browser jump did not propagate to sibling tab");
+  assert(third.seen.some((message) => message.type === "action" && message.id === first.id && message.action === "jump"), "different browser did not observe shared visitor jump");
+
   await delay(1600);
   const longText = "x".repeat(200);
   secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: longText }));

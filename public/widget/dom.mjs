@@ -38,6 +38,7 @@ import { figureMarkup } from "./figure.mjs";
  * @property {HTMLFormElement} [composer]
  * @property {HTMLInputElement} [input]
  * @property {HTMLButtonElement} [send]
+ * @property {ReturnType<typeof setTimeout> | null} [jumpTimer]
  */
 
 const ENTER_ICON = `
@@ -126,7 +127,7 @@ export function renderShell(container) {
 
   const instructions = document.createElement("p");
   instructions.textContent =
-    "Move with the arrow keys, or tap where you want to walk. Tap your nameplate to chat, and tap a character to see their recent messages.";
+    "Move with the arrow keys, press J to jump, or tap where you want to walk. Tap your nameplate to chat, and tap a character to see their recent messages.";
 
   const link = document.createElement("a");
   link.href = TOWNSQUARE_URL;
@@ -612,6 +613,20 @@ export function setFacing(avatar, movingLeft) {
  */
 export function setWalking(avatar, walking) {
   avatar.el.classList.toggle("walking", walking);
+}
+
+/**
+ * @param {AvatarView} avatar
+ */
+export function playJump(avatar) {
+  avatar.el.classList.remove("avatar--jumping");
+  clearTimeout(avatar.jumpTimer);
+  void avatar.el.offsetWidth;
+  avatar.el.classList.add("avatar--jumping");
+  avatar.jumpTimer = setTimeout(() => {
+    avatar.el.classList.remove("avatar--jumping");
+    avatar.jumpTimer = null;
+  }, 560);
 }
 
 /**

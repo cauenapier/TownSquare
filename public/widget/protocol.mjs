@@ -3,7 +3,7 @@
  */
 
 import { recordMessage, sayMessage } from "./chat.mjs";
-import { setWalking } from "./dom.mjs";
+import { playJump, setWalking, updatePose, updatePropEffects } from "./dom.mjs";
 import {
   applyPeerState,
   applyProfileState,
@@ -40,6 +40,16 @@ function clearPeers(ctx) {
   for (const id of [...ctx.peers.keys()]) {
     removePeer(ctx, id);
   }
+}
+
+function applyJump(ctx, id) {
+  const presence = id === ctx.self.id ? ctx.self : ctx.peers.get(id);
+  if (!presence) return;
+  presence.pose = null;
+  presence.propId = null;
+  updatePose(presence.avatar, presence.pose);
+  updatePropEffects(presence.avatar, presence.x, presence.propId);
+  playJump(presence.avatar);
 }
 
 /**
@@ -124,6 +134,13 @@ export function wireSocket(ctx) {
         const peer = applyPeerState(ctx, message);
         if (!peer.pose) {
           bumpWalking(peer);
+        }
+        return;
+      }
+
+      if (message.type === "action") {
+        if (message.action === "jump") {
+          applyJump(ctx, message.id);
         }
         return;
       }

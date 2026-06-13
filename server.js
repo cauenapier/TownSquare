@@ -50,6 +50,7 @@ const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
 const MOVE_THROTTLE_MS = 40;
+const ACTION_THROTTLE_MS = 560;
 const CHAT_THROTTLE_MS = 1500;
 const RECONNECT_GRACE_MS = 1500;
 const HEARTBEAT_INTERVAL_MS = 30000;
@@ -163,6 +164,7 @@ function isPlainObject(value) {
 }
 
 const MESSAGE_HANDLERS = {
+  action: handleAction,
   init: handleInit,
   move: handleMove,
   profile: handleProfile,
@@ -171,7 +173,7 @@ const MESSAGE_HANDLERS = {
   say: handleSay,
 };
 
-/** @returns {{connectionId:number,ws:any,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastChatAt:number}} */
+/** @returns {{connectionId:number,ws:any,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws, scene, site) {
   return {
     connectionId,
@@ -182,6 +184,7 @@ function createClient(connectionId, ws, scene, site) {
     joined: false,
     readingActive: false,
     lastMoveAt: 0,
+    lastActionAt: 0,
     lastChatAt: 0,
   };
 }
@@ -1214,6 +1217,22 @@ function handleMove(client, message) {
   clearPose(client.identity);
 
   emitIdentityState(client.identity, { exceptConnectionId: client.connectionId });
+}
+
+function handleAction(client, message) {
+  if (!client.identity) return;
+  if (message.action !== "jump") return;
+
+  const now = Date.now();
+  if (now - client.lastActionAt < ACTION_THROTTLE_MS) return;
+
+  client.lastActionAt = now;
+  clearPose(client.identity);
+  broadcast(client.scene, {
+    type: "action",
+    id: client.identity.id,
+    action: "jump",
+  }, { exceptConnectionId: client.connectionId });
 }
 
 function handleProfile(client, message) {

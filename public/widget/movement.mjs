@@ -4,7 +4,7 @@
 
 import { layoutBubbleColumns } from "./bubble-layout.mjs";
 import { INTERACTIVE_PROPS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
-import { renderAvatar, setFacing, setWalking, updatePose, updatePropEffects } from "./dom.mjs";
+import { playJump, renderAvatar, setFacing, setWalking, updatePose, updatePropEffects } from "./dom.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -74,6 +74,41 @@ export function maybeSendMove(ctx) {
   self.lastSentX = self.x;
   self.lastSendAt = now;
   socket.send(JSON.stringify({ type: "move", x: self.x }));
+}
+
+const JUMP_COOLDOWN_MS = 560;
+
+/**
+ * @param {EventTarget | null} target
+ * @returns {boolean}
+ */
+function isTypingTarget(target) {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || Boolean(target instanceof Element && target.closest("[contenteditable]"));
+}
+
+/**
+ * @param {WidgetContext} ctx
+ */
+export function triggerJump(ctx) {
+  if (ctx.quiet) return;
+
+  const now = Date.now();
+  if (now - ctx.self.lastJumpAt < JUMP_COOLDOWN_MS) return;
+  ctx.self.lastJumpAt = now;
+
+  resetPropSettle(ctx);
+  ctx.self.pose = null;
+  ctx.self.propId = null;
+  updatePose(ctx.self.avatar, ctx.self.pose);
+  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+  playJump(ctx.self.avatar);
+
+  if (ctx.socket.readyState === WebSocket.OPEN) {
+    ctx.socket.send(JSON.stringify({ type: "action", action: "jump" }));
+  }
 }
 
 /**
@@ -158,9 +193,12 @@ export function stopGameLoop(ctx) {
 export function wireKeyboard(ctx) {
   ctx.onKeyDown = (event) => {
     if (ctx.quiet) return;
-    if (event.target instanceof HTMLInputElement) return;
+    if (isTypingTarget(event.target)) return;
     if (event.key === "ArrowLeft") ctx.self.movingLeft = true;
     if (event.key === "ArrowRight") ctx.self.movingRight = true;
+    if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "j") {
+      triggerJump(ctx);
+    }
   };
 
   ctx.onKeyUp = (event) => {

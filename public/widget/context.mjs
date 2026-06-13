@@ -18,6 +18,7 @@
  * @property {number | null} targetX Tap-to-walk destination; null when none.
  * @property {number} lastSentX
  * @property {number} lastSendAt
+ * @property {number} lastJumpAt
  * @property {string | null} pose
  * @property {string | null} propId
  * @property {string} displayName
