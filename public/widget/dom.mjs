@@ -176,9 +176,12 @@ export function renderShell(container) {
  * @returns {() => void}
  */
 export function wireHelpPanel(helpButton, helpPanel) {
+  const app = helpButton.closest(".townsquare");
+
   const setHelpOpen = (open) => {
     helpPanel.hidden = !open;
     helpButton.setAttribute("aria-expanded", String(open));
+    app?.classList.toggle("townsquare--help-open", open);
   };
 
   const onHelpClick = () => setHelpOpen(helpPanel.hidden);

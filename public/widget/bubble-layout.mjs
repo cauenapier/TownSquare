@@ -44,6 +44,35 @@ export const DEFAULT_LAYOUT_CONFIG = {
   scaleFloor: 0.55,
 };
 
+/** Stages narrower than this pick up {@link NARROW_LAYOUT_CONFIG} automatically. */
+export const NARROW_STAGE_MAX_WIDTH = 480;
+
+/** @type {LayoutConfig} */
+export const NARROW_LAYOUT_CONFIG = {
+  columnGap: 5,
+  edgeMargin: 8,
+  nearX: 0.14,
+  farX: 0.24,
+  fadeFloor: 0.08,
+  scaleFloor: 0.4,
+};
+
+/**
+ * Reading dials for the current stage width. Narrow stages tighten proximity
+ * emphasis so distant chatter fades and shrinks sooner; optional overrides
+ * (e.g. dev-scene sliders) win on top.
+ *
+ * @param {number} stageWidth
+ * @param {Partial<LayoutConfig>} [overrides]
+ * @returns {LayoutConfig}
+ */
+export function layoutConfigForStage(stageWidth, overrides) {
+  const base = stageWidth > 0 && stageWidth < NARROW_STAGE_MAX_WIDTH
+    ? NARROW_LAYOUT_CONFIG
+    : DEFAULT_LAYOUT_CONFIG;
+  return overrides ? { ...base, ...overrides } : base;
+}
+
 /** The tail's base stays clear of the live bubble's rounded corners by this much. */
 const TAIL_INSET = 22;
 /** How far the tail's tip can lean past its base toward the speaker. */
@@ -242,9 +271,9 @@ function applyShift(column, shift) {
  * @param {Partial<LayoutConfig>} [config] Tuning overrides; defaults fill the rest.
  */
 export function layoutBubbleColumns(stage, presences, selfX, config) {
-  const cfg = config ? { ...DEFAULT_LAYOUT_CONFIG, ...config } : DEFAULT_LAYOUT_CONFIG;
   const stageWidth = stage.clientWidth;
   if (!stageWidth) return;
+  const cfg = layoutConfigForStage(stageWidth, config);
 
   /** @type {Array<Column>} */
   const columns = [];

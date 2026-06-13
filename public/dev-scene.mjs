@@ -137,6 +137,17 @@ function stepActor(actor, now, dt, random, walking) {
   }
 }
 
+function manualLayoutOverrides() {
+  /** @type {Partial<typeof DEFAULT_LAYOUT_CONFIG>} */
+  const overrides = {};
+  for (const key of Object.keys(DEFAULT_LAYOUT_CONFIG)) {
+    if (tuning.layout[key] !== DEFAULT_LAYOUT_CONFIG[key]) {
+      overrides[key] = tuning.layout[key];
+    }
+  }
+  return Object.keys(overrides).length ? overrides : undefined;
+}
+
 function createSelf(stage) {
   const self = {
     x: 0.5,
@@ -249,7 +260,7 @@ function mountDevScene(count, walking) {
     for (const actor of actors) {
       stepActor(actor, now, dt, random, actorsWalking);
     }
-    layoutBubbleColumns(stage, [self, ...actors], self.x, tuning.layout);
+    layoutBubbleColumns(stage, [self, ...actors], self.x, manualLayoutOverrides());
     frame = requestAnimationFrame(tick);
   };
 

@@ -32,8 +32,17 @@
   overflow: hidden;
 }
 
-.townsquare:has(.townsquare__help-panel:not([hidden])) {
+.townsquare--help-open {
   overflow: visible;
+}
+
+.townsquare--help-open .townsquare__controls {
+  z-index: 2147483003;
+}
+
+.townsquare--help-open .townsquare-avatar--self,
+.townsquare--help-open .townsquare-avatar__composer--docked {
+  z-index: 0;
 }
 
 .townsquare__controls {
@@ -807,6 +816,19 @@
 }
 
 @media (max-width: 420px) {
+  .townsquare {
+    --fs-speech: 11px;
+  }
+
+  .townsquare-avatar__above {
+    max-width: min(160px, 78vw);
+    gap: 5px;
+  }
+
+  .townsquare-avatar__bubble {
+    padding: 8px 12px 9px;
+  }
+
   .townsquare-avatar__tray-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1092,6 +1114,14 @@
 }
 
 @media (max-width: 640px) {
+  .townsquare {
+    min-height: 300px;
+  }
+
+  .townsquare__stage {
+    height: min(45vh, 280px);
+  }
+
   .townsquare__status { flex-direction: column; gap: 4px; }
   .townsquare-avatar__composer { min-width: min(260px, 80vw); }
 }
