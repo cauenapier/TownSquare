@@ -1,7 +1,5 @@
 ## Project Intro
 
-- This project hasn't been released yet, so do not treat code as legacy code. Feel free to clean and remove old code if needed.
-
 ## Conventions
 - Follow Conventional Commits approach
 
