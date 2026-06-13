@@ -953,19 +953,31 @@ function disconnectInactiveIdentity(identity) {
   if (!identity.joined) return;
   clearLeaveTimer(identity);
   identity.inactiveKick = true;
+  const awayMin = identity.awaySince ? Math.round((Date.now() - identity.awaySince) / 60000) : null;
+  const idleMin = identity.lastActivityAt ? Math.round((Date.now() - identity.lastActivityAt) / 60000) : null;
+  console.log(`[inactive] kicking visitor ${identity.id} (away=${awayMin}m idle=${idleMin}m clients=${identity.clients.size})`);
   closeIdentityClients(identity, 4001, "inactive");
 }
 
 function sweepInactiveIdentities(now = Date.now()) {
   if (INACTIVE_DISCONNECT_MS <= 0) return;
 
+  let total = 0, kicked = 0;
   for (const scene of scenes.values()) {
     for (const identity of scene.identities.values()) {
+      if (!identity.joined) continue;
+      total++;
+      const idleMs = identity.lastActivityAt > 0 ? now - identity.lastActivityAt : -1;
+      const awayMs = identity.awaySince !== null ? now - identity.awaySince : -1;
       if (isIdentityInactive(identity, now)) {
+        kicked++;
         disconnectInactiveIdentity(identity);
+      } else if (idleMs > 60000 || awayMs > 60000) {
+        console.log(`[sweep] id=${identity.id} clients=${identity.clients.size} readingActive=${identity.readingActive} idle=${Math.round(idleMs/60000)}m away=${awayMs < 0 ? "null" : Math.round(awayMs/60000) + "m"}`);
       }
     }
   }
+  if (total > 0) console.log(`[sweep] checked=${total} kicked=${kicked}`);
 }
 
 function clearLeaveTimer(identity) {
