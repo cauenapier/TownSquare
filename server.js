@@ -41,6 +41,12 @@ const DEFAULT_DEV_ORIGINS = new Set([
   `https://localhost:${PORT}`,
 ]);
 const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 100);
+const MAX_CONNECTIONS_PER_IP = Number(process.env.MAX_CONNECTIONS_PER_IP || 8);
+const INIT_TIMEOUT_MS = Number(process.env.INIT_TIMEOUT_MS || 5000);
+const TRUSTED_PROXY_IPS = new Set(
+  String(process.env.TRUSTED_PROXY_IPS || "127.0.0.1,::1,::ffff:127.0.0.1")
+    .split(",").map((s) => s.trim()).filter(Boolean),
+);
 const MAX_BROWSER_ID_LEN = 80;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
 const MAX_READING_URL_LEN = 240;
@@ -534,9 +540,22 @@ function buildAdminUrl(req, adminToken) {
 const registrationsByIp = new Map();
 const adminAuthFailuresByIp = new Map();
 const serviceAdminAuthFailuresByIp = new Map();
+const connectionCountByIp = new Map();
 
 function getRequestIp(req) {
-  return req.socket.remoteAddress || "unknown";
+  const remote = req.socket.remoteAddress || "unknown";
+  if (!TRUSTED_PROXY_IPS.has(remote)) return remote;
+
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const first = String(forwarded).split(",")[0].trim();
+    if (first) return first;
+  }
+
+  const realIp = req.headers["x-real-ip"];
+  if (realIp) return String(realIp).trim();
+
+  return remote;
 }
 
 function recentBucket(map, key, limit) {
@@ -1705,17 +1724,36 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
+  const ip = getRequestIp(req);
+  const ipCount = connectionCountByIp.get(ip) ?? 0;
+  if (ipCount >= MAX_CONNECTIONS_PER_IP) {
+    ws.close(1013, "too many connections");
+    return;
+  }
+  connectionCountByIp.set(ip, ipCount + 1);
+
   const client = createClient(nextConnectionId++, ws, access.scene, access.site);
   access.scene.clients.set(client.connectionId, client);
   ws.isAlive = true;
+
+  const initTimer = setTimeout(() => {
+    if (!client.joined) ws.close(4008, "init timeout");
+  }, INIT_TIMEOUT_MS);
 
   ws.on("message", (raw) => handleClientMessage(client, raw));
   ws.on("pong", () => {
     ws.isAlive = true;
   });
   ws.on("close", () => {
+    clearTimeout(initTimer);
     client.scene.clients.delete(client.connectionId);
     handleClientClose(client);
+    const remaining = (connectionCountByIp.get(ip) ?? 1) - 1;
+    if (remaining <= 0) {
+      connectionCountByIp.delete(ip);
+    } else {
+      connectionCountByIp.set(ip, remaining);
+    }
   });
   ws.on("error", () => {
     // close handler owns cleanup
