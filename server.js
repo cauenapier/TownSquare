@@ -110,6 +110,21 @@ function loadEnvFile(filePath = path.join(__dirname, ".env")) {
 let PROPS_BY_ID = new Map();
 /** @type {Array<import("./public/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
+let DEFAULT_SITE_SCENE_CONFIG = { benches: 2, trees: 1, lamps: 1, branches: 0 };
+let DEFAULT_SITE_STYLE = {
+  scene: "#e4e2dd",
+  page: "#efede9",
+  surface: "#fdf8f4",
+  ink: "#2a2926",
+  accent: "#c8641f",
+  other: "#26241f",
+  ground: "rgba(42, 41, 38, 0.16)",
+};
+let sanitizeSceneConfig = (config) => ({ ...DEFAULT_SITE_SCENE_CONFIG, ...(config || {}) });
+let sanitizeSiteStyle = (style) => ({ ...DEFAULT_SITE_STYLE, ...(style || {}) });
+let buildSceneProps = () => [];
+let buildBirdPerches = () => [];
+let buildSiteCss = () => "";
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -451,6 +466,26 @@ async function sendTelegramChatNotification(site, identity, text, at) {
   }
 }
 
+function getSceneConfig(site) {
+  return sanitizeSceneConfig(site?.sceneConfig || DEFAULT_SITE_SCENE_CONFIG);
+}
+
+function getStyleConfig(site) {
+  return sanitizeSiteStyle(site?.styleConfig || DEFAULT_SITE_STYLE);
+}
+
+function getSceneProps(site) {
+  return site ? buildSceneProps(getSceneConfig(site)) : Array.from(PROPS_BY_ID.values());
+}
+
+function getSceneBirdPerches(site) {
+  return site ? buildBirdPerches(getSceneProps(site)) : BIRD_PERCHES;
+}
+
+function buildStyleSnippet(site) {
+  return buildSiteCss(getStyleConfig(site));
+}
+
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
 
@@ -461,7 +496,8 @@ function buildEmbedSnippet(req, site) {
 
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "${serverOrigin}",
-    siteKey: "${site.siteKey}"
+    siteKey: "${site.siteKey}",
+    scene: ${JSON.stringify(getSceneConfig(site))}
   });
 </script>`;
 }
@@ -540,7 +576,12 @@ function handleRegisterSite(req, res) {
       return;
     }
 
-    const { site, adminToken } = createSiteRecord({ name: body.name, origin });
+    const { site, adminToken } = createSiteRecord({
+      name: body.name,
+      origin,
+      sceneConfig: body.sceneConfig,
+      styleConfig: body.styleConfig,
+    });
     sitesByKey.set(site.siteKey, site);
     saveSites();
 
@@ -549,6 +590,7 @@ function handleRegisterSite(req, res) {
       adminToken,
       adminUrl: buildAdminUrl(req, adminToken),
       embedSnippet: buildEmbedSnippet(req, site),
+      styleSnippet: buildStyleSnippet(site),
     });
   });
 }
@@ -563,7 +605,8 @@ function sendAdminSite(req, res, site, adminToken) {
     site: publicSite(site),
     adminUrl: buildAdminUrl(req, adminToken),
     embedSnippet: buildEmbedSnippet(req, site),
-    scene: getSceneStats(getScene(site.siteKey)),
+    styleSnippet: buildStyleSnippet(site),
+    scene: getSceneStats(getScene(site.siteKey, site)),
   });
 }
 
@@ -982,7 +1025,7 @@ function occupiedBirdPerchIds(scene) {
 
 function pickFreeBirdPerch(scene) {
   const occupied = occupiedBirdPerchIds(scene);
-  const free = BIRD_PERCHES.filter((perch) => !occupied.has(perch.id));
+  const free = scene.birdPerches.filter((perch) => !occupied.has(perch.id));
   if (free.length === 0) return null;
   return free[Math.floor(Math.random() * free.length)];
 }
@@ -1048,10 +1091,14 @@ function tickSceneBirds(scene, now) {
   spawnBird(scene);
 }
 
-function createScene(key) {
+function createScene(key, site = null) {
   const now = Date.now();
+  const props = getSceneProps(site);
   return {
     key,
+    props,
+    propsById: new Map(props.map((prop) => [prop.id, prop])),
+    birdPerches: getSceneBirdPerches(site),
     clients: new Map(),
     identities: new Map(),
     identityByBrowser: new Map(),
@@ -1062,7 +1109,7 @@ function createScene(key) {
   };
 }
 
-function createSiteRecord({ name, origin }) {
+function createSiteRecord({ name, origin, sceneConfig, styleConfig }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -1072,6 +1119,8 @@ function createSiteRecord({ name, origin }) {
       adminTokenHash: hashAdminToken(adminToken),
       name: sanitizeSiteName(name, origin),
       origin,
+      sceneConfig: sanitizeSceneConfig(sceneConfig),
+      styleConfig: sanitizeSiteStyle(styleConfig),
       disabled: false,
       chatDisabled: false,
       verifiedAt: null,
@@ -1130,6 +1179,8 @@ function publicSite(site) {
     siteKey: site.siteKey,
     name: site.name,
     origin: site.origin,
+    sceneConfig: getSceneConfig(site),
+    styleConfig: getStyleConfig(site),
     disabled: site.disabled,
     chatDisabled: site.chatDisabled,
     verifiedAt: site.verifiedAt,
@@ -1139,11 +1190,11 @@ function publicSite(site) {
   };
 }
 
-function getScene(sceneKey) {
+function getScene(sceneKey, site = null) {
   const existing = scenes.get(sceneKey);
   if (existing) return existing;
 
-  const scene = createScene(sceneKey);
+  const scene = createScene(sceneKey, site);
   scenes.set(sceneKey, scene);
   return scene;
 }
@@ -1170,7 +1221,7 @@ function validateSiteAccess(reqUrl) {
   const url = new URL(reqUrl, `http://${HOST}:${PORT}`);
   const siteKey = url.searchParams.get("siteKey") || "";
   if (!siteKey) {
-    return { ok: true, scene: getScene("default"), site: null };
+    return { ok: true, scene: getScene("default", null), site: null };
   }
 
   const site = sitesByKey.get(siteKey);
@@ -1178,7 +1229,7 @@ function validateSiteAccess(reqUrl) {
     return { ok: false, status: 403, reason: "site disabled or unknown" };
   }
 
-  return { ok: true, scene: getScene(site.siteKey), site };
+  return { ok: true, scene: getScene(site.siteKey, site), site };
 }
 
 function isOriginAllowedForSite(origin, site) {
@@ -1455,7 +1506,7 @@ function handleReading(client, message) {
 
 function handleSettle(client, message) {
   if (!client.identity) return;
-  const prop = PROPS_BY_ID.get(message.propId);
+  const prop = client.scene.propsById.get(message.propId);
   if (!prop?.pose) return;
 
   const identity = client.identity;
@@ -1631,6 +1682,15 @@ wss.on("close", () => {
 });
 
 async function startServer() {
+  const siteConfig = await import("./public/site-config.mjs");
+  DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
+  DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
+  sanitizeSceneConfig = siteConfig.sanitizeSceneConfig;
+  sanitizeSiteStyle = siteConfig.sanitizeSiteStyle;
+  buildSceneProps = siteConfig.buildSceneProps;
+  buildBirdPerches = siteConfig.buildBirdPerches;
+  buildSiteCss = siteConfig.buildSiteCss;
+
   const { PROPS } = await import("./public/scene-props.mjs");
   PROPS_BY_ID = new Map(PROPS.map((prop) => [prop.id, prop]));
 

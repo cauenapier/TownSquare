@@ -49,10 +49,27 @@
 
         <section class="hosted-section" id="install-section">
           <h2>Embed snippet</h2>
+          <p class="hosted-note">Paste this where you want the square to appear.</p>
           <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-snippet">Copy snippet</button>
           </div>
+        </section>
+
+        <section class="hosted-section" id="style-section">
+          <h2>Customization CSS</h2>
+          <p class="hosted-note">Paste this into your site stylesheet, then tweak it if you want.</p>
+          <textarea id="style-snippet" readonly rows="7" spellcheck="false"></textarea>
+          <div class="hosted-actions">
+            <button type="button" id="copy-style">Copy CSS</button>
+          </div>
+        </section>
+
+        <section class="hosted-section" id="scene-section">
+          <div class="hosted-section-head">
+            <h2>Current scene setup</h2>
+          </div>
+          <div class="hosted-kv" id="scene-summary"></div>
         </section>
 
         <section class="hosted-section" id="moderation-section">

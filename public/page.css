@@ -464,6 +464,16 @@ body {
   margin-top: 22px;
 }
 
+.hosted-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hosted-grid--compact {
+  gap: 12px;
+}
+
 .hosted-form label {
   display: grid;
   gap: 7px;
@@ -641,6 +651,38 @@ body {
   font-weight: 650;
 }
 
+.hosted-kv {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hosted-kv div {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.hosted-kv strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hosted-kv span,
+.hosted-kv code {
+  overflow-wrap: anywhere;
+  font-weight: 650;
+}
+
+.hosted-kv code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
 .hosted-section-head,
 .hosted-toggle,
 .visitor-row {
@@ -761,11 +803,15 @@ body {
 @media (max-width: 640px) {
   .page-card { padding: 20px; border-radius: 20px; }
   .hosted-panel { padding: 20px; }
-  .hosted-meta dl { grid-template-columns: 1fr; }
-  .hosted-copy-row { flex-wrap: wrap; }
+  .hosted-grid,
+  .hosted-kv,
+  .hosted-meta dl,
   .service-site-row,
   .service-site-meta {
     grid-template-columns: 1fr;
+  }
+  .hosted-copy-row {
+    flex-wrap: wrap;
   }
   .hosted-section-head,
   .visitor-row {

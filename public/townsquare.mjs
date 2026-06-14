@@ -30,6 +30,15 @@ import {
 import { updateStatus } from "./widget/presence.mjs";
 import { wireSocket } from "./widget/protocol.mjs";
 import {
+  applySiteStyle,
+  buildBirdPerches,
+  buildSceneProps,
+  DEFAULT_SCENE_CONFIG,
+  DEFAULT_SITE_STYLE,
+  sanitizeSceneConfig,
+  sanitizeSiteStyle,
+} from "./site-config.mjs";
+import {
   applyWidgetTheme,
   buildSocketUrl,
   getBrowserId,
@@ -45,6 +54,8 @@ import {
  * @property {string} [serverOrigin] TownSquare server origin for static assets and WebSocket traffic.
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
  * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
+ * @property {{ benches?: number, trees?: number, lamps?: number, branches?: number }} [scene] Scene prop counts.
+ * @property {{ scene?: string, page?: string, surface?: string, ink?: string, accent?: string, other?: string, ground?: string }} [style] CSS-token overrides.
  * @property {string} [readingLabel] Explicit page label. Defaults to the page heading, then document title.
  * @property {string} [readingUrl] Explicit page URL. Defaults to the current browser URL.
  * @property {"auto" | "light" | "dark"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; use `dark` when the host page has a manual dark toggle.
@@ -77,6 +88,9 @@ export function mountTownSquare(root, options = {}) {
   );
   const siteKey = options.siteKey || root.dataset.townsquareSiteKey || "";
   const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey);
+  const sceneConfig = sanitizeSceneConfig(options.scene || DEFAULT_SCENE_CONFIG);
+  const sceneProps = buildSceneProps(sceneConfig);
+  const birdPerches = buildBirdPerches(sceneProps);
   const browserId = getBrowserId();
   const profile = getStoredProfile();
   const { readingLabel, readingUrl } = readCurrentPage(root, options);
@@ -100,7 +114,8 @@ export function mountTownSquare(root, options = {}) {
     helpPanel,
   } = renderShell(root);
 
-  renderProps(stage);
+  applySiteStyle(root, sanitizeSiteStyle(options.style || DEFAULT_SITE_STYLE));
+  renderProps(stage, sceneProps);
 
   /** @type {import("./widget/context.mjs").WidgetContext} */
   const ctx = {
@@ -110,6 +125,9 @@ export function mountTownSquare(root, options = {}) {
     socketUrl,
     browserId,
     peers,
+    sceneProps,
+    propsById: new Map(sceneProps.map((prop) => [prop.id, prop])),
+    birdPerchesById: new Map(birdPerches.map((perch) => [perch.id, perch])),
     app,
     stage,
     statusRowEl: statusRow,

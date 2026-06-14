@@ -1,10 +1,7 @@
 /**
- * Shared timing, movement, and scene constants for the embeddable widget.
+ * Shared timing and movement constants for the embeddable widget.
  */
 
-import { PROPS } from "../scene-props.mjs";
-
-export { PROPS };
 export {
   CHARACTER_COLORS,
   DEFAULT_CHARACTER_COLOR,
@@ -25,5 +22,3 @@ export const PROP_SETTLE_MS = 700;
 export const GHOST_STACK_MAX = 4;
 export const MOVEMENT_SPEED = 0.22;
 export const SEND_INTERVAL_MS = 45;
-
-export const INTERACTIVE_PROPS = PROPS.filter((prop) => prop.pose && prop.zoneRadius > 0);

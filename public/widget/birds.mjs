@@ -4,7 +4,6 @@
  * Motion is CSS-only; this module never runs in the animation frame loop.
  */
 
-import { BIRD_PERCHES_BY_ID } from "../bird-perches.mjs";
 import { MAX_X, MIN_X } from "./constants.mjs";
 
 const BIRD_FLYING_SVG = `
@@ -72,11 +71,12 @@ export function initBirds(ctx) {
 }
 
 /**
+ * @param {BirdsContext} ctx
  * @param {string} perchId
  * @returns {{ x: number, liftPx: number } | null}
  */
-function perchLayout(perchId) {
-  const perch = BIRD_PERCHES_BY_ID.get(perchId);
+function perchLayout(ctx, perchId) {
+  const perch = ctx.birdPerchesById?.get(perchId);
   if (!perch) return null;
   return { x: perch.x, liftPx: perch.liftPx };
 }
@@ -101,9 +101,9 @@ function createBirdElement(id, x, liftPx) {
  * @param {BirdView} bird
  * @param {string} perchId
  */
-function setBirdPerch(bird, perchId) {
+function setBirdPerch(ctx, bird, perchId) {
   bird.perchId = perchId;
-  const layout = perchLayout(perchId);
+  const layout = perchLayout(ctx, perchId);
   if (!layout) return;
   bird.x = layout.x;
   bird.el.style.setProperty("--bird-x", String(layout.x));
@@ -135,7 +135,7 @@ function entryX(from) {
 function upsertArrivingBird(ctx, id, perchId, x, from) {
   if (!ctx.birdLayer || !ctx.birds) return;
 
-  const layout = perchLayout(perchId);
+  const layout = perchLayout(ctx, perchId);
   if (!layout) return;
 
   let bird = ctx.birds.get(id);
@@ -144,7 +144,7 @@ function upsertArrivingBird(ctx, id, perchId, x, from) {
     ctx.birds.set(id, bird);
     ctx.birdLayer.appendChild(bird.el);
   } else {
-    setBirdPerch(bird, perchId);
+    setBirdPerch(ctx, bird, perchId);
   }
 
   bird.perchId = perchId;
@@ -172,7 +172,7 @@ function upsertArrivingBird(ctx, id, perchId, x, from) {
 function upsertPerchedBird(ctx, id, perchId, x) {
   if (!ctx.birdLayer || !ctx.birds) return;
 
-  const layout = perchLayout(perchId);
+  const layout = perchLayout(ctx, perchId);
   if (!layout) return;
 
   let bird = ctx.birds.get(id);
@@ -186,7 +186,7 @@ function upsertPerchedBird(ctx, id, perchId, x) {
     return;
   }
 
-  setBirdPerch(bird, perchId);
+  setBirdPerch(ctx, bird, perchId);
   setBirdPerchedArt(bird);
   bird.el.className = "bird bird--perched";
 }

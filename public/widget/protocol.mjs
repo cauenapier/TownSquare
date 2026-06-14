@@ -50,7 +50,7 @@ function applyJump(ctx, id) {
   presence.pose = null;
   presence.propId = null;
   updatePose(presence.avatar, presence.pose);
-  updatePropEffects(presence.avatar, presence.x, presence.propId);
+  updatePropEffects(presence.avatar, presence.x, presence.propId, ctx.sceneProps);
   playJump(presence.avatar);
 }
 

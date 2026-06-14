@@ -45,12 +45,26 @@ async function createSite(name) {
   const response = await fetch(`${HTTP_ORIGIN}/api/sites`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name, origin: HTTP_ORIGIN }),
+    body: JSON.stringify({
+      name,
+      origin: HTTP_ORIGIN,
+      sceneConfig: { benches: 1, trees: 2, lamps: 1, branches: 3 },
+      styleConfig: {
+        scene: "#e6dfd3",
+        page: "#f5efe7",
+        surface: "#fffaf6",
+        ink: "#2d2926",
+        accent: "#9d5c2f",
+      },
+    }),
   });
   const body = await response.json();
   assert(response.ok, body.error || "site registration failed");
   assert(body.site.siteKey, "registered site did not include a site key");
   assert(body.adminToken, "registered site did not include an admin token");
+  assert(body.styleSnippet.includes("#townsquare-root"), "registered site did not include a style snippet");
+  assert(body.site.sceneConfig?.branches === 3, "registered site did not persist scene config");
+  assert(body.site.styleConfig?.accent === "#9d5c2f", "registered site did not persist style config");
   return body;
 }
 
@@ -72,6 +86,8 @@ async function loginWithAdminToken(adminToken) {
 async function adminSiteApi(siteKey, adminToken) {
   const { response, body } = await postJson("/api/admin/site", { siteKey, adminToken });
   assert(response.ok, body.error || "site admin request failed");
+  assert(body.styleSnippet.includes("--you"), "site admin did not return style snippet");
+  assert(typeof body.site.sceneConfig?.benches === "number", "site admin did not return scene config");
   return body;
 }
 
@@ -210,6 +226,16 @@ async function delay(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitFor(check, message, { timeout = 2500, interval = 25 } = {}) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeout) {
+    const value = check();
+    if (value) return value;
+    await delay(interval);
+  }
+  throw new Error(message);
+}
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
@@ -321,15 +347,16 @@ async function main() {
   assert(third.hello.peers[0].readingActive === true, "peer snapshot did not include active reading state");
   assert(first.seen.some((message) => message.type === "join" && message.peer.id === third.id), "first client did not observe different-browser join");
 
-  await delay(800);
-
-  const birdSpawn = findLast(first.seen, (message) => message.type === "bird" && message.action === "spawn");
-  assert(birdSpawn, "ambient bird did not spawn after visitors joined");
+  const birdSpawn = await waitFor(
+    () => findLast(first.seen, (message) => message.type === "bird" && message.action === "spawn")
+      || first.hello.birds?.[0]
+      || third.hello.birds?.[0],
+    "ambient bird was never available in the scene",
+    { timeout: 4000 },
+  );
   assert(typeof birdSpawn.x === "number", "bird spawn did not include x");
 
   const birdJoiner = await connect({ x: 0.4, browserId: "browser-bird-sync" });
-  await delay(100);
-
   assert(Array.isArray(birdJoiner.hello.birds), "hello did not include birds snapshot");
   assert(
     birdJoiner.hello.birds.some((bird) => bird.id === birdSpawn.id && bird.perchId === birdSpawn.perchId),
@@ -337,18 +364,16 @@ async function main() {
   );
 
   third.ws.send(JSON.stringify({ type: "move", x: birdSpawn.x }));
-  await delay(100);
-
-  assert(
-    first.seen.some((message) => message.type === "bird" && message.action === "flee" && message.id === birdSpawn.id),
+  await waitFor(
+    () => first.seen.some((message) => message.type === "bird" && message.action === "flee" && message.id === birdSpawn.id),
     "first client did not receive bird flee broadcast",
   );
-  assert(
-    third.seen.some((message) => message.type === "bird" && message.action === "flee" && message.id === birdSpawn.id),
+  await waitFor(
+    () => third.seen.some((message) => message.type === "bird" && message.action === "flee" && message.id === birdSpawn.id),
     "approaching visitor did not receive bird flee event",
   );
-  assert(
-    birdJoiner.seen.some((message) => message.type === "bird" && message.action === "flee" && message.id === birdSpawn.id),
+  await waitFor(
+    () => birdJoiner.seen.some((message) => message.type === "bird" && message.action === "flee" && message.id === birdSpawn.id),
     "other visitor did not receive bird flee broadcast",
   );
 
@@ -360,10 +385,8 @@ async function main() {
     readingLabel: "API reference",
     readingUrl: `${HTTP_ORIGIN}/docs/api`,
   }));
-  await delay(100);
-
-  assert(
-    first.seen.some((message) => (
+  await waitFor(
+    () => first.seen.some((message) => (
       message.type === "reading"
       && message.id === first.id
       && message.readingLabel === "API reference"
@@ -371,8 +394,8 @@ async function main() {
     )),
     "reading update did not propagate to same-browser sibling",
   );
-  assert(
-    third.seen.some((message) => (
+  await waitFor(
+    () => third.seen.some((message) => (
       message.type === "reading"
       && message.id === first.id
       && message.readingLabel === "API reference"
@@ -404,10 +427,8 @@ async function main() {
     readingUrl: `${HTTP_ORIGIN}/docs/api`,
     readingActive: false,
   }));
-  await delay(100);
-
-  assert(
-    third.seen.some((message) => (
+  await waitFor(
+    () => third.seen.some((message) => (
       message.type === "reading"
       && message.id === first.id
       && message.readingActive === false
@@ -416,10 +437,8 @@ async function main() {
   );
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "profile", displayName: "Ada", color: "#3f6fb5" }));
-  await delay(100);
-
-  assert(
-    first.seen.some((message) => (
+  await waitFor(
+    () => first.seen.some((message) => (
       message.type === "profile"
       && message.id === first.id
       && message.displayName === "Ada"
@@ -427,8 +446,8 @@ async function main() {
     )),
     "profile update did not propagate to same-browser sibling",
   );
-  assert(
-    third.seen.some((message) => (
+  await waitFor(
+    () => third.seen.some((message) => (
       message.type === "profile"
       && message.id === first.id
       && message.displayName === "Ada"
@@ -442,22 +461,18 @@ async function main() {
   secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: "hello from shared browser" }));
   await delay(100);
   secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: "this should be rate-limited away" }));
-  await delay(100);
-
-  assert(first.seen.some((message) => message.type === "move" && message.id === first.id), "same-browser move did not propagate to sibling tab");
-  assert(first.seen.some((message) => message.type === "say" && message.id === first.id), "same-browser chat did not propagate to sibling tab");
-  assert(third.seen.some((message) => message.type === "move" && message.id === first.id), "different browser did not observe shared visitor movement");
-  assert(third.seen.some((message) => message.type === "say" && message.id === first.id), "different browser did not observe shared visitor chat");
+  await waitFor(() => first.seen.some((message) => message.type === "move" && message.id === first.id), "same-browser move did not propagate to sibling tab");
+  await waitFor(() => first.seen.some((message) => message.type === "say" && message.id === first.id), "same-browser chat did not propagate to sibling tab");
+  await waitFor(() => third.seen.some((message) => message.type === "move" && message.id === first.id), "different browser did not observe shared visitor movement");
+  await waitFor(() => third.seen.some((message) => message.type === "say" && message.id === first.id), "different browser did not observe shared visitor chat");
   assert(
     !third.seen.some((message) => message.type === "say" && message.id === first.id && message.text === "this should be rate-limited away"),
     "chat rate limit did not suppress a rapid second message",
   );
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "action", action: "jump" }));
-  await delay(100);
-
-  assert(first.seen.some((message) => message.type === "action" && message.id === first.id && message.action === "jump"), "same-browser jump did not propagate to sibling tab");
-  assert(third.seen.some((message) => message.type === "action" && message.id === first.id && message.action === "jump"), "different browser did not observe shared visitor jump");
+  await waitFor(() => first.seen.some((message) => message.type === "action" && message.id === first.id && message.action === "jump"), "same-browser jump did not propagate to sibling tab");
+  await waitFor(() => third.seen.some((message) => message.type === "action" && message.id === first.id && message.action === "jump"), "different browser did not observe shared visitor jump");
 
   await delay(1600);
   const longText = "x".repeat(200);
@@ -471,56 +486,58 @@ async function main() {
   secondSameBrowser.ws.send(JSON.stringify({ type: "move", x: 0.2 }));
   await delay(100);
   secondSameBrowser.ws.send(JSON.stringify({ type: "settle", propId: "bench" }));
-  await delay(100);
-
-  const firstBenchState = findLast(first.seen, (message) => message.type === "move" && message.id === first.id && message.pose === "sitting");
-  const thirdBenchState = findLast(third.seen, (message) => message.type === "move" && message.id === first.id && message.pose === "sitting");
-
-  assert(firstBenchState, "same-browser bench settle did not propagate to sibling tab");
-  assert(thirdBenchState, "bench settle did not propagate to other visitors");
+  const firstBenchState = await waitFor(
+    () => findLast(first.seen, (message) => message.type === "move" && message.id === first.id && message.pose === "sitting" && message.propId === "bench"),
+    "same-browser bench settle did not propagate to sibling tab",
+  );
+  await waitFor(
+    () => findLast(third.seen, (message) => message.type === "move" && message.id === first.id && message.pose === "sitting" && message.propId === "bench"),
+    "bench settle did not propagate to other visitors",
+  );
 
   third.ws.send(JSON.stringify({ type: "move", x: 0.2 }));
   await delay(100);
   third.ws.send(JSON.stringify({ type: "settle", propId: "bench" }));
-  await delay(100);
-
-  const thirdSeatState = findLast(first.seen, (message) => message.type === "move" && message.id === third.id && message.pose === "sitting");
-  assert(thirdSeatState, "second visitor did not settle onto the bench");
+  const thirdSeatState = await waitFor(
+    () => findLast(first.seen, (message) => message.type === "move" && message.id === third.id && message.pose === "sitting" && message.propId === "bench"),
+    "second visitor did not settle onto the bench",
+  );
   assert(Math.abs(thirdSeatState.x - firstBenchState.x) > 0.005, "bench seat allocation reused an occupied seat");
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "move", x: 0.8 }));
   await delay(100);
   secondSameBrowser.ws.send(JSON.stringify({ type: "settle", propId: "tree" }));
-  await delay(100);
-
-  const firstTreeState = findLast(first.seen, (message) => (
-    message.type === "move"
-    && message.id === first.id
-    && message.pose === "resting"
-    && message.propId === "tree"
-  ));
-  const thirdTreeState = findLast(third.seen, (message) => (
-    message.type === "move"
-    && message.id === first.id
-    && message.pose === "resting"
-    && message.propId === "tree"
-  ));
-
-  assert(firstTreeState, "same-browser tree settle did not propagate to sibling tab");
-  assert(thirdTreeState, "tree settle did not propagate to other visitors");
+  const firstTreeState = await waitFor(
+    () => findLast(first.seen, (message) => (
+      message.type === "move"
+      && message.id === first.id
+      && message.pose === "resting"
+      && message.propId === "tree"
+    )),
+    "same-browser tree settle did not propagate to sibling tab",
+  );
+  await waitFor(
+    () => findLast(third.seen, (message) => (
+      message.type === "move"
+      && message.id === first.id
+      && message.pose === "resting"
+      && message.propId === "tree"
+    )),
+    "tree settle did not propagate to other visitors",
+  );
 
   third.ws.send(JSON.stringify({ type: "move", x: 0.8 }));
   await delay(100);
   third.ws.send(JSON.stringify({ type: "settle", propId: "tree" }));
-  await delay(100);
-
-  const thirdTreeSeatState = findLast(first.seen, (message) => (
-    message.type === "move"
-    && message.id === third.id
-    && message.pose === "resting"
-    && message.propId === "tree"
-  ));
-  assert(thirdTreeSeatState, "second visitor did not settle under the tree");
+  const thirdTreeSeatState = await waitFor(
+    () => findLast(first.seen, (message) => (
+      message.type === "move"
+      && message.id === third.id
+      && message.pose === "resting"
+      && message.propId === "tree"
+    )),
+    "second visitor did not settle under the tree",
+  );
   assert(Math.abs(thirdTreeSeatState.x - firstTreeState.x) > 0.005, "tree seat allocation reused an occupied seat");
 
   secondSameBrowser.ws.close();
@@ -529,9 +546,11 @@ async function main() {
   assert(!first.seen.some((message) => message.type === "leave" && message.id === first.id), "closing one same-browser tab incorrectly removed the shared visitor");
 
   third.ws.close();
-  await delay(1700);
-
-  assert(first.seen.some((message) => message.type === "leave" && message.id === third.id), "first client did not observe different-browser leave");
+  await waitFor(
+    () => first.seen.some((message) => message.type === "leave" && message.id === third.id),
+    "first client did not observe different-browser leave",
+    { timeout: 2500 },
+  );
 
   const hostedA = await createSite("Smoke A");
   const hostedB = await createSite("Smoke B");

@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Add TownSquare to your website</title>
+    <link rel="stylesheet" href="/widget.css" />
     <link rel="stylesheet" href="/page.css" />
   </head>
   <body>
@@ -12,7 +13,7 @@
         <p class="eyebrow">Hosted TownSquare</p>
         <h1 id="register-title">Add TownSquare to your website</h1>
         <p class="hosted-copy">
-          Enter your site URL, get a snippet, paste it into your page. No account required.
+          Set up your square, preview it, then copy the snippet and CSS into your site.
         </p>
 
         <form class="hosted-form" id="register-form">
@@ -31,10 +32,72 @@
             <span>Site name <small>optional</small></span>
             <input id="site-name" name="name" type="text" placeholder="My site" maxlength="80" />
           </label>
+
+          <section class="hosted-section" aria-labelledby="scene-config-title">
+            <div class="hosted-section-head">
+              <h2 id="scene-config-title">Scene props</h2>
+            </div>
+            <div class="hosted-grid hosted-grid--compact">
+              <label>
+                <span>Benches</span>
+                <input id="scene-benches" name="scene-benches" type="number" min="0" max="6" step="1" value="2" />
+              </label>
+              <label>
+                <span>Trees</span>
+                <input id="scene-trees" name="scene-trees" type="number" min="0" max="6" step="1" value="1" />
+              </label>
+              <label>
+                <span>Lamps</span>
+                <input id="scene-lamps" name="scene-lamps" type="number" min="0" max="4" step="1" value="1" />
+              </label>
+              <label>
+                <span>Branches</span>
+                <input id="scene-branches" name="scene-branches" type="number" min="0" max="8" step="1" value="0" />
+              </label>
+            </div>
+          </section>
+
+          <section class="hosted-section" aria-labelledby="style-config-title">
+            <div class="hosted-section-head">
+              <h2 id="style-config-title">Style overrides</h2>
+            </div>
+            <div class="hosted-grid hosted-grid--compact">
+              <label>
+                <span>Scene</span>
+                <input id="style-scene" name="style-scene" type="color" value="#e4e2dd" />
+              </label>
+              <label>
+                <span>Page</span>
+                <input id="style-page" name="style-page" type="color" value="#efede9" />
+              </label>
+              <label>
+                <span>Surface</span>
+                <input id="style-surface" name="style-surface" type="color" value="#fdf8f4" />
+              </label>
+              <label>
+                <span>Ink</span>
+                <input id="style-ink" name="style-ink" type="color" value="#2a2926" />
+              </label>
+              <label>
+                <span>Accent</span>
+                <input id="style-accent" name="style-accent" type="color" value="#c8641f" />
+              </label>
+            </div>
+          </section>
+
           <button type="submit" id="register-submit">Create my TownSquare</button>
         </form>
 
         <p class="hosted-status" id="register-status" role="status" hidden></p>
+
+        <section class="hosted-section" aria-labelledby="preview-title">
+          <div class="hosted-section-head">
+            <h2 id="preview-title">Preview</h2>
+          </div>
+          <div class="townsquare-host">
+            <div id="townsquare-root"></div>
+          </div>
+        </section>
 
         <p class="hosted-note hosted-footnote">
           Already registered? <a href="/admin">Open your admin page</a> with your admin token.
@@ -60,10 +123,18 @@
           </li>
           <li>
             <h2>Paste this snippet into your page</h2>
-            <p class="hosted-note">Anywhere in your HTML works. The square appears where you put it.</p>
-            <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
+            <p class="hosted-note">Put the mount where you want the square to appear.</p>
+            <textarea id="embed-snippet" readonly rows="10" spellcheck="false"></textarea>
             <div class="hosted-actions">
               <button type="button" id="copy-snippet">Copy snippet</button>
+            </div>
+          </li>
+          <li>
+            <h2>Paste this CSS into your site</h2>
+            <p class="hosted-note">This is the customization layer you can keep editing later.</p>
+            <textarea id="style-snippet" readonly rows="10" spellcheck="false"></textarea>
+            <div class="hosted-actions">
+              <button type="button" id="copy-style">Copy CSS</button>
             </div>
           </li>
           <li>

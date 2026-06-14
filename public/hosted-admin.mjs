@@ -8,7 +8,10 @@ const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const metaEl = document.getElementById("site-meta");
 const snippetEl = document.getElementById("embed-snippet");
+const styleSnippetEl = document.getElementById("style-snippet");
+const sceneSummaryEl = document.getElementById("scene-summary");
 const copyButton = document.getElementById("copy-snippet");
+const copyStyleButton = document.getElementById("copy-style");
 const chatDisabledInput = document.getElementById("chat-disabled");
 const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
@@ -126,6 +129,20 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function renderSceneSummary(sceneConfig = {}) {
+  sceneSummaryEl.innerHTML = [
+    ["Benches", sceneConfig.benches ?? 0],
+    ["Trees", sceneConfig.trees ?? 0],
+    ["Lamps", sceneConfig.lamps ?? 0],
+    ["Branches", sceneConfig.branches ?? 0],
+  ]
+    .map(
+      ([label, value]) =>
+        `<div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(String(value))}</span></div>`,
+    )
+    .join("");
+}
+
 function render(data) {
   currentSite = data.site;
   const scene = data.scene;
@@ -144,6 +161,10 @@ function render(data) {
   if (document.activeElement !== snippetEl) {
     snippetEl.value = data.embedSnippet;
   }
+  if (document.activeElement !== styleSnippetEl) {
+    styleSnippetEl.value = data.styleSnippet;
+  }
+  renderSceneSummary(currentSite.sceneConfig);
   chatDisabledInput.checked = currentSite.chatDisabled;
   disableSiteButton.textContent = currentSite.disabled ? "Enable site" : "Disable site";
 
@@ -235,6 +256,23 @@ async function action(name, data = {}) {
   await loadSite();
 }
 
+function bindCopy(button, source, doneLabel) {
+  const originalLabel = button.textContent;
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(source.value);
+    } catch {
+      source.focus();
+      source.select();
+      return;
+    }
+    button.textContent = doneLabel;
+    setTimeout(() => {
+      button.textContent = originalLabel;
+    }, 1200);
+  });
+}
+
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   loginSubmitButton.disabled = true;
@@ -256,19 +294,8 @@ signOutButton.addEventListener("click", () => {
   showLogin("Signed out. Your token was forgotten on this device.");
 });
 
-copyButton.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(snippetEl.value);
-  } catch {
-    snippetEl.focus();
-    snippetEl.select();
-    return;
-  }
-  copyButton.textContent = "Copied";
-  setTimeout(() => {
-    copyButton.textContent = "Copy snippet";
-  }, 1200);
-});
+bindCopy(copyButton, snippetEl, "Copied");
+bindCopy(copyStyleButton, styleSnippetEl, "Copied");
 
 chatDisabledInput.addEventListener("change", () => action("setChatDisabled", { disabled: chatDisabledInput.checked }));
 clearMessagesButton.addEventListener("click", () => action("clearMessages"));

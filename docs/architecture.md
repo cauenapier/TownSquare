@@ -27,6 +27,7 @@ TownSquare currently has three practical surfaces:
    - accountless site registration
    - public site key for embed routing
    - private admin token for moderation/settings, stored as a hash
+   - site-specific scene props + style config shared with the widget runtime
    - service admin password for operator-level site management
    - small JSON site registry
 
@@ -70,10 +71,11 @@ Do not front-load yet:
 The first hosted shape is:
 
 1. Site owner registers a URL with the main TownSquare service.
-2. The service issues an embed snippet with a public site key.
-3. The service issues a private admin link with an admin token.
-4. The widget connects to the main service using that site identity.
-5. The runtime keeps site-level scene separation while optionally allowing curated cross-site travel later.
+2. The registration flow collects scene prop counts and style overrides, with a live preview.
+3. The service issues an embed snippet with a public site key and a generated CSS snippet.
+4. The service issues a private admin link with an admin token.
+5. The widget connects to the main service using that site identity.
+6. The runtime keeps site-level scene separation while optionally allowing curated cross-site travel later.
 
 That suggests a future fourth surface:
 
@@ -106,6 +108,8 @@ Near-term changes should preserve these rules:
 - the widget should know which server origin to use without assuming same-page hosting
 - the server should be deployable behind a normal reverse proxy
 - health checks and operational docs should exist before broader packaging work
+- scene props and bird perches should be derived from one shared config source, not duplicated between widget and server
+- hosted customization should be deterministic across register/admin/embed/runtime flows
 
 ## Current limits
 
