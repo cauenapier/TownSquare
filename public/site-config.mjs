@@ -54,20 +54,17 @@ export const SCENE_FIELDS = Object.freeze([
     start: 0.16,
     end: 0.84,
   }),
-  Object.freeze({
-    key: "branches",
-    kind: "branch",
-    itemLabel: "Branch",
-    label: "Branches",
-    inputName: "scene-branches",
-    positionsKey: "branchXs",
-    min: 0,
-    max: 8,
-    defaultValue: 0,
-    start: 0.2,
-    end: 0.8,
-  }),
 ]);
+
+export const SCENE_BIRDS_FIELD = Object.freeze({
+  key: "birds",
+  itemLabel: "Bird",
+  label: "Birds",
+  inputName: "scene-birds",
+  min: 0,
+  max: 18,
+  defaultValue: 3,
+});
 
 export const STYLE_FIELDS = Object.freeze([
   Object.freeze({ key: "scene", label: "Background", inputName: "style-scene", defaultValue: "#e4e2dd", cssVar: "--scene" }),
@@ -86,7 +83,6 @@ const POSITION_PRESETS = Object.freeze({
   benches: Object.freeze([0.2, 0.72, 0.46, 0.08, 0.58, 0.86]),
   trees: Object.freeze([0.8, 0.58, 0.36, 0.9, 0.18, 0.68]),
   lamps: Object.freeze([0.12, 0.88, 0.36, 0.64]),
-  branches: Object.freeze([0.22, 0.3, 0.38, 0.46, 0.54, 0.62, 0.7, 0.78]),
 });
 
 export const DEFAULT_SCENE_CONFIG = Object.freeze(buildDefaultSceneConfig());
@@ -124,15 +120,6 @@ const TREE_SVG = `
   </svg>
 `;
 
-const BRANCH_SVG = `
-  <svg viewBox="0 0 42 28" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-    <path d="M4 18 C11 18 17 16 22 12 C26 9 31 6 38 6"></path>
-    <path d="M18 13 L11 9"></path>
-    <path d="M25 10 L20 4"></path>
-    <path d="M31 8 L28 2"></path>
-  </svg>
-`;
-
 /**
  * @typedef {Object} SceneProp
  * @property {string} id
@@ -155,6 +142,7 @@ function buildDefaultSceneConfig() {
     next[field.key] = field.defaultValue;
     next[field.positionsKey] = Object.freeze(selectDefaultPositions(field, field.defaultValue));
   }
+  next[SCENE_BIRDS_FIELD.key] = SCENE_BIRDS_FIELD.defaultValue;
   return next;
 }
 
@@ -255,18 +243,6 @@ function createTree(index, x) {
   };
 }
 
-function createBranch(index, x) {
-  return {
-    id: uniqueId("branch", index),
-    kind: "branch",
-    x,
-    zoneRadius: 0,
-    width: 42,
-    height: 28,
-    svg: BRANCH_SVG,
-  };
-}
-
 export function getScenePositionInputName(sceneKey, index) {
   const field = SCENE_FIELD_BY_KEY.get(sceneKey);
   if (!field) throw new Error(`Unknown scene field: ${sceneKey}`);
@@ -274,7 +250,8 @@ export function getScenePositionInputName(sceneKey, index) {
 }
 
 export function isSceneCountInputName(name = "") {
-  return SCENE_FIELDS.some((field) => field.inputName === name);
+  return SCENE_FIELDS.some((field) => field.inputName === name)
+    || name === SCENE_BIRDS_FIELD.inputName;
 }
 
 export function sanitizeSceneConfig(input = {}) {
@@ -286,6 +263,13 @@ export function sanitizeSceneConfig(input = {}) {
     next[field.key] = count;
     next[field.positionsKey] = sanitizePositionList(field, base[field.positionsKey], count);
   }
+
+  next[SCENE_BIRDS_FIELD.key] = clampInt(
+    base[SCENE_BIRDS_FIELD.key],
+    SCENE_BIRDS_FIELD.min,
+    SCENE_BIRDS_FIELD.max,
+    SCENE_BIRDS_FIELD.defaultValue,
+  );
 
   return next;
 }
@@ -328,6 +312,13 @@ export function readSceneConfigFromForm(form) {
     });
   }
 
+  next[SCENE_BIRDS_FIELD.key] = clampInt(
+    formData.get(SCENE_BIRDS_FIELD.inputName),
+    SCENE_BIRDS_FIELD.min,
+    SCENE_BIRDS_FIELD.max,
+    SCENE_BIRDS_FIELD.defaultValue,
+  );
+
   return next;
 }
 
@@ -358,6 +349,11 @@ export function applyConfigToForm(form, config = {}) {
         positionInput.value = String(roundPercent(x * 100));
       }
     });
+  }
+
+  const birdsInput = form.elements.namedItem(SCENE_BIRDS_FIELD.inputName);
+  if (birdsInput && "value" in birdsInput) {
+    birdsInput.value = String(config[SCENE_BIRDS_FIELD.key] ?? SCENE_BIRDS_FIELD.defaultValue);
   }
 
   for (const field of STYLE_FIELDS) {
@@ -394,6 +390,17 @@ export function syncSceneCountProse(form) {
     const count = Number(input.value);
     noun.textContent = count === 1 ? singular : plural;
   }
+
+  const birdsInput = form.elements.namedItem(SCENE_BIRDS_FIELD.inputName);
+  if (birdsInput instanceof HTMLInputElement) {
+    const noun = birdsInput.closest(".scene-count")?.querySelector(".scene-count__noun");
+    if (noun instanceof HTMLElement) {
+      const singular = noun.dataset.singular || SCENE_BIRDS_FIELD.itemLabel.toLowerCase();
+      const plural = noun.dataset.plural || SCENE_BIRDS_FIELD.label.toLowerCase();
+      const count = Number(birdsInput.value);
+      noun.textContent = count === 1 ? singular : plural;
+    }
+  }
 }
 
 export function bindSceneCountProse(form) {
@@ -410,6 +417,10 @@ export function bindSceneCountProse(form) {
     if (input instanceof HTMLInputElement) {
       input.addEventListener("input", sync);
     }
+  }
+  const birdsInput = form.elements.namedItem(SCENE_BIRDS_FIELD.inputName);
+  if (birdsInput instanceof HTMLInputElement) {
+    birdsInput.addEventListener("input", sync);
   }
   sync();
 }
@@ -628,6 +639,8 @@ export function getSceneSummaryEntries(sceneConfig = {}) {
     }
   }
 
+  entries.push({ label: SCENE_BIRDS_FIELD.label, value: scene[SCENE_BIRDS_FIELD.key] });
+
   return entries;
 }
 
@@ -643,9 +656,6 @@ export function buildSceneProps(config = DEFAULT_SCENE_CONFIG) {
   });
   scene.treeXs.forEach((x, index) => {
     props.push(createTree(index, x));
-  });
-  scene.branchXs.forEach((x, index) => {
-    props.push(createBranch(index, x));
   });
 
   return props.sort((a, b) => a.x - b.x);
@@ -671,16 +681,6 @@ export function buildBirdPerches(props = []) {
         x: prop.x,
       });
       continue;
-    }
-
-    if (prop.kind === "branch") {
-      perches.push({
-        id: `${prop.id}-perch`,
-        propId: prop.id,
-        offsetX: 0,
-        liftPx: 12,
-        x: prop.x,
-      });
     }
   }
   return perches;

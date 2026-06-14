@@ -67,7 +67,6 @@ const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS
 const HEARTBEAT_INTERVAL_MS = 30000;
 const BIRD_TICK_INTERVAL_MS = 1000;
 const TELEGRAM_API_TIMEOUT_MS = 5000;
-const MAX_BIRDS = 3;
 const BIRD_FLEE_RADIUS = 0.07;
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
 const BIRD_SPAWN_MAX_MS = Number(process.env.BIRD_SPAWN_MAX_MS || 22000);
@@ -119,7 +118,7 @@ function loadEnvFile(filePath = path.join(__dirname, ".env")) {
 let PROPS_BY_ID = new Map();
 /** @type {Array<import("./public/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
-let DEFAULT_SITE_SCENE_CONFIG = { benches: 2, trees: 1, lamps: 1, branches: 0 };
+let DEFAULT_SITE_SCENE_CONFIG = { benches: 2, trees: 1, lamps: 1, birds: 3 };
 let DEFAULT_SITE_STYLE = {
   scene: "#e4e2dd",
   page: "#efede9",
@@ -1240,7 +1239,7 @@ function maybeFleeBirds(scene, playerX) {
 }
 
 function spawnBird(scene) {
-  if (scene.birds.size >= MAX_BIRDS) return false;
+  if (scene.birds.size >= scene.maxBirds) return false;
 
   const perch = pickFreeBirdPerch(scene);
   if (!perch) return false;
@@ -1268,19 +1267,21 @@ function spawnBird(scene) {
 
 function tickSceneBirds(scene, now) {
   if (!sceneHasJoinedClients(scene)) return;
-  if (scene.birds.size >= MAX_BIRDS) return;
+  if (scene.birds.size >= scene.maxBirds) return;
   if (now < scene.nextSpawnAt) return;
   spawnBird(scene);
 }
 
 function createScene(key, site = null) {
   const now = Date.now();
+  const config = getSceneConfig(site);
   const props = getSceneProps(site);
   return {
     key,
     props,
     propsById: new Map(props.map((prop) => [prop.id, prop])),
     birdPerches: getSceneBirdPerches(site),
+    maxBirds: config.birds,
     clients: new Map(),
     identities: new Map(),
     identityByBrowser: new Map(),

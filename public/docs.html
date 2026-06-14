@@ -97,7 +97,7 @@
               <h2 id="scene-h">Design your square</h2>
               <p>
                 Your square is set in a small park. You decide what goes in it: how many
-                benches, trees, lamps, and branches, and where each one stands.
+                benches, trees, lamps, and birds, and where each prop stands.
               </p>
               <table class="docs-table">
                 <thead>
@@ -107,7 +107,7 @@
                   <tr><td>Benches</td><td>0 to 6</td><td>Places to sit, the obvious social spots.</td></tr>
                   <tr><td>Trees</td><td>0 to 6</td><td>Shade, a calmer park feel, and perches for birds.</td></tr>
                   <tr><td>Lamps</td><td>0 to 4</td><td>A more structured, street-like look.</td></tr>
-                  <tr><td>Branches</td><td>0 to 8</td><td>Small perches that keep the square from looking bare.</td></tr>
+                  <tr><td>Birds</td><td>0 to 18</td><td>Ambient birds that perch on benches and trees.</td></tr>
                 </tbody>
               </table>
               <h3>Placing things</h3>
@@ -245,7 +245,7 @@ docker run --rm -p 8787:8787 -e HOST=0.0.0.0 townsquare</code></pre>
               </p>
               <pre><code>mountTownSquare(document.getElementById("townsquare-root"), {
   serverOrigin: "https://your-townsquare-host",
-  scene: { benches: 1, trees: 2, lamps: 1, branches: 4 },
+  scene: { benches: 1, trees: 2, lamps: 1, birds: 3 },
   style: {
     scene: "#e6dfd3",   // Background
     page: "#f5efe7",    // Ground

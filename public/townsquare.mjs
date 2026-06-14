@@ -55,7 +55,7 @@ import {
  * @property {string} [serverOrigin] TownSquare server origin for static assets and WebSocket traffic.
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
  * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
- * @property {{ benches?: number, trees?: number, lamps?: number, branches?: number, benchXs?: number[], treeXs?: number[], lampXs?: number[], branchXs?: number[] }} [scene] Scene prop counts and optional per-prop X positions (0..1).
+ * @property {{ benches?: number, trees?: number, lamps?: number, birds?: number, benchXs?: number[], treeXs?: number[], lampXs?: number[] }} [scene] Scene prop counts and optional per-prop X positions (0..1).
  * @property {{ scene?: string, page?: string, surface?: string, ink?: string, accent?: string, other?: string, ground?: string }} [style] CSS-token overrides.
  * @property {string} [readingLabel] Explicit page label. Defaults to the page heading, then document title.
  * @property {string} [readingUrl] Explicit page URL. Defaults to the current browser URL.

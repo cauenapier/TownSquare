@@ -129,7 +129,7 @@ Notes:
 - `serverOrigin` is the realtime/backend origin the widget should connect to.
 - `socketPath` defaults to `/live`; set it explicitly when your reverse proxy exposes TownSquare on a different websocket path such as `/townsquare/live`.
 - `siteKey` is only needed when using one hosted TownSquare server for multiple registered sites.
-- `scene` lets you configure prop counts per mount/site (`benches`, `trees`, `lamps`, `branches`).
+- `scene` lets you configure prop counts per mount/site (`benches`, `trees`, `lamps`, `birds`).
 - `style` lets you override TownSquare CSS tokens without forking widget styles.
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
@@ -143,7 +143,7 @@ mountTownSquare(document.getElementById("townsquare-root"), {
     benches: 1,
     trees: 2,
     lamps: 1,
-    branches: 4,
+    birds: 3,
   },
   style: {
     scene: "#e6dfd3",

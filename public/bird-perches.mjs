@@ -1,7 +1,7 @@
 /**
  * Bird perch definitions shared by the server and widget.
  *
- * Positions are derived from scene props so bench/tree/branch changes stay
+ * Positions are derived from scene props so bench/tree changes stay
  * single-sourced.
  */
 
