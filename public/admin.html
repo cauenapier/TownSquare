@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>TownSquare admin</title>
     <link rel="stylesheet" href="/widget.css" />
     <link rel="stylesheet" href="/page.css" />
@@ -61,24 +61,44 @@
               <div class="hosted-section-head">
                 <h2 id="scene-config-title">Scene props</h2>
               </div>
-              <div class="hosted-grid hosted-grid--compact">
-                <label>
-                  <span>Benches</span>
-                  <input id="scene-benches" name="scene-benches" type="number" min="0" max="6" step="1" value="2" />
-                </label>
-                <label>
-                  <span>Trees</span>
-                  <input id="scene-trees" name="scene-trees" type="number" min="0" max="6" step="1" value="1" />
-                </label>
-                <label>
-                  <span>Lamps</span>
-                  <input id="scene-lamps" name="scene-lamps" type="number" min="0" max="4" step="1" value="1" />
-                </label>
-                <label>
-                  <span>Branches</span>
-                  <input id="scene-branches" name="scene-branches" type="number" min="0" max="8" step="1" value="0" />
-                </label>
-              </div>
+              <p class="scene-counts">
+                <span class="scene-counts__lead">This square has</span>
+                <span class="scene-counts__run">
+                  <span class="scene-counts__chunk">
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-benches" name="scene-benches" type="number" min="0" max="6" step="1" value="2" inputmode="numeric" aria-label="Benches" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="bench" data-plural="benches">benches</span>
+                    </span><span class="scene-counts__sep">,</span>
+                  </span>
+                  <span class="scene-counts__chunk">
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-trees" name="scene-trees" type="number" min="0" max="6" step="1" value="1" inputmode="numeric" aria-label="Trees" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="tree" data-plural="trees">tree</span>
+                    </span><span class="scene-counts__sep">,</span>
+                  </span>
+                  <span class="scene-counts__chunk">
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-lamps" name="scene-lamps" type="number" min="0" max="4" step="1" value="1" inputmode="numeric" aria-label="Lamps" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="lamp" data-plural="lamps">lamp</span>
+                    </span><span class="scene-counts__sep">,</span>
+                  </span>
+                  <span class="scene-counts__chunk scene-counts__chunk--last">
+                    <span class="scene-counts__and">and</span>
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-branches" name="scene-branches" type="number" min="0" max="8" step="1" value="0" inputmode="numeric" aria-label="Branches" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="branch" data-plural="branches">branches</span>
+                    </span><span class="scene-counts__end">.</span>
+                  </span>
+                </span>
+              </p>
               <div class="hosted-position-groups" id="scene-position-fields"></div>
             </section>
 
@@ -89,23 +109,43 @@
               <div class="hosted-grid hosted-grid--compact">
                 <label>
                   <span>Background</span>
-                  <input id="style-scene" name="style-scene" type="color" value="#e4e2dd" />
+                  <div class="hosted-color-control">
+                    <input id="style-scene" type="color" value="#e4e2dd" data-style-picker="style-scene" />
+                    <input type="hidden" name="style-scene" value="#e4e2dd" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-scene" aria-pressed="false">None</button>
+                  </div>
                 </label>
                 <label>
                   <span>Ground</span>
-                  <input id="style-page" name="style-page" type="color" value="#efede9" />
+                  <div class="hosted-color-control">
+                    <input id="style-page" type="color" value="#efede9" data-style-picker="style-page" />
+                    <input type="hidden" name="style-page" value="#efede9" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-page" aria-pressed="false">None</button>
+                  </div>
                 </label>
                 <label>
                   <span>Buttons and Tags</span>
-                  <input id="style-surface" name="style-surface" type="color" value="#fdf8f4" />
+                  <div class="hosted-color-control">
+                    <input id="style-surface" type="color" value="#fdf8f4" data-style-picker="style-surface" />
+                    <input type="hidden" name="style-surface" value="#fdf8f4" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-surface" aria-pressed="false">None</button>
+                  </div>
                 </label>
                 <label>
                   <span>Ink</span>
-                  <input id="style-ink" name="style-ink" type="color" value="#2a2926" />
+                  <div class="hosted-color-control">
+                    <input id="style-ink" type="color" value="#2a2926" data-style-picker="style-ink" />
+                    <input type="hidden" name="style-ink" value="#2a2926" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-ink" aria-pressed="false">None</button>
+                  </div>
                 </label>
                 <label>
                   <span>Accent</span>
-                  <input id="style-accent" name="style-accent" type="color" value="#c8641f" />
+                  <div class="hosted-color-control">
+                    <input id="style-accent" type="color" value="#c8641f" data-style-picker="style-accent" />
+                    <input type="hidden" name="style-accent" value="#c8641f" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-accent" aria-pressed="false">None</button>
+                  </div>
                 </label>
               </div>
             </section>
@@ -117,7 +157,7 @@
             <p class="hosted-status" id="customization-status" role="status" hidden></p>
           </form>
 
-          <section class="hosted-section" aria-labelledby="preview-title">
+          <section class="hosted-section hosted-preview-dock" aria-labelledby="preview-title">
             <div class="hosted-section-head">
               <h2 id="preview-title">Preview</h2>
             </div>

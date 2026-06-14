@@ -9,6 +9,7 @@
  */
 
 const SAFE_COLOR_RE = /^[#(),.%\sA-Za-z0-9-]+$/;
+export const STYLE_TRANSPARENT = "transparent";
 const POSITION_INPUT_MIN = 0;
 const POSITION_INPUT_MAX = 100;
 const POSITION_INPUT_STEP = 1;
@@ -289,11 +290,19 @@ export function sanitizeSceneConfig(input = {}) {
   return next;
 }
 
+export function isTransparentStyleValue(value) {
+  return typeof value === "string" && value.trim().toLowerCase() === STYLE_TRANSPARENT;
+}
+
 export function sanitizeSiteStyle(input = {}) {
   const base = isPlainObject(input) ? input : {};
   const next = {};
   for (const { key, defaultValue } of STYLE_FIELDS) {
     const value = typeof base[key] === "string" ? base[key].trim() : "";
+    if (isTransparentStyleValue(value)) {
+      next[key] = STYLE_TRANSPARENT;
+      continue;
+    }
     next[key] = value && value.length <= 64 && SAFE_COLOR_RE.test(value) ? value : defaultValue;
   }
   return next;
@@ -325,7 +334,13 @@ export function readSceneConfigFromForm(form) {
 export function readStyleConfigFromForm(form) {
   const formData = new FormData(form);
   return Object.fromEntries(
-    STYLE_FIELDS.map((field) => [field.key, String(formData.get(field.inputName) || "").trim()]),
+    STYLE_FIELDS.map((field) => {
+      const hiddenInput = form.querySelector(`input[type="hidden"][name="${field.inputName}"]`);
+      const raw = hiddenInput instanceof HTMLInputElement
+        ? hiddenInput.value
+        : formData.get(field.inputName);
+      return [field.key, String(raw || "").trim()];
+    }),
   );
 }
 
@@ -346,10 +361,137 @@ export function applyConfigToForm(form, config = {}) {
   }
 
   for (const field of STYLE_FIELDS) {
-    const input = form.elements.namedItem(field.inputName);
+    const input = form.querySelector(`input[type="hidden"][name="${field.inputName}"]`)
+      ?? form.elements.namedItem(field.inputName);
     if (input && "value" in input) {
       input.value = String(config[field.key] ?? field.defaultValue);
     }
+  }
+
+  syncStyleColorFields(form);
+  syncSceneCountProse(form);
+}
+
+export function getSceneCountNoun(field, count) {
+  const n = Number(count);
+  const singular = field.itemLabel.toLowerCase();
+  const plural = field.label.toLowerCase();
+  return n === 1 ? singular : plural;
+}
+
+export function syncSceneCountProse(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+
+  for (const field of SCENE_FIELDS) {
+    const input = form.elements.namedItem(field.inputName);
+    if (!(input instanceof HTMLInputElement)) continue;
+
+    const noun = input.closest(".scene-count")?.querySelector(".scene-count__noun");
+    if (!(noun instanceof HTMLElement)) continue;
+
+    const singular = noun.dataset.singular || field.itemLabel.toLowerCase();
+    const plural = noun.dataset.plural || field.label.toLowerCase();
+    const count = Number(input.value);
+    noun.textContent = count === 1 ? singular : plural;
+  }
+}
+
+export function bindSceneCountProse(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+
+  const prose = form.querySelector(".scene-counts");
+  if (!(prose instanceof HTMLElement)) return;
+  if (prose.dataset.sceneCountBound === "true") return;
+  prose.dataset.sceneCountBound = "true";
+
+  const sync = () => syncSceneCountProse(form);
+  for (const field of SCENE_FIELDS) {
+    const input = form.elements.namedItem(field.inputName);
+    if (input instanceof HTMLInputElement) {
+      input.addEventListener("input", sync);
+    }
+  }
+  sync();
+}
+
+export function bindStyleColorFields(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+
+  for (const field of STYLE_FIELDS) {
+    const valueInput = form.querySelector(`input[type="hidden"][name="${field.inputName}"]`);
+    if (!(valueInput instanceof HTMLInputElement)) continue;
+
+    const control = valueInput.closest(".hosted-color-control");
+    if (!(control instanceof HTMLElement)) continue;
+
+    if (control.dataset.styleColorBound === "true") continue;
+    control.dataset.styleColorBound = "true";
+
+    const picker = control.querySelector("[data-style-picker]");
+    const clearButton = control.querySelector("[data-style-clear]");
+
+    const syncFromValue = () => {
+      const transparent = isTransparentStyleValue(valueInput.value);
+      if (picker instanceof HTMLInputElement) {
+        picker.disabled = transparent;
+        if (!transparent && /^#[0-9a-f]{6}$/i.test(valueInput.value)) {
+          picker.value = valueInput.value;
+        }
+      }
+      if (clearButton instanceof HTMLButtonElement) {
+        clearButton.setAttribute("aria-pressed", transparent ? "true" : "false");
+      }
+      control.classList.toggle("hosted-color-control--transparent", transparent);
+    };
+
+    if (picker instanceof HTMLInputElement) {
+      picker.addEventListener("input", () => {
+        valueInput.value = picker.value;
+        syncFromValue();
+        valueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    if (clearButton instanceof HTMLButtonElement) {
+      clearButton.addEventListener("click", () => {
+        const makeTransparent = !isTransparentStyleValue(valueInput.value);
+        valueInput.value = makeTransparent ? STYLE_TRANSPARENT : field.defaultValue;
+        if (!makeTransparent && picker instanceof HTMLInputElement) {
+          picker.value = field.defaultValue;
+        }
+        syncFromValue();
+        valueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    syncFromValue();
+  }
+}
+
+export function syncStyleColorFields(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+
+  for (const field of STYLE_FIELDS) {
+    const valueInput = form.querySelector(`input[type="hidden"][name="${field.inputName}"]`);
+    if (!(valueInput instanceof HTMLInputElement)) continue;
+
+    const control = valueInput.closest(".hosted-color-control");
+    if (!(control instanceof HTMLElement)) continue;
+
+    const picker = control.querySelector("[data-style-picker]");
+    const clearButton = control.querySelector("[data-style-clear]");
+    const transparent = isTransparentStyleValue(valueInput.value);
+
+    if (picker instanceof HTMLInputElement) {
+      picker.disabled = transparent;
+      if (!transparent && /^#[0-9a-f]{6}$/i.test(valueInput.value)) {
+        picker.value = valueInput.value;
+      }
+    }
+    if (clearButton instanceof HTMLButtonElement) {
+      clearButton.setAttribute("aria-pressed", transparent ? "true" : "false");
+    }
+    control.classList.toggle("hosted-color-control--transparent", transparent);
   }
 }
 
@@ -358,10 +500,11 @@ export function getScenePositionGroups(sceneConfig = {}) {
   return SCENE_FIELDS.map((field) => ({
     key: field.key,
     label: `${field.label} placement`,
-    helper: `Each X value is a percentage from left (0) to right (100).`,
+    helper: `Each bracketed value is a percentage from left (0) to right (100).`,
     items: scene[field.positionsKey].map((x, index) => ({
       key: `${field.kind}-${index + 1}`,
-      label: `${field.itemLabel} ${index + 1} X`,
+      label: `${field.itemLabel} ${index + 1} position`,
+      displayLabel: `${field.itemLabel} ${index + 1}`.toLowerCase(),
       inputName: getScenePositionInputName(field.key, index),
       min: POSITION_INPUT_MIN,
       max: POSITION_INPUT_MAX,
@@ -369,6 +512,106 @@ export function getScenePositionGroups(sceneConfig = {}) {
       value: roundPercent(x * 100),
     })),
   })).filter((group) => group.items.length > 0);
+}
+
+function appendInlineNumberField(parent, item) {
+  const open = document.createElement("span");
+  open.className = "scene-inline__slot";
+  open.setAttribute("aria-hidden", "true");
+  open.textContent = "[";
+
+  const input = document.createElement("input");
+  input.name = item.inputName;
+  input.type = "number";
+  input.min = String(item.min);
+  input.max = String(item.max);
+  input.step = String(item.step);
+  input.value = String(item.value);
+  input.inputMode = "numeric";
+  input.setAttribute("aria-label", `${item.label} position`);
+
+  const close = document.createElement("span");
+  close.className = "scene-inline__slot";
+  close.setAttribute("aria-hidden", "true");
+  close.textContent = "]";
+
+  parent.append(open, input, close);
+}
+
+export function renderScenePositionFields(container, sceneConfig = {}) {
+  if (!(container instanceof HTMLElement)) return;
+  const groups = getScenePositionGroups(sceneConfig);
+  container.replaceChildren();
+
+  if (groups.length === 0) {
+    const note = document.createElement("p");
+    note.className = "hosted-note";
+    note.textContent = "Add at least one prop above to place it manually.";
+    container.appendChild(note);
+    return;
+  }
+
+  const hint = document.createElement("p");
+  hint.className = "hosted-note hosted-position-hint";
+  hint.textContent = groups[0].helper;
+  container.appendChild(hint);
+
+  for (const group of groups) {
+    const prose = document.createElement("p");
+    prose.className = "scene-placements";
+
+    const run = document.createElement("span");
+    run.className = "scene-placements__run";
+
+    group.items.forEach((item, index) => {
+      const isLast = index === group.items.length - 1;
+
+      if (isLast && group.items.length > 1) {
+        const and = document.createElement("span");
+        and.className = "scene-placements__and";
+        and.textContent = "and";
+        run.appendChild(and);
+      }
+
+      const chunk = document.createElement("span");
+      chunk.className = `scene-placements__chunk${isLast ? " scene-placements__chunk--last" : ""}`;
+
+      const label = document.createElement("span");
+      label.className = "scene-placement__label";
+      label.textContent = item.displayLabel;
+
+      const at = document.createElement("span");
+      at.className = "scene-placement__at";
+      at.textContent = " at ";
+
+      const placement = document.createElement("span");
+      placement.className = "scene-placement";
+      appendInlineNumberField(placement, item);
+
+      const unit = document.createElement("span");
+      unit.className = "scene-placement__unit";
+      unit.setAttribute("aria-hidden", "true");
+      unit.textContent = "%";
+
+      chunk.append(label, at, placement, unit);
+      run.appendChild(chunk);
+
+      if (!isLast) {
+        const sep = document.createElement("span");
+        sep.className = "scene-placements__sep";
+        sep.textContent = ",";
+        run.appendChild(sep);
+      } else {
+        const end = document.createElement("span");
+        end.className = "scene-placements__end";
+        end.textContent = ".";
+        run.appendChild(end);
+      }
+    });
+
+    prose.appendChild(run);
+    container.appendChild(prose);
+  }
 }
 
 export function getSceneSummaryEntries(sceneConfig = {}) {

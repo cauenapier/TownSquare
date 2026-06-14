@@ -7,11 +7,13 @@ import {
 } from "./hosted-common.mjs";
 import {
   applyConfigToForm,
-  getScenePositionGroups,
+  bindSceneCountProse,
+  bindStyleColorFields,
   getSceneSummaryEntries,
   isSceneCountInputName,
   readSceneConfigFromForm,
   readStyleConfigFromForm,
+  renderScenePositionFields,
   sanitizeSceneConfig,
   sanitizeSiteStyle,
 } from "./site-config.mjs";
@@ -41,6 +43,9 @@ const chatDisabledInput = document.getElementById("chat-disabled");
 const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
 const visitorList = document.getElementById("visitor-list");
+
+bindStyleColorFields(customizationForm);
+bindSceneCountProse(customizationForm);
 
 const STORAGE_KEY = "townsquare-admin-session";
 const REFRESH_INTERVAL_MS = 5000;
@@ -150,64 +155,9 @@ function renderSceneSummary(sceneConfig = {}) {
   renderKeyValueList(sceneSummaryEl, getSceneSummaryEntries(sceneConfig));
 }
 
-function renderScenePositionInputs(sceneConfig) {
-  if (!(scenePositionFields instanceof HTMLElement)) return;
-  const groups = getScenePositionGroups(sceneConfig);
-  scenePositionFields.replaceChildren();
-
-  if (groups.length === 0) {
-    const note = document.createElement("p");
-    note.className = "hosted-note";
-    note.textContent = "Add at least one prop above to place it manually.";
-    scenePositionFields.appendChild(note);
-    return;
-  }
-
-  for (const group of groups) {
-    const section = document.createElement("section");
-    section.className = "hosted-position-group";
-
-    const heading = document.createElement("div");
-    heading.className = "hosted-position-group-head";
-
-    const title = document.createElement("strong");
-    title.textContent = group.label;
-
-    const helper = document.createElement("p");
-    helper.className = "hosted-note";
-    helper.textContent = group.helper;
-
-    heading.append(title, helper);
-
-    const grid = document.createElement("div");
-    grid.className = "hosted-grid hosted-grid--compact";
-
-    for (const item of group.items) {
-      const label = document.createElement("label");
-      const text = document.createElement("span");
-      const input = document.createElement("input");
-
-      text.textContent = item.label;
-      input.name = item.inputName;
-      input.type = "number";
-      input.min = String(item.min);
-      input.max = String(item.max);
-      input.step = String(item.step);
-      input.value = String(item.value);
-      input.inputMode = "numeric";
-
-      label.append(text, input);
-      grid.appendChild(label);
-    }
-
-    section.append(heading, grid);
-    scenePositionFields.appendChild(section);
-  }
-}
-
 function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(customizationForm)) {
   const next = sanitizeSceneConfig(sceneConfig);
-  renderScenePositionInputs(next);
+  renderScenePositionFields(scenePositionFields, next);
   applyConfigToForm(customizationForm, next);
 }
 
