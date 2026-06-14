@@ -14,6 +14,7 @@ import {
   setStatusMessage,
   updateStatus,
 } from "./presence.mjs";
+import { getBrowserSecret, saveBrowserSecret } from "./utils.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -71,6 +72,7 @@ export function wireSocket(ctx) {
       socket.send(JSON.stringify({
         type: "init",
         browserId,
+        browserSecret: getBrowserSecret(),
         x: self.x,
         displayName: self.displayName,
         color: self.color,
@@ -100,6 +102,7 @@ export function wireSocket(ctx) {
 
       if (message.type === "hello") {
         self.id = message.id;
+        saveBrowserSecret(message.browserSecret);
         applySelfState(ctx, message);
         // Backlog seeds the hover tray only — it never pops a live bubble, so a
         // refresh doesn't replay everyone's last messages into the scene.

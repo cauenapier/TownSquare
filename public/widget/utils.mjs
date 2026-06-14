@@ -4,6 +4,7 @@
 
 import {
   BROWSER_ID_KEY,
+  BROWSER_SECRET_KEY,
   CHARACTER_COLORS,
   DEFAULT_CHARACTER_COLOR,
   DISPLAY_NAME_MAX,
@@ -31,6 +32,31 @@ export function getBrowserId() {
     return nextId;
   } catch {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+/**
+ * Server-issued secret that proves ownership of a browserId identity.
+ *
+ * @returns {string}
+ */
+export function getBrowserSecret() {
+  try {
+    return localStorage.getItem(BROWSER_SECRET_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * @param {string} browserSecret
+ */
+export function saveBrowserSecret(browserSecret) {
+  if (typeof browserSecret !== "string" || !browserSecret) return;
+  try {
+    localStorage.setItem(BROWSER_SECRET_KEY, browserSecret);
+  } catch {
+    // Reconnect will mint a fresh ephemeral identity if storage is unavailable.
   }
 }
 

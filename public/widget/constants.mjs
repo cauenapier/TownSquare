@@ -19,6 +19,7 @@ export {
 
 export const BUBBLE_TTL_MS = 6000;
 export const BROWSER_ID_KEY = "townsquare-browser-id";
+export const BROWSER_SECRET_KEY = "townsquare-browser-secret";
 export const PROFILE_STORAGE_KEY = "townsquare-profile";
 export const PROP_SETTLE_MS = 700;
 /** Most bubbles kept visible in a figure's ghost stack (live + lingering ghosts). */

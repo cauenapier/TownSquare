@@ -16,13 +16,14 @@ function siteSocketUrl(siteKey) {
   return url.toString();
 }
 
-function connect({ x, browserId, siteKey = "", origin = "", displayName = "", color = "", readingLabel, readingUrl, readingActive }) {
+function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", displayName = "", color = "", readingLabel, readingUrl, readingActive }) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(siteSocketUrl(siteKey), origin ? { headers: { Origin: origin } } : undefined);
     const seen = [];
 
     ws.on("open", () => {
       const init = { type: "init", x, browserId, displayName, color };
+      if (browserSecret) init.browserSecret = browserSecret;
       if (typeof readingLabel === "string") init.readingLabel = readingLabel;
       if (typeof readingUrl === "string") init.readingUrl = readingUrl;
       if (typeof readingActive === "boolean") init.readingActive = readingActive;
@@ -189,6 +190,10 @@ async function assertServiceAdminShowsActiveVisitors(hostedA, hostedB) {
     siteAdminA.scene.visitors[0]?.displayName === "Named Visitor",
     "site admin active visitor did not include display name",
   );
+  assert(
+    !Object.hasOwn(siteAdminA.scene.visitors[0] || {}, "browserId"),
+    "site admin visitor payload leaked browserId",
+  );
 
   const listed = await serviceAdminApi("/api/service-admin/sites");
   const listedA = listed.sites.find((site) => site.siteKey === hostedA.site.siteKey);
@@ -208,6 +213,16 @@ async function assertEmbeddableAssetsAreCrossOriginLoadable() {
 
 async function delay(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(check, message, { timeout = 2500, interval = 25 } = {}) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeout) {
+    const value = check();
+    if (value) return value;
+    await delay(interval);
+  }
+  throw new Error(message);
 }
 
 function assert(condition, message) {
@@ -291,7 +306,11 @@ async function main() {
     readingLabel: "  Launch    notes  ",
     readingUrl: `${HTTP_ORIGIN}/notes/launch`,
   });
-  const secondSameBrowser = await connect({ x: 0.75, browserId: "browser-a" });
+  const secondSameBrowser = await connect({
+    x: 0.75,
+    browserId: "browser-a",
+    browserSecret: first.hello.browserSecret,
+  });
 
   await delay(100);
 
@@ -301,6 +320,7 @@ async function main() {
   assert(first.hello.readingLabel === "Launch notes", "reading label was not normalized on init");
   assert(first.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "reading URL was not accepted on init");
   assert(first.hello.readingActive === true, "reading should default to active on init");
+  assert(typeof first.hello.browserSecret === "string" && first.hello.browserSecret.length > 0, "hello did not include browser secret");
   assert(secondSameBrowser.hello.displayName === "Ada Lovelace", "same-browser tab did not inherit display name");
   assert(secondSameBrowser.hello.color === "#3f7f63", "same-browser tab did not inherit character color");
   assert(secondSameBrowser.hello.readingLabel === "Launch notes", "same-browser tab did not inherit reading label");
@@ -319,12 +339,22 @@ async function main() {
   assert(third.hello.peers[0].readingLabel === "Launch notes", "peer snapshot did not include reading label");
   assert(third.hello.peers[0].readingUrl === `${HTTP_ORIGIN}/notes/launch`, "peer snapshot did not include reading URL");
   assert(third.hello.peers[0].readingActive === true, "peer snapshot did not include active reading state");
+  assert(!Object.hasOwn(third.hello.peers[0], "browserId"), "peer snapshot leaked browserId");
   assert(first.seen.some((message) => message.type === "join" && message.peer.id === third.id), "first client did not observe different-browser join");
+  const joinBroadcast = first.seen.find((message) => message.type === "join" && message.peer?.id === third.id);
+  assert(joinBroadcast && !Object.hasOwn(joinBroadcast.peer, "browserId"), "join broadcast leaked browserId");
 
-  await delay(800);
+  const impersonator = await connect({ x: 0.8, browserId: "browser-a" });
+  assert(impersonator.id !== first.id, "stolen browserId reused victim visitor id");
+  assert(impersonator.hello.displayName !== "Ada Lovelace", "stolen browserId hijacked victim profile");
 
-  const birdSpawn = findLast(first.seen, (message) => message.type === "bird" && message.action === "spawn");
-  assert(birdSpawn, "ambient bird did not spawn after visitors joined");
+  const birdSpawn = await waitFor(
+    () => findLast(first.seen, (message) => message.type === "bird" && message.action === "spawn")
+      || first.hello.birds?.[0]
+      || third.hello.birds?.[0],
+    "ambient bird was never available in the scene",
+    { timeout: 4000 },
+  );
   assert(typeof birdSpawn.x === "number", "bird spawn did not include x");
 
   const birdJoiner = await connect({ x: 0.4, browserId: "browser-bird-sync" });
