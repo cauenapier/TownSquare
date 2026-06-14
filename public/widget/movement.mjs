@@ -164,7 +164,11 @@ export function tick(ctx, now) {
     maybeRequestPropSettle(ctx, now);
   }
 
-  layoutBubbleColumns(ctx.stage, [ctx.self, ...ctx.peers.values()], ctx.self.x);
+  layoutBubbleColumns(
+    ctx.stage,
+    ctx.options.solo === true ? [ctx.self] : [ctx.self, ...ctx.peers.values()],
+    ctx.self.x,
+  );
 
   ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
 }

@@ -97,7 +97,7 @@ function mountPreview() {
     serverOrigin: window.location.origin,
     scene,
     style,
-    preview: true,
+    solo: true,
     readingLabel: "Registration preview",
     readingUrl: window.location.href,
   });

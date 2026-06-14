@@ -61,6 +61,7 @@ import {
  * @property {string} [readingUrl] Explicit page URL. Defaults to the current browser URL.
  * @property {"auto" | "light" | "dark"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; use `dark` when the host page has a manual dark toggle.
  * @property {boolean} [preview=false] Static registration-style preview: fixed spawn position, no live socket, and in-place scene/style updates via the mount handle.
+ * @property {boolean} [solo=false] Live socket, but hide other visitors. Useful for registration/admin previews on shared default scenes.
  */
 
 /**
@@ -121,7 +122,8 @@ export function mountTownSquare(root, options = {}) {
   const { readingLabel, readingUrl } = readCurrentPage(root, options);
   const readingActive = document.visibilityState === "visible" && document.hasFocus();
   const preview = options.preview === true;
-  const spawnX = preview ? PREVIEW_SPAWN_X : randomSpawnX();
+  const solo = options.solo === true;
+  const spawnX = preview || solo ? PREVIEW_SPAWN_X : randomSpawnX();
   const peers = new Map();
   const coarsePointer = typeof window.matchMedia === "function"
     && window.matchMedia("(pointer: coarse)").matches;
@@ -299,6 +301,10 @@ export function mountTownSquare(root, options = {}) {
         const sceneConfig = sanitizeSceneConfig(scene);
         ctx.options = { ...ctx.options, scene: sceneConfig };
         refreshScene(ctx, sceneConfig);
+        const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
+        if (!preview && !siteKey && ctx.socket.readyState === WebSocket.OPEN) {
+          ctx.socket.send(JSON.stringify({ type: "sceneConfig", sceneConfig }));
+        }
       }
       if (style) {
         const styleConfig = sanitizeSiteStyle(style);

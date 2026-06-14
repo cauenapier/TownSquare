@@ -194,6 +194,7 @@ const MESSAGE_HANDLERS = {
   move: handleMove,
   profile: handleProfile,
   reading: handleReading,
+  sceneConfig: handleSceneConfig,
   settle: handleSettle,
   say: handleSay,
 };
@@ -1525,6 +1526,11 @@ function handleReading(client, message) {
     readingUrl,
     readingActive: client.identity.readingActive,
   });
+}
+
+function handleSceneConfig(client, message) {
+  if (client.site) return;
+  syncClientSceneProps(client, message);
 }
 
 function handleSettle(client, message) {
