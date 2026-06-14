@@ -162,14 +162,18 @@ function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(customiza
 }
 
 function renderSiteMeta(site, scene) {
-  renderDefinitionList(metaEl, [
+  const entries = [
     { label: "Site", value: site.name },
     { label: "Origin", value: site.origin },
+  ];
+  if (site.email) entries.push({ label: "Email", value: site.email });
+  entries.push(
     { label: "Status", value: site.disabled ? "Disabled" : "Enabled" },
     { label: "Verified", value: formatTime(site.verifiedAt) },
     { label: "Active visitors", value: scene.activeVisitors },
     { label: "Blocked", value: site.blockedCount },
-  ]);
+  );
+  renderDefinitionList(metaEl, entries);
 }
 
 function createVisitorRow(visitor) {

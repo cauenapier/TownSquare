@@ -84,6 +84,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         origin: formData.get("origin"),
         name: formData.get("name"),
+        email: formData.get("email"),
         sceneConfig: readSceneConfigFromForm(form),
         styleConfig: readStyleConfigFromForm(form),
       }),

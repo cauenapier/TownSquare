@@ -45,7 +45,9 @@ const MAX_BROWSER_ID_LEN = 80;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
 const MAX_READING_URL_LEN = 240;
 const MAX_SITE_NAME_LEN = 80;
+const MAX_EMAIL_LEN = 254;
 const MAX_ORIGIN_LEN = 240;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
@@ -303,6 +305,13 @@ function sanitizeSiteName(name, origin) {
   } catch {
     return "Untitled site";
   }
+}
+
+function parseOptionalEmail(email) {
+  const clean = typeof email === "string" ? email.trim().slice(0, MAX_EMAIL_LEN) : "";
+  if (!clean) return { ok: true, email: null };
+  if (!EMAIL_RE.test(clean)) return { ok: false, email: null };
+  return { ok: true, email: clean };
 }
 
 function createToken(prefix, bytes = 18) {
@@ -589,9 +598,16 @@ function handleRegisterSite(req, res) {
       return;
     }
 
+    const parsedEmail = parseOptionalEmail(body.email);
+    if (!parsedEmail.ok) {
+      sendJson(res, 400, { error: "Enter a valid email address, or leave the field empty." });
+      return;
+    }
+
     const { site, adminToken } = createSiteRecord({
       name: body.name,
       origin,
+      email: parsedEmail.email,
       sceneConfig: body.sceneConfig,
       styleConfig: body.styleConfig,
     });
@@ -1131,7 +1147,7 @@ function createScene(key, site = null) {
   };
 }
 
-function createSiteRecord({ name, origin, sceneConfig, styleConfig }) {
+function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -1141,6 +1157,7 @@ function createSiteRecord({ name, origin, sceneConfig, styleConfig }) {
       adminTokenHash: hashAdminToken(adminToken),
       name: sanitizeSiteName(name, origin),
       origin,
+      email: email || null,
       sceneConfig: sanitizeSceneConfig(sceneConfig),
       styleConfig: sanitizeSiteStyle(styleConfig),
       disabled: false,
@@ -1201,6 +1218,7 @@ function publicSite(site) {
     siteKey: site.siteKey,
     name: site.name,
     origin: site.origin,
+    email: site.email || null,
     sceneConfig: getSceneConfig(site),
     styleConfig: getStyleConfig(site),
     disabled: site.disabled,
