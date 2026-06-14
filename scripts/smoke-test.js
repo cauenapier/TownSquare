@@ -381,12 +381,12 @@ async function main() {
   assert(first.id === secondSameBrowser.id, "same-browser tabs did not reuse one shared identity");
   assert(first.hello.displayName === "Ada Lovelace", "display name was not normalized on init");
   assert(first.hello.color === "#3f7f63", "character color was not accepted on init");
-  assert(first.hello.readingLabel === "Launch notes", "reading label was not normalized on init");
+  assert(first.hello.readingLabel === "launch", "reading label was not derived from the URL on init");
   assert(first.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "reading URL was not accepted on init");
   assert(first.hello.readingActive === true, "reading should default to active on init");
   assert(secondSameBrowser.hello.displayName === "Ada Lovelace", "same-browser tab did not inherit display name");
   assert(secondSameBrowser.hello.color === "#3f7f63", "same-browser tab did not inherit character color");
-  assert(secondSameBrowser.hello.readingLabel === "Launch notes", "same-browser tab did not inherit reading label");
+  assert(secondSameBrowser.hello.readingLabel === "launch", "same-browser tab did not inherit reading label");
   assert(secondSameBrowser.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "same-browser tab did not inherit reading URL");
   assert(secondSameBrowser.hello.readingActive === true, "same-browser tab did not inherit active reading state");
   assert(secondSameBrowser.hello.peers.length === 0, "same-browser tab should not see itself as a peer");
@@ -399,7 +399,7 @@ async function main() {
   assert(third.hello.peers.length === 1, "third client should see one existing visitor, not one per tab");
   assert(third.hello.peers[0].displayName === "Ada Lovelace", "peer snapshot did not include display name");
   assert(third.hello.peers[0].color === "#3f7f63", "peer snapshot did not include character color");
-  assert(third.hello.peers[0].readingLabel === "Launch notes", "peer snapshot did not include reading label");
+  assert(third.hello.peers[0].readingLabel === "launch", "peer snapshot did not include reading label");
   assert(third.hello.peers[0].readingUrl === `${HTTP_ORIGIN}/notes/launch`, "peer snapshot did not include reading URL");
   assert(third.hello.peers[0].readingActive === true, "peer snapshot did not include active reading state");
   assert(first.seen.some((message) => message.type === "join" && message.peer.id === third.id), "first client did not observe different-browser join");
@@ -446,7 +446,7 @@ async function main() {
     () => first.seen.some((message) => (
       message.type === "reading"
       && message.id === first.id
-      && message.readingLabel === "API reference"
+      && message.readingLabel === "api"
       && message.readingUrl === `${HTTP_ORIGIN}/docs/api`
     )),
     "reading update did not propagate to same-browser sibling",
@@ -455,10 +455,15 @@ async function main() {
     () => third.seen.some((message) => (
       message.type === "reading"
       && message.id === first.id
-      && message.readingLabel === "API reference"
+      && message.readingLabel === "api"
       && message.readingUrl === `${HTTP_ORIGIN}/docs/api`
     )),
     "reading update did not propagate to other visitors",
+  );
+
+  assert(
+    !third.seen.some((message) => message.type === "reading" && message.readingLabel === "API reference"),
+    "server accepted a client-controlled reading label",
   );
 
   secondSameBrowser.ws.send(JSON.stringify({
@@ -664,6 +669,8 @@ async function main() {
     siteKey: hostedA.site.siteKey,
     origin: HTTP_ORIGIN,
     displayName: "Named Visitor",
+    readingLabel: "visiting your mom",
+    readingUrl: `${HTTP_ORIGIN}/docs/real-page`,
   });
   const siteBVisitor = await connect({
     x: 0.7,
@@ -675,7 +682,24 @@ async function main() {
   await delay(100);
 
   assert(siteAVisitor.hello.peers.length === 0, "hosted site A saw visitors from another site");
+  assert(siteAVisitor.hello.readingLabel === "real page", "hosted site accepted a custom reading label");
+  assert(siteAVisitor.hello.readingUrl === `${HTTP_ORIGIN}/docs/real-page`, "hosted site did not keep a same-origin reading URL");
   assert(siteBVisitor.hello.peers.length === 0, "hosted site B saw visitors from another site");
+
+  siteAVisitor.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "visiting your mom",
+    readingUrl: "https://attacker.example/status",
+  }));
+  await waitFor(
+    () => siteAVisitor.seen.some((message) => (
+      message.type === "reading"
+      && message.id === siteAVisitor.id
+      && message.readingLabel === ""
+      && message.readingUrl === ""
+    )),
+    "hosted site did not reject an off-site reading URL",
+  );
   await assertServiceAdminShowsActiveVisitors(hostedA, hostedB);
 
   siteAVisitor.ws.close();

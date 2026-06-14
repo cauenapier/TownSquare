@@ -207,13 +207,14 @@ const MESSAGE_HANDLERS = {
   say: handleSay,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
-function createClient(connectionId, ws, scene, site) {
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+function createClient(connectionId, ws, scene, site, origin = "") {
   return {
     connectionId,
     ws,
     scene,
     site,
+    origin,
     propsById: scene.propsById,
     identity: null,
     joined: false,
@@ -296,6 +297,49 @@ function sanitizeReadingUrl(readingUrl) {
   } catch {
     return "";
   }
+}
+
+function parseReadingUrl(readingUrl) {
+  const sanitized = sanitizeReadingUrl(readingUrl);
+  if (!sanitized) return null;
+  try {
+    return new URL(sanitized);
+  } catch {
+    return null;
+  }
+}
+
+function labelFromReadingUrl(url) {
+  const segment = url.pathname.split("/").filter(Boolean).pop() || "";
+  if (!segment) return sanitizeReadingLabel(url.hostname.replace(/^www\./, ""));
+
+  try {
+    return sanitizeReadingLabel(decodeURIComponent(segment)
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/[-_]+/g, " "));
+  } catch {
+    return sanitizeReadingLabel(segment.replace(/[-_]+/g, " "));
+  }
+}
+
+function readingUrlAllowedForClient(client, url) {
+  const urlOrigin = normalizeOrigin(url.origin);
+  if (!urlOrigin) return false;
+  if (client.site) return urlOrigin === client.site.origin;
+  return !client.origin || urlOrigin === client.origin;
+}
+
+function sanitizeReadingState(client, message, fallback = {}) {
+  const hasReadingUrl = Object.hasOwn(message, "readingUrl");
+  const readingUrl = hasReadingUrl ? parseReadingUrl(message.readingUrl) : parseReadingUrl(fallback.readingUrl || "");
+  if (!readingUrl || !readingUrlAllowedForClient(client, readingUrl)) {
+    return { readingLabel: "", readingUrl: "" };
+  }
+
+  return {
+    readingLabel: labelFromReadingUrl(readingUrl),
+    readingUrl: readingUrl.href,
+  };
 }
 
 function sanitizeCharacterColor(color) {
@@ -1412,11 +1456,10 @@ function handleInit(client, message) {
   const previousReadingLabel = identity.readingLabel;
   const previousReadingUrl = identity.readingUrl;
   const previousReadingActive = identity.readingActive;
-  if (Object.hasOwn(message, "readingLabel")) {
-    identity.readingLabel = sanitizeReadingLabel(message.readingLabel);
-  }
   if (Object.hasOwn(message, "readingUrl")) {
-    identity.readingUrl = sanitizeReadingUrl(message.readingUrl);
+    const reading = sanitizeReadingState(client, message);
+    identity.readingLabel = reading.readingLabel;
+    identity.readingUrl = reading.readingUrl;
   }
   client.readingActive = message.readingActive !== false;
 
@@ -1541,8 +1584,8 @@ function handleProfile(client, message) {
 function handleReading(client, message) {
   if (!client.identity) return;
 
-  const readingLabel = sanitizeReadingLabel(message.readingLabel);
-  const readingUrl = sanitizeReadingUrl(message.readingUrl);
+  const reading = sanitizeReadingState(client, message, client.identity);
+  const { readingLabel, readingUrl } = reading;
   const readingActive = message.readingActive !== false;
   const previousReadingLabel = client.identity.readingLabel;
   const previousReadingUrl = client.identity.readingUrl;
@@ -1722,6 +1765,7 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
+  const origin = normalizeOrigin(req.headers.origin || "");
   const originAllowed = access.site
     ? isOriginAllowedForSite(req.headers.origin, access.site)
     : isAllowedOrigin(req.headers.origin, req.headers.host);
@@ -1744,7 +1788,7 @@ wss.on("connection", (ws, req) => {
   }
   connectionCountByIp.set(ip, ipCount + 1);
 
-  const client = createClient(nextConnectionId++, ws, access.scene, access.site);
+  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "");
   access.scene.clients.set(client.connectionId, client);
   ws.isAlive = true;
 
