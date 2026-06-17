@@ -22,6 +22,8 @@ import {
   closeTrays,
   startGameLoop,
   stopGameLoop,
+  triggerHighFive,
+  triggerJump,
   unwireKeyboard,
   unwireStagePointer,
   wireKeyboard,
@@ -98,6 +100,8 @@ export function mountTownSquare(root, options = {}) {
     expandButton,
     helpButton,
     helpPanel,
+    jumpButton,
+    highFiveButton,
   } = renderShell(root);
 
   renderProps(stage);
@@ -206,6 +210,10 @@ export function mountTownSquare(root, options = {}) {
   expandButton.addEventListener("click", () => {
     setExpanded(!ctx.expanded);
   });
+  const onJumpClick = () => triggerJump(ctx);
+  const onHighFiveClick = () => triggerHighFive(ctx);
+  jumpButton.addEventListener("click", onJumpClick);
+  highFiveButton.addEventListener("click", onHighFiveClick);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
 
   const onWindowKeyDown = (event) => {
@@ -249,6 +257,8 @@ export function mountTownSquare(root, options = {}) {
       unwireKeyboard(ctx);
       unwireStagePointer(ctx);
       unwireHelpPanel();
+      jumpButton.removeEventListener("click", onJumpClick);
+      highFiveButton.removeEventListener("click", onHighFiveClick);
       closeTrays(ctx);
       window.removeEventListener("keydown", onWindowKeyDown);
       unwatchPage();

@@ -68,6 +68,14 @@ const EXPAND_ICON = `
   </svg>
 `;
 
+const JUMP_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 19V5"></path>
+    <path d="M6 11l6-6 6 6"></path>
+  </svg>
+`;
+
 const PENCIL_ICON = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -82,7 +90,7 @@ const TOWNSQUARE_URL = "https://townsquare.cauenapier.com/";
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpPanel: HTMLElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement }}
  */
 export function renderShell(container) {
   const element = document.createElement("section");
@@ -129,7 +137,7 @@ export function renderShell(container) {
 
   const instructions = document.createElement("p");
   instructions.textContent =
-    "Move with the arrow keys, press J to jump, press H to show a high-five or high-five a nearby visitor showing one, and tap where you want to walk. Tap your nameplate to chat, and tap a character to see their recent messages.";
+    "Move with the arrow keys or tap where you want to walk. Press J to jump and H to show a high-five; on touch, use the action buttons. Tap your nameplate to chat, and tap a character to see their recent messages.";
 
   const link = document.createElement("a");
   link.href = TOWNSQUARE_URL;
@@ -140,6 +148,25 @@ export function renderShell(container) {
   helpPanel.append(helpTitle, description, instructions, link);
 
   controls.append(quietButton, expandButton, helpButton, helpPanel);
+
+  const actions = document.createElement("div");
+  actions.className = "townsquare__actions";
+
+  const jumpButton = document.createElement("button");
+  jumpButton.className = "townsquare__action";
+  jumpButton.type = "button";
+  jumpButton.innerHTML = JUMP_ICON;
+  jumpButton.setAttribute("aria-label", "Jump");
+  jumpButton.title = "Jump";
+
+  const highFiveButton = document.createElement("button");
+  highFiveButton.className = "townsquare__action";
+  highFiveButton.type = "button";
+  highFiveButton.textContent = "🙌";
+  highFiveButton.setAttribute("aria-label", "High five");
+  highFiveButton.title = "High five";
+
+  actions.append(jumpButton, highFiveButton);
 
   const statusRow = document.createElement("div");
   statusRow.className = "townsquare__status";
@@ -156,7 +183,7 @@ export function renderShell(container) {
   ground.className = "townsquare__ground";
   stageEl.appendChild(ground);
 
-  element.append(controls, statusRow, stageEl);
+  element.append(controls, actions, statusRow, stageEl);
   container.appendChild(element);
   return {
     app: element,
@@ -167,6 +194,8 @@ export function renderShell(container) {
     expandButton,
     helpButton,
     helpPanel,
+    jumpButton,
+    highFiveButton,
   };
 }
 

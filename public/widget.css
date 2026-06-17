@@ -86,6 +86,48 @@
   height: 16px;
 }
 
+.townsquare__actions {
+  position: absolute;
+  z-index: 2147483001;
+  right: 8px;
+  bottom: 12px;
+  display: none;
+  gap: 8px;
+}
+
+.townsquare__action {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface) 84%, transparent);
+  color: var(--ink);
+  box-shadow: 0 8px 20px -14px rgba(42, 41, 38, 0.42);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  font: 700 18px/1 var(--font);
+}
+
+.townsquare__action:hover,
+.townsquare__action:focus-visible {
+  border-color: var(--hair-2);
+  background: var(--surface);
+}
+
+.townsquare__action:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.townsquare__action svg {
+  width: 19px;
+  height: 19px;
+}
+
 .townsquare__help-button {
   font: 650 0.92rem/1 var(--font);
 }
@@ -202,6 +244,7 @@
 }
 
 .townsquare--quiet .townsquare__status,
+.townsquare--quiet .townsquare__actions,
 .townsquare--quiet .townsquare__stage {
   display: none;
 }
@@ -240,6 +283,11 @@
   flex: 1 1 auto;
   height: auto;
   min-height: 0;
+}
+
+.townsquare--expanded .townsquare__actions {
+  right: 18px;
+  bottom: calc(18px + var(--ts-keyboard, 0px));
 }
 
 .prop--tree .canopy,
@@ -1363,6 +1411,10 @@
 }
 
 @media (pointer: coarse) {
+  .townsquare__actions {
+    display: flex;
+  }
+
   .townsquare__control {
     width: 40px;
     height: 40px;
