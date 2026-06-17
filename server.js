@@ -53,7 +53,6 @@ const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
 const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
 const CHAT_THROTTLE_MS = 1500;
-const HIGH_FIVE_DISTANCE = 0.07;
 const RECONNECT_GRACE_MS = 1500;
 const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 * 60 * 1000);
 const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS || 60000);
@@ -62,6 +61,7 @@ const BIRD_TICK_INTERVAL_MS = 1000;
 const TELEGRAM_API_TIMEOUT_MS = 5000;
 const MAX_BIRDS = 3;
 const BIRD_FLEE_RADIUS = 0.07;
+const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
 const BIRD_SPAWN_MAX_MS = Number(process.env.BIRD_SPAWN_MAX_MS || 22000);
 const BIRD_FIRST_SPAWN_MS = Number(process.env.BIRD_FIRST_SPAWN_MS || 500);
@@ -75,6 +75,7 @@ let MAX_MESSAGE_LEN;
 let MAX_DISPLAY_NAME_LEN;
 let MAX_READING_LABEL_LEN;
 let MAX_RECENT_MESSAGES;
+let HIGH_FIVE_DISTANCE;
 let DEFAULT_CHARACTER_COLOR;
 /** @type {Set<string>} */
 let CHARACTER_COLORS = new Set();
@@ -1437,7 +1438,7 @@ function handleMove(client, message) {
 
 function handleAction(client, message) {
   if (!client.identity) return;
-  if (!["jump", "raise-hand", "high-five"].includes(message.action)) return;
+  if (!VALID_ACTIONS.has(message.action)) return;
 
   const now = Date.now();
   if (now - client.lastActionAt < ACTION_THROTTLE_MS) return;
@@ -1707,6 +1708,7 @@ async function startServer() {
   MAX_DISPLAY_NAME_LEN = shared.DISPLAY_NAME_MAX;
   MAX_READING_LABEL_LEN = shared.READING_LABEL_MAX;
   MAX_RECENT_MESSAGES = shared.MAX_RECENT_MESSAGES;
+  HIGH_FIVE_DISTANCE = shared.HIGH_FIVE_DISTANCE;
   DEFAULT_CHARACTER_COLOR = shared.DEFAULT_CHARACTER_COLOR;
   CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);
 

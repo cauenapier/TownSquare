@@ -9,6 +9,7 @@ export {
   CHARACTER_COLORS,
   DEFAULT_CHARACTER_COLOR,
   DISPLAY_NAME_MAX,
+  HIGH_FIVE_DISTANCE,
   MAX_RECENT_MESSAGES,
   MAX_X,
   MESSAGE_MAX,
@@ -28,7 +29,6 @@ export const PROP_SETTLE_MS = 700;
 export const GHOST_STACK_MAX = 4;
 export const MOVEMENT_SPEED = 0.22;
 export const SEND_INTERVAL_MS = 45;
-export const HIGH_FIVE_DISTANCE = 0.07;
 export const RAISED_HAND_MS = 5000;
 export const HIGH_FIVE_MS = 760;
 

@@ -45,14 +45,18 @@ function clearPeers(ctx) {
   }
 }
 
-function applyJump(ctx, id) {
-  const presence = id === ctx.self.id ? ctx.self : ctx.peers.get(id);
-  if (!presence) return;
+function clearPresencePoseForAction(presence) {
   presence.pose = null;
   presence.propId = null;
   updatePose(presence.avatar, presence.pose);
   updatePropEffects(presence.avatar, presence.x, presence.propId);
   setWalking(presence.avatar, false);
+}
+
+function applyJump(ctx, id) {
+  const presence = id === ctx.self.id ? ctx.self : ctx.peers.get(id);
+  if (!presence) return;
+  clearPresencePoseForAction(presence);
   playJump(presence.avatar);
 }
 
@@ -63,11 +67,7 @@ function presenceById(ctx, id) {
 function applyRaiseHand(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
-  presence.pose = null;
-  presence.propId = null;
-  updatePose(presence.avatar, presence.pose);
-  updatePropEffects(presence.avatar, presence.x, presence.propId);
-  setWalking(presence.avatar, false);
+  clearPresencePoseForAction(presence);
   playRaisedHand(presence.avatar);
 }
 
@@ -76,11 +76,7 @@ function applyHighFive(ctx, id, targetId) {
   const target = presenceById(ctx, targetId);
   if (!initiator || !target) return;
   for (const presence of [initiator, target]) {
-    presence.pose = null;
-    presence.propId = null;
-    updatePose(presence.avatar, presence.pose);
-    updatePropEffects(presence.avatar, presence.x, presence.propId);
-    setWalking(presence.avatar, false);
+    clearPresencePoseForAction(presence);
     playHighFive(presence.avatar);
   }
   setFacing(initiator.avatar, target.x < initiator.x);

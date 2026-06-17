@@ -11,6 +11,7 @@ export const MESSAGE_MAX = 140;
 export const DISPLAY_NAME_MAX = 18;
 export const READING_LABEL_MAX = 42;
 export const MAX_RECENT_MESSAGES = 5;
+export const HIGH_FIVE_DISTANCE = 0.07;
 
 export const CHARACTER_COLORS = [
   "#5f6b73",

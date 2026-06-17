@@ -102,6 +102,18 @@ function isTypingTarget(target) {
 /**
  * @param {WidgetContext} ctx
  */
+function clearSelfPoseForAction(ctx) {
+  resetPropSettle(ctx);
+  ctx.self.pose = null;
+  ctx.self.propId = null;
+  updatePose(ctx.self.avatar, ctx.self.pose);
+  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+  setWalking(ctx.self.avatar, false);
+}
+
+/**
+ * @param {WidgetContext} ctx
+ */
 export function triggerJump(ctx) {
   if (ctx.quiet) return;
 
@@ -109,11 +121,7 @@ export function triggerJump(ctx) {
   if (now - ctx.self.lastJumpAt < JUMP_COOLDOWN_MS) return;
   ctx.self.lastJumpAt = now;
 
-  resetPropSettle(ctx);
-  ctx.self.pose = null;
-  ctx.self.propId = null;
-  updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+  clearSelfPoseForAction(ctx);
   playJump(ctx.self.avatar);
 
   if (ctx.socket.readyState === WebSocket.OPEN) {
@@ -148,12 +156,7 @@ export function triggerHighFive(ctx) {
   if (now - ctx.self.lastHighFiveAt < HIGH_FIVE_COOLDOWN_MS) return;
   ctx.self.lastHighFiveAt = now;
 
-  resetPropSettle(ctx);
-  ctx.self.pose = null;
-  ctx.self.propId = null;
-  updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
-  setWalking(ctx.self.avatar, false);
+  clearSelfPoseForAction(ctx);
 
   const peer = nearestRaisedHandPeer(ctx);
   if (peer) {
