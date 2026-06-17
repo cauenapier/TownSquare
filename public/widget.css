@@ -202,7 +202,14 @@
   position: relative;
   height: 180px;
   border-radius: var(--r) var(--r) 0 0;
-  background: transparent;
+  background: linear-gradient(
+    180deg,
+    var(--scene) 0%,
+    var(--scene) 72%,
+    var(--scene-edge) 72%,
+    var(--page) 72.4%,
+    var(--page) 100%
+  );
   /* taps move the character; keep page panning, drop double-tap zoom */
   touch-action: manipulation;
 }
@@ -214,7 +221,7 @@
   background: var(--ground);
 }
 
-.prop {
+#townsquare-root .prop {
   position: absolute;
   bottom: 53px;
   transform: translateX(-50%);
@@ -223,14 +230,14 @@
   pointer-events: none;
 }
 
-.prop svg {
+#townsquare-root .prop svg {
   width: 100%;
   height: 100%;
   display: block;
   overflow: visible;
 }
 
-.prop svg * {
+#townsquare-root .prop svg * {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -290,17 +297,17 @@
   bottom: calc(18px + var(--ts-keyboard, 0px));
 }
 
-.prop--tree .canopy,
-.prop--tree .trunk {
+#townsquare-root .prop--tree .canopy,
+#townsquare-root .prop--tree .trunk {
   fill: currentColor;
   fill-opacity: 0.15;
 }
 
-.prop--lamp {
+#townsquare-root .prop--lamp {
   z-index: 1;
 }
 
-.prop__light {
+#townsquare-root .prop__light {
   position: absolute;
   top: 16%;
   left: 75%;

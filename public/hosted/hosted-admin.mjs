@@ -1,5 +1,25 @@
 import { bindCopy } from "../lib/ui-common.mjs";
-import { createAutoRefresh, createStatusSetter, escapeHtml, formatTime, postJson } from "./hosted-common.mjs";
+import {
+  createAutoRefresh,
+  createStatusSetter,
+  escapeHtml,
+  formatTime,
+  postJson,
+  renderKeyValueList,
+} from "./hosted-common.mjs";
+import {
+  applyConfigToForm,
+  bindSceneCountProse,
+  bindStyleColorFields,
+  getSceneSummaryEntries,
+  isSceneCountInputName,
+  readSceneConfigFromForm,
+  readStyleConfigFromForm,
+  renderScenePositionFields,
+  sanitizeSceneConfig,
+  sanitizeSiteStyle,
+} from "../shared/site-config.mjs";
+import { mountTownSquare } from "../townsquare.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -10,12 +30,24 @@ const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const metaEl = document.getElementById("site-meta");
+const customizationForm = document.getElementById("customization-form");
+const customizationStatusEl = document.getElementById("customization-status");
+const saveCustomizationButton = document.getElementById("save-customization");
+const resetCustomizationButton = document.getElementById("reset-customization");
+const previewRoot = document.getElementById("townsquare-root");
+const scenePositionFields = document.getElementById("scene-position-fields");
 const snippetEl = document.getElementById("embed-snippet");
+const styleSnippetEl = document.getElementById("style-snippet");
+const sceneSummaryEl = document.getElementById("scene-summary");
 const copyButton = document.getElementById("copy-snippet");
+const copyStyleButton = document.getElementById("copy-style");
 const chatDisabledInput = document.getElementById("chat-disabled");
 const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
 const visitorList = document.getElementById("visitor-list");
+
+bindStyleColorFields(customizationForm);
+bindSceneCountProse(customizationForm);
 
 const STORAGE_KEY = "townsquare-admin-session";
 const REFRESH_INTERVAL_MS = 5000;
@@ -23,9 +55,13 @@ const REFRESH_INTERVAL_MS = 5000;
 let currentSite = null;
 let siteKey = "";
 let adminToken = "";
+let previewHandle = null;
+let customizationBusy = false;
+let customizationSavedMessage = "";
 
 const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
 const setStatus = createStatusSetter(statusEl);
+const setCustomizationStatus = createStatusSetter(customizationStatusEl, { toggleHidden: true });
 const autoRefresh = createAutoRefresh(() => loadSite({ silent: true }), REFRESH_INTERVAL_MS);
 
 function readStoredCredentials() {
@@ -58,15 +94,23 @@ function storeCredentials() {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ siteKey, adminToken }));
 }
 
+function destroyPreview() {
+  previewHandle?.destroy();
+  previewHandle = null;
+}
+
 function clearCredentials() {
   siteKey = "";
   adminToken = "";
   currentSite = null;
+  customizationSavedMessage = "";
+  destroyPreview();
   sessionStorage.removeItem(STORAGE_KEY);
 }
 
 function showLogin(message = "", isError = false) {
   autoRefresh.stop();
+  destroyPreview();
   adminView.hidden = true;
   loginView.hidden = false;
   setLoginStatus(message, isError);
@@ -77,6 +121,94 @@ function showAdmin() {
   loginView.hidden = true;
   adminView.hidden = false;
   autoRefresh.start();
+}
+
+function renderSceneSummary(sceneConfig = {}) {
+  renderKeyValueList(sceneSummaryEl, getSceneSummaryEntries(sceneConfig));
+}
+
+function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(customizationForm)) {
+  const next = sanitizeSceneConfig(sceneConfig);
+  renderScenePositionFields(scenePositionFields, next);
+  applyConfigToForm(customizationForm, next);
+}
+
+function getCurrentCustomization() {
+  return {
+    sceneConfig: sanitizeSceneConfig(currentSite?.sceneConfig || {}),
+    styleConfig: sanitizeSiteStyle(currentSite?.styleConfig || {}),
+  };
+}
+
+function readCustomizationFromForm() {
+  return {
+    sceneConfig: sanitizeSceneConfig(readSceneConfigFromForm(customizationForm)),
+    styleConfig: sanitizeSiteStyle(readStyleConfigFromForm(customizationForm)),
+  };
+}
+
+function serializeCustomization(customization) {
+  return JSON.stringify({
+    sceneConfig: sanitizeSceneConfig(customization?.sceneConfig || {}),
+    styleConfig: sanitizeSiteStyle(customization?.styleConfig || {}),
+  });
+}
+
+function customizationIsDirty() {
+  if (!currentSite) return false;
+  return serializeCustomization(readCustomizationFromForm()) !== serializeCustomization(getCurrentCustomization());
+}
+
+function updateCustomizationButtons() {
+  const dirty = customizationIsDirty();
+  saveCustomizationButton.disabled = customizationBusy || !dirty;
+  resetCustomizationButton.disabled = customizationBusy || !dirty;
+}
+
+function updateCustomizationStatus() {
+  if (customizationBusy) {
+    setCustomizationStatus("Saving customization...");
+    return;
+  }
+
+  if (customizationSavedMessage) {
+    setCustomizationStatus(customizationSavedMessage);
+    return;
+  }
+
+  if (customizationIsDirty()) {
+    setCustomizationStatus("Previewing unsaved changes. Save to regenerate the embed snippet and CSS.");
+    return;
+  }
+
+  setCustomizationStatus("");
+}
+
+function mountPreview() {
+  if (!(previewRoot instanceof HTMLElement)) return;
+  const customization = currentSite ? readCustomizationFromForm() : getCurrentCustomization();
+  destroyPreview();
+  previewHandle = mountTownSquare(previewRoot, {
+    serverOrigin: window.location.origin,
+    scene: customization.sceneConfig,
+    style: customization.styleConfig,
+    solo: true,
+    readingLabel: currentSite ? `${currentSite.name} preview` : "Admin preview",
+    readingUrl: window.location.href,
+  });
+}
+
+function syncCustomizationForm({ force = false } = {}) {
+  if (!currentSite || !(customizationForm instanceof HTMLFormElement)) return;
+  if (force || !customizationIsDirty()) {
+    const customization = getCurrentCustomization();
+    applyConfigToForm(customizationForm, { ...customization.sceneConfig, ...customization.styleConfig });
+    syncScenePositionInputs(customization.sceneConfig);
+    applyConfigToForm(customizationForm, { ...customization.sceneConfig, ...customization.styleConfig });
+  }
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+  mountPreview();
 }
 
 function render(data) {
@@ -97,8 +229,13 @@ function render(data) {
   if (document.activeElement !== snippetEl) {
     snippetEl.value = data.embedSnippet;
   }
+  if (document.activeElement !== styleSnippetEl) {
+    styleSnippetEl.value = data.styleSnippet;
+  }
+  renderSceneSummary(currentSite.sceneConfig);
   chatDisabledInput.checked = currentSite.chatDisabled;
   disableSiteButton.textContent = currentSite.disabled ? "Enable site" : "Disable site";
+  syncCustomizationForm();
 
   visitorList.replaceChildren();
   if (scene.visitors.length === 0) {
@@ -188,10 +325,11 @@ async function action(name, data = {}) {
   const result = await postJson("/api/admin/action", { siteKey, adminToken, action: name, ...data });
   if (!result.ok) {
     setStatus(result.body.error || "Action failed.", true);
-    return;
+    return false;
   }
 
   await loadSite();
+  return true;
 }
 
 loginForm.addEventListener("submit", async (event) => {
@@ -216,6 +354,39 @@ signOutButton.addEventListener("click", () => {
 });
 
 bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
+bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnippetEl });
+
+customizationForm.addEventListener("input", (event) => {
+  customizationSavedMessage = "";
+  if (isSceneCountInputName(event.target?.name || "")) {
+    syncScenePositionInputs(readSceneConfigFromForm(customizationForm));
+  }
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+  mountPreview();
+});
+
+customizationForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  customizationBusy = true;
+  customizationSavedMessage = "";
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+
+  const ok = await action("updateCustomization", readCustomizationFromForm());
+
+  customizationBusy = false;
+  if (ok) {
+    customizationSavedMessage = "Customization saved. Copy the refreshed snippet and CSS below.";
+  }
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+});
+
+resetCustomizationButton.addEventListener("click", () => {
+  customizationSavedMessage = "";
+  syncCustomizationForm({ force: true });
+});
 
 chatDisabledInput.addEventListener("change", () => action("setChatDisabled", { disabled: chatDisabledInput.checked }));
 clearMessagesButton.addEventListener("click", () => action("clearMessages"));

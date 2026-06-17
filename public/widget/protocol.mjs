@@ -20,6 +20,10 @@ import { getBrowserSecret, saveBrowserSecret } from "./utils.mjs";
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
  */
 
+function isSolo(ctx) {
+  return ctx.options.solo === true;
+}
+
 const WALK_BUMP_MS = 120;
 const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 8000;
@@ -45,11 +49,11 @@ function clearPeers(ctx) {
   }
 }
 
-function clearPresencePoseForAction(presence) {
+function clearPresencePoseForAction(ctx, presence) {
   presence.pose = null;
   presence.propId = null;
   updatePose(presence.avatar, presence.pose);
-  updatePropEffects(presence.avatar, presence.x, presence.propId);
+  updatePropEffects(presence.avatar, presence.x, presence.propId, ctx.sceneProps);
   setWalking(presence.avatar, false);
 }
 
@@ -60,14 +64,14 @@ function presenceById(ctx, id) {
 function applyJump(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
-  clearPresencePoseForAction(presence);
+  clearPresencePoseForAction(ctx, presence);
   playJump(presence.avatar);
 }
 
 function applyRaiseHand(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
-  clearPresencePoseForAction(presence);
+  clearPresencePoseForAction(ctx, presence);
   playRaisedHand(presence.avatar);
 }
 
@@ -76,7 +80,7 @@ function applyHighFive(ctx, id, targetId) {
   const target = presenceById(ctx, targetId);
   if (!initiator || !target) return;
   for (const presence of [initiator, target]) {
-    clearPresencePoseForAction(presence);
+    clearPresencePoseForAction(ctx, presence);
     playHighFive(presence.avatar);
   }
   setFacing(initiator.avatar, target.x < initiator.x);
@@ -97,7 +101,7 @@ export function wireSocket(ctx) {
 
     socket.addEventListener("open", () => {
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
-      socket.send(JSON.stringify({
+      const init = {
         type: "init",
         browserId,
         browserSecret: getBrowserSecret(),
@@ -107,7 +111,12 @@ export function wireSocket(ctx) {
         readingLabel: self.readingLabel,
         readingUrl: self.readingUrl,
         readingActive: self.readingActive,
-      }));
+      };
+      const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
+      if (!siteKey && ctx.options.scene) {
+        init.sceneConfig = ctx.options.scene;
+      }
+      socket.send(JSON.stringify(init));
     });
 
     socket.addEventListener("error", () => {
@@ -137,8 +146,10 @@ export function wireSocket(ctx) {
         for (const recent of message.messages || []) {
           recordMessage(self.avatar, recent);
         }
-        for (const peer of message.peers) {
-          applyPeerState(ctx, peer);
+        if (!isSolo(ctx)) {
+          for (const peer of message.peers) {
+            applyPeerState(ctx, peer);
+          }
         }
         syncBirdsFromHello(ctx, message.birds);
         updateStatus(ctx);
@@ -155,12 +166,16 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === "join") {
-        applyPeerState(ctx, message.peer);
+        if (!isSolo(ctx)) {
+          applyPeerState(ctx, message.peer);
+        }
         return;
       }
 
       if (message.type === "leave") {
-        removePeer(ctx, message.id);
+        if (!isSolo(ctx)) {
+          removePeer(ctx, message.id);
+        }
         return;
       }
 
@@ -174,6 +189,8 @@ export function wireSocket(ctx) {
           return;
         }
 
+        if (isSolo(ctx)) return;
+
         const peer = applyPeerState(ctx, message);
         if (!peer.pose) {
           bumpWalking(peer);
@@ -182,6 +199,7 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === "action") {
+        if (message.id !== self.id && isSolo(ctx)) return;
         if (message.action === "jump") {
           applyJump(ctx, message.id);
         } else if (message.action === "raise-hand") {
@@ -202,6 +220,8 @@ export function wireSocket(ctx) {
           return;
         }
 
+        if (isSolo(ctx)) return;
+
         const peer = peers.get(message.id);
         if (!peer) return;
         if (ctx.quiet) {
@@ -213,12 +233,16 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === "profile") {
-        applyProfileState(ctx, message);
+        if (message.id === self.id || !isSolo(ctx)) {
+          applyProfileState(ctx, message);
+        }
         return;
       }
 
       if (message.type === "reading") {
-        applyReadingState(ctx, message);
+        if (message.id === self.id || !isSolo(ctx)) {
+          applyReadingState(ctx, message);
+        }
       }
     });
 

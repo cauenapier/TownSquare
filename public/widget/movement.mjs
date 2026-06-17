@@ -3,7 +3,7 @@
  */
 
 import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
-import { HIGH_FIVE_DISTANCE, INTERACTIVE_PROPS, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
+import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import { clamp } from "./math.mjs";
 import {
   playHighFive,
@@ -46,9 +46,9 @@ export function maybeRequestPropSettle(ctx, now) {
   if (self.pose) return;
   if (socket.readyState !== WebSocket.OPEN) return;
 
-  const prop = INTERACTIVE_PROPS.find((candidate) => (
-    Math.abs(self.x - candidate.x) < candidate.zoneRadius
-  ));
+  const prop = ctx.sceneProps
+    .filter((candidate) => candidate.pose && candidate.zoneRadius > 0)
+    .find((candidate) => Math.abs(self.x - candidate.x) < candidate.zoneRadius);
   if (!prop) {
     resetPropSettle(ctx);
     return;
@@ -109,7 +109,7 @@ function clearSelfPoseForAction(ctx) {
   ctx.self.pose = null;
   ctx.self.propId = null;
   updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
   setWalking(ctx.self.avatar, false);
 }
 
@@ -222,18 +222,18 @@ export function tick(ctx, now) {
     }
     renderAvatar(ctx.self.avatar, ctx.self.x);
     setFacing(ctx.self.avatar, direction < 0);
-    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
     setWalking(ctx.self.avatar, true);
     maybeSendMove(ctx);
   } else {
     setWalking(ctx.self.avatar, false);
-    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
     maybeRequestPropSettle(ctx, now);
   }
 
   layoutBubbleColumns(
     ctx.stage,
-    [ctx.self, ...ctx.peers.values()],
+    ctx.options.solo === true ? [ctx.self] : [ctx.self, ...ctx.peers.values()],
     ctx.self.x,
     layoutConfigFor(undefined, ctx.expanded),
   );

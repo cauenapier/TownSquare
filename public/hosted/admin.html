@@ -2,8 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>TownSquare admin</title>
+    <link rel="stylesheet" href="/widget.css" />
     <link rel="stylesheet" href="/page.css" />
   </head>
   <body>
@@ -47,12 +48,148 @@
 
         <section class="hosted-meta" id="site-meta"></section>
 
+        <section class="hosted-section" id="customization-section">
+          <div class="hosted-section-head">
+            <h2>Editable customization</h2>
+          </div>
+          <p class="hosted-note">
+            Change the saved scene and style here, preview it, then copy the refreshed snippet and CSS below.
+          </p>
+
+          <form class="hosted-form" id="customization-form">
+            <section aria-labelledby="scene-config-title">
+              <div class="hosted-section-head">
+                <h2 id="scene-config-title">Scene props</h2>
+              </div>
+              <p class="scene-counts">
+                <span class="scene-counts__lead">This square has</span>
+                <span class="scene-counts__run">
+                  <span class="scene-counts__chunk">
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-benches" name="scene-benches" type="number" min="0" max="6" step="1" value="2" inputmode="numeric" aria-label="Benches" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="bench" data-plural="benches">benches</span>
+                    </span><span class="scene-counts__sep">,</span>
+                  </span>
+                  <span class="scene-counts__chunk">
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-trees" name="scene-trees" type="number" min="0" max="6" step="1" value="1" inputmode="numeric" aria-label="Trees" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="tree" data-plural="trees">tree</span>
+                    </span><span class="scene-counts__sep">,</span>
+                  </span>
+                  <span class="scene-counts__chunk">
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-lamps" name="scene-lamps" type="number" min="0" max="4" step="1" value="1" inputmode="numeric" aria-label="Lamps" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="lamp" data-plural="lamps">lamp</span>
+                    </span><span class="scene-counts__sep">,</span>
+                  </span>
+                  <span class="scene-counts__chunk scene-counts__chunk--last">
+                    <span class="scene-counts__and">and</span>
+                    <span class="scene-count">
+                      <span class="scene-count__slot" aria-hidden="true">[</span>
+                      <input id="scene-birds" name="scene-birds" type="number" min="0" max="18" step="1" value="3" inputmode="numeric" aria-label="Birds" />
+                      <span class="scene-count__slot" aria-hidden="true">]</span>
+                      <span class="scene-count__noun" data-singular="bird" data-plural="birds">birds</span>
+                    </span><span class="scene-counts__end">.</span>
+                  </span>
+                </span>
+              </p>
+              <div class="hosted-position-groups" id="scene-position-fields"></div>
+            </section>
+
+            <section aria-labelledby="style-config-title">
+              <div class="hosted-section-head">
+                <h2 id="style-config-title">Style overrides</h2>
+              </div>
+              <div class="hosted-grid hosted-grid--compact">
+                <label>
+                  <span>Background</span>
+                  <div class="hosted-color-control">
+                    <input id="style-scene" type="color" value="#e4e2dd" data-style-picker="style-scene" />
+                    <input type="hidden" name="style-scene" value="#e4e2dd" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-scene" aria-pressed="false">None</button>
+                  </div>
+                </label>
+                <label>
+                  <span>Ground</span>
+                  <div class="hosted-color-control">
+                    <input id="style-page" type="color" value="#efede9" data-style-picker="style-page" />
+                    <input type="hidden" name="style-page" value="#efede9" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-page" aria-pressed="false">None</button>
+                  </div>
+                </label>
+                <label>
+                  <span>Buttons and Tags</span>
+                  <div class="hosted-color-control">
+                    <input id="style-surface" type="color" value="#fdf8f4" data-style-picker="style-surface" />
+                    <input type="hidden" name="style-surface" value="#fdf8f4" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-surface" aria-pressed="false">None</button>
+                  </div>
+                </label>
+                <label>
+                  <span>Ink</span>
+                  <div class="hosted-color-control">
+                    <input id="style-ink" type="color" value="#2a2926" data-style-picker="style-ink" />
+                    <input type="hidden" name="style-ink" value="#2a2926" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-ink" aria-pressed="false">None</button>
+                  </div>
+                </label>
+                <label>
+                  <span>Accent</span>
+                  <div class="hosted-color-control">
+                    <input id="style-accent" type="color" value="#c8641f" data-style-picker="style-accent" />
+                    <input type="hidden" name="style-accent" value="#c8641f" />
+                    <button type="button" class="hosted-color-clear" data-style-clear="style-accent" aria-pressed="false">None</button>
+                  </div>
+                </label>
+              </div>
+            </section>
+
+            <div class="hosted-actions">
+              <button type="submit" id="save-customization">Save customization</button>
+              <button type="button" id="reset-customization">Reset form</button>
+            </div>
+            <p class="hosted-status" id="customization-status" role="status" hidden></p>
+          </form>
+
+          <section class="hosted-section hosted-preview-dock" aria-labelledby="preview-title">
+            <div class="hosted-section-head">
+              <h2 id="preview-title">Preview</h2>
+            </div>
+            <div class="townsquare-host">
+              <div id="townsquare-root"></div>
+            </div>
+          </section>
+        </section>
+
         <section class="hosted-section" id="install-section">
           <h2>Embed snippet</h2>
+          <p class="hosted-note">Paste this where you want the square to appear.</p>
           <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-snippet">Copy snippet</button>
           </div>
+        </section>
+
+        <section class="hosted-section" id="style-section">
+          <h2>Customization CSS</h2>
+          <p class="hosted-note">Paste this into your site stylesheet, then tweak it if you want.</p>
+          <textarea id="style-snippet" readonly rows="7" spellcheck="false"></textarea>
+          <div class="hosted-actions">
+            <button type="button" id="copy-style">Copy CSS</button>
+          </div>
+        </section>
+
+        <section class="hosted-section" id="scene-section">
+          <div class="hosted-section-head">
+            <h2>Saved scene setup</h2>
+          </div>
+          <div class="hosted-kv" id="scene-summary"></div>
         </section>
 
         <section class="hosted-section" id="moderation-section">

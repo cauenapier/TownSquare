@@ -55,6 +55,40 @@ async function createSite(name) {
   return body;
 }
 
+async function assertCustomizationPersists() {
+  const response = await fetch(`${HTTP_ORIGIN}/api/sites`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "Custom Scene",
+      origin: HTTP_ORIGIN,
+      email: "owner@example.com",
+      sceneConfig: { benches: 3, trees: 2, lamps: 1, birds: 6, benchXs: [0.14, 0.5, 0.82] },
+      styleConfig: { accent: "#9d5c2f" },
+    }),
+  });
+  const body = await response.json();
+  assert(response.ok, body.error || "customized site registration failed");
+  assert(body.site.email === "owner@example.com", "registered site did not persist email");
+  assert(body.site.sceneConfig?.benches === 3, "registered site did not persist scene config");
+  assert(body.site.sceneConfig?.birds === 6, "registered site did not persist bird count");
+  assert(body.site.sceneConfig?.benchXs?.[0] === 0.14, "registered site did not persist bench placement");
+  assert(body.site.styleConfig?.accent === "#9d5c2f", "registered site did not persist style config");
+  assert(body.embedSnippet.includes("scene:"), "embed snippet did not include the scene config");
+  assert(typeof body.styleSnippet === "string" && body.styleSnippet.includes("--you"), "missing scoped style snippet");
+
+  const updated = await postJson("/api/admin/action", {
+    siteKey: body.site.siteKey,
+    adminToken: body.adminToken,
+    action: "updateCustomization",
+    sceneConfig: { benches: 4, trees: 1, lamps: 2, birds: 2 },
+    styleConfig: { accent: "#336699" },
+  });
+  assert(updated.response.ok, updated.body.error || "admin customization update failed");
+  assert(updated.body.site.sceneConfig?.benches === 4, "admin customization did not update scene config");
+  assert(updated.body.site.styleConfig?.accent === "#336699", "admin customization did not update accent color");
+}
+
 async function loginWithAdminToken(adminToken) {
   const response = await fetch(`${HTTP_ORIGIN}/api/admin/login`, {
     method: "POST",
@@ -317,13 +351,13 @@ async function main() {
   assert(first.id === secondSameBrowser.id, "same-browser tabs did not reuse one shared identity");
   assert(first.hello.displayName === "Ada Lovelace", "display name was not normalized on init");
   assert(first.hello.color === "#3f7f63", "character color was not accepted on init");
-  assert(first.hello.readingLabel === "Launch notes", "reading label was not normalized on init");
+  assert(first.hello.readingLabel === "launch", "reading label was not derived from the URL on init");
   assert(first.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "reading URL was not accepted on init");
   assert(first.hello.readingActive === true, "reading should default to active on init");
   assert(typeof first.hello.browserSecret === "string" && first.hello.browserSecret.length > 0, "hello did not include browser secret");
   assert(secondSameBrowser.hello.displayName === "Ada Lovelace", "same-browser tab did not inherit display name");
   assert(secondSameBrowser.hello.color === "#3f7f63", "same-browser tab did not inherit character color");
-  assert(secondSameBrowser.hello.readingLabel === "Launch notes", "same-browser tab did not inherit reading label");
+  assert(secondSameBrowser.hello.readingLabel === "launch", "same-browser tab did not inherit reading label");
   assert(secondSameBrowser.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "same-browser tab did not inherit reading URL");
   assert(secondSameBrowser.hello.readingActive === true, "same-browser tab did not inherit active reading state");
   assert(secondSameBrowser.hello.peers.length === 0, "same-browser tab should not see itself as a peer");
@@ -336,7 +370,7 @@ async function main() {
   assert(third.hello.peers.length === 1, "third client should see one existing visitor, not one per tab");
   assert(third.hello.peers[0].displayName === "Ada Lovelace", "peer snapshot did not include display name");
   assert(third.hello.peers[0].color === "#3f7f63", "peer snapshot did not include character color");
-  assert(third.hello.peers[0].readingLabel === "Launch notes", "peer snapshot did not include reading label");
+  assert(third.hello.peers[0].readingLabel === "launch", "peer snapshot did not include reading label");
   assert(third.hello.peers[0].readingUrl === `${HTTP_ORIGIN}/notes/launch`, "peer snapshot did not include reading URL");
   assert(third.hello.peers[0].readingActive === true, "peer snapshot did not include active reading state");
   assert(!Object.hasOwn(third.hello.peers[0], "browserId"), "peer snapshot leaked browserId");
@@ -396,7 +430,7 @@ async function main() {
     first.seen.some((message) => (
       message.type === "reading"
       && message.id === first.id
-      && message.readingLabel === "API reference"
+      && message.readingLabel === "api"
       && message.readingUrl === `${HTTP_ORIGIN}/docs/api`
     )),
     "reading update did not propagate to same-browser sibling",
@@ -405,10 +439,15 @@ async function main() {
     third.seen.some((message) => (
       message.type === "reading"
       && message.id === first.id
-      && message.readingLabel === "API reference"
+      && message.readingLabel === "api"
       && message.readingUrl === `${HTTP_ORIGIN}/docs/api`
     )),
     "reading update did not propagate to other visitors",
+  );
+
+  assert(
+    !third.seen.some((message) => message.type === "reading" && message.readingLabel === "API reference"),
+    "server accepted a client-controlled reading label",
   );
 
   secondSameBrowser.ws.send(JSON.stringify({
@@ -578,6 +617,8 @@ async function main() {
 
   assert(first.seen.some((message) => message.type === "leave" && message.id === third.id), "first client did not observe different-browser leave");
 
+  await assertCustomizationPersists();
+
   const hostedA = await createSite("Smoke A");
   const hostedB = await createSite("Smoke B");
   assertAdminTokenStoredAsHash(hostedA.site.siteKey, hostedA.adminToken);
@@ -591,6 +632,8 @@ async function main() {
     siteKey: hostedA.site.siteKey,
     origin: HTTP_ORIGIN,
     displayName: "Named Visitor",
+    readingLabel: "visiting your mom",
+    readingUrl: `${HTTP_ORIGIN}/docs/real-page`,
   });
   const siteBVisitor = await connect({
     x: 0.7,
@@ -602,7 +645,24 @@ async function main() {
   await delay(100);
 
   assert(siteAVisitor.hello.peers.length === 0, "hosted site A saw visitors from another site");
+  assert(siteAVisitor.hello.readingLabel === "real page", "hosted site accepted a custom reading label");
+  assert(siteAVisitor.hello.readingUrl === `${HTTP_ORIGIN}/docs/real-page`, "hosted site did not keep a same-origin reading URL");
   assert(siteBVisitor.hello.peers.length === 0, "hosted site B saw visitors from another site");
+
+  siteAVisitor.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "visiting your mom",
+    readingUrl: "https://attacker.example/status",
+  }));
+  await waitFor(
+    () => siteAVisitor.seen.some((message) => (
+      message.type === "reading"
+      && message.id === siteAVisitor.id
+      && message.readingLabel === ""
+      && message.readingUrl === ""
+    )),
+    "hosted site did not reject an off-site reading URL",
+  );
   await assertServiceAdminShowsActiveVisitors(hostedA, hostedB);
 
   siteAVisitor.ws.close();

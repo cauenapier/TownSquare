@@ -132,7 +132,7 @@ export function applySelfState(ctx, state) {
     setFacing(ctx.self.avatar, ctx.self.x < previousX);
   }
   updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
 }
 
 /**
@@ -159,7 +159,7 @@ export function applyPeerState(ctx, peerState) {
     setFacing(peer.avatar, peer.x < previousX);
   }
   updatePose(peer.avatar, peer.pose);
-  updatePropEffects(peer.avatar, peer.x, peer.propId);
+  updatePropEffects(peer.avatar, peer.x, peer.propId, ctx.sceneProps);
   return peer;
 }
 
