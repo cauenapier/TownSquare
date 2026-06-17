@@ -36,6 +36,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `spec.md` — product truth
 - `roadmap.md` — product-facing sequencing
 - `public/docs.html` — in-app docs page (usage + deployment guide), served at `/docs`
+- `public/changelog.html` — simple in-app changelog page, served at `/changelog`
 - `docs/architecture.md` — current boundaries and future hosted shape
 
 ## Requirements

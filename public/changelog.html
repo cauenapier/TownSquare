@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare changelog</title>
+    <meta
+      name="description"
+      content="A simple changelog for TownSquare updates."
+    />
+    <link rel="stylesheet" href="/page.css" />
+  </head>
+  <body>
+    <div class="docs-page">
+      <div class="docs-shell">
+        <aside class="docs-toc" aria-label="On this page">
+          <a class="docs-home" href="/">← TownSquare</a>
+          <details class="docs-toc__details" open>
+            <summary class="docs-toc__summary">On this page</summary>
+            <nav class="docs-nav">
+              <p class="docs-nav__group">Changelog</p>
+              <a href="#latest">Latest changes</a>
+            </nav>
+          </details>
+        </aside>
+
+        <main class="docs-main">
+          <article class="docs-article">
+            <p class="eyebrow">TownSquare changelog</p>
+            <h1>Changelog</h1>
+            <p class="docs-lead">
+              A simple place to record when TownSquare changes and what changed.
+            </p>
+
+            <section class="docs-section" id="latest" aria-labelledby="latest-h">
+              <h2 id="latest-h">Latest changes</h2>
+              <h3>June 17, 2026</h3>
+              <ul>
+                <li><strong>High five</strong> — Press H to invite someone to high five.</li>
+                <li><strong>Site owner badge</strong> — Identifies the site owner in the room.</li>
+                <li><strong>Chat input</strong> — Your own chat history no longer appears while typing a new message, improving overall readability.</li>
+              </ul>
+            </section>
+
+            <footer class="docs-footer">
+              <a href="/docs">← Back to documentation</a>
+              <a href="/">TownSquare home</a>
+            </footer>
+          </article>
+        </main>
+      </div>
+    </div>
+    <script>
+      // The table of contents stays open on desktop and collapses on mobile.
+      (function () {
+        var details = document.querySelector(".docs-toc__details");
+        if (!details) return;
+        var mobile = window.matchMedia("(max-width: 879.98px)");
+        function sync() {
+          details.open = !mobile.matches;
+        }
+        sync();
+        mobile.addEventListener("change", sync);
+      })();
+    </script>
+  </body>
+</html>

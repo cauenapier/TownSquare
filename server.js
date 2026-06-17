@@ -341,6 +341,7 @@ function resolvePublicFile(requestUrl, hostHeader) {
     ["/admin", "/admin.html"],
     ["/service-admin", "/service-admin.html"],
     ["/docs", "/docs.html"],
+    ["/changelog", "/changelog.html"],
   ]);
   const pathname = aliases.get(url.pathname) || url.pathname;
   const normalized = path.normalize(pathname).replace(/^\.+/, "");
