@@ -94,6 +94,11 @@ body {
   font-size: 0.92rem;
 }
 
+.page-hint a {
+  color: var(--you-deep);
+  font-weight: 650;
+}
+
 .townsquare-host {
   width: min(1100px, 100%);
   margin: 48px auto 0;
