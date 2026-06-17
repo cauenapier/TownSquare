@@ -200,7 +200,7 @@ function createClient(connectionId, ws, scene, site) {
   };
 }
 
-/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
+/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
 function createIdentity(id, browserId, x) {
   return {
     id,
@@ -214,6 +214,7 @@ function createIdentity(id, browserId, x) {
     readingLabel: "",
     readingUrl: "",
     readingActive: false,
+    isOwner: false,
     clients: new Set(),
     joined: false,
     leaveTimer: null,
@@ -636,6 +637,23 @@ const ADMIN_ACTIONS = {
       closeIdentityClients(identity, 4003, "blocked");
     }
   },
+  setOwnerVisitor(site, scene, body) {
+    const identity = scene.identities.get(Number(body.visitorId));
+    if (!identity) return;
+    const owner = Boolean(body.owner);
+    const index = site.ownerBrowserIds.indexOf(identity.browserId);
+    if (owner && index === -1) site.ownerBrowserIds.push(identity.browserId);
+    if (!owner && index !== -1) site.ownerBrowserIds.splice(index, 1);
+    identity.isOwner = owner;
+    touchSite(site);
+    broadcast(scene, {
+      type: "profile",
+      id: identity.id,
+      displayName: identity.displayName,
+      color: identity.color,
+      isOwner: owner,
+    });
+  },
   clearMessages(site, scene) {
     for (const identity of scene.identities.values()) {
       identity.messages = [];
@@ -813,6 +831,7 @@ function snapshotIdentity(identity) {
     readingLabel: identity.readingLabel,
     readingUrl: identity.readingUrl,
     readingActive: identity.readingActive,
+    isOwner: identity.isOwner,
     messages: identity.messages,
   };
 }
@@ -1103,6 +1122,7 @@ function createSiteRecord({ name, origin }) {
       createdAt: now,
       updatedAt: now,
       blockedBrowserIds: [],
+      ownerBrowserIds: [],
     },
   };
 }
@@ -1121,6 +1141,9 @@ function loadSites() {
         }
         delete site.adminToken;
         sitesMigratedOnLoad = true;
+      }
+      if (!Array.isArray(site.ownerBrowserIds)) {
+        site.ownerBrowserIds = [];
       }
       return [site.siteKey, site];
     }));
@@ -1183,6 +1206,7 @@ function getSceneStats(scene) {
       displayName: identity.displayName,
       color: identity.color,
       clientCount: identity.clients.size,
+      isOwner: identity.isOwner,
       messages: identity.messages,
     }));
 
@@ -1324,6 +1348,8 @@ function handleInit(client, message) {
     identity.color = sanitizeCharacterColor(message.color);
   }
 
+  identity.isOwner = Boolean(site) && site.ownerBrowserIds.includes(identity.browserId);
+
   client.identity = identity;
   client.joined = true;
   identity.clients.add(client);
@@ -1345,6 +1371,7 @@ function handleInit(client, message) {
     readingLabel: identity.readingLabel,
     readingUrl: identity.readingUrl,
     readingActive: identity.readingActive,
+    isOwner: identity.isOwner,
     messages: identity.messages,
     peers,
     birds: snapshotBirds(scene),

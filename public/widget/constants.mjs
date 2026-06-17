@@ -18,6 +18,8 @@ export {
 } from "../shared-constants.mjs";
 
 export const BUBBLE_TTL_MS = 6000;
+/** URL hash flag that reveals the owner-claim hint ("You're visitor #N"). */
+export const OWNER_SETUP_HASH = "townsquare-owner";
 export const BROWSER_ID_KEY = "townsquare-browser-id";
 export const BROWSER_SECRET_KEY = "townsquare-browser-secret";
 export const PROFILE_STORAGE_KEY = "townsquare-profile";

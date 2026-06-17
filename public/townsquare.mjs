@@ -132,6 +132,7 @@ export function mountTownSquare(root, options = {}) {
       readingLabel,
       readingUrl,
       readingActive,
+      isOwner: false,
       propZoneEnteredAt: 0,
       settlePropId: null,
       settleRequested: false,

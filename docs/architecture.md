@@ -27,6 +27,9 @@ TownSquare currently has three practical surfaces:
    - accountless site registration
    - public site key for embed routing
    - private admin token for moderation/settings, stored as a hash
+   - verified owner badge: admin marks a live visitor's browser id into the site's
+     `ownerBrowserIds`; the server stamps `isOwner` on that identity (gated by the
+     visitor's `browserSecret`, so it cannot be spoofed) and broadcasts it as a crown
    - service admin password for operator-level site management
    - small JSON site registry
 

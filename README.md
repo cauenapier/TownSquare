@@ -157,10 +157,31 @@ The admin page can:
 
 - show install/seen status
 - show active visitors
+- mark an active visitor as the verified site owner (and unmark them)
 - kick or block active visitors
 - disable chat
 - disable the site
 - clear recent in-memory messages
+
+### Mark the site owner
+
+Visitors are anonymous, so by default nothing distinguishes the owner from anyone
+else. To get a tamper-resistant owner badge (a 👑 crown) on your own character:
+
+1. Open your own site so you appear as a live visitor. Add `#townsquare-owner` to the
+   URL and the widget shows a hint with your visitor number (`You're visitor #N …`).
+2. Open the admin page and find that visitor in the active list.
+3. Click **Make owner**. Your character gains the crown live for everyone in the square,
+   and keeps it on every future visit from that browser. Click **Owner ✓** to remove it.
+
+The badge is server-issued, so it cannot be faked by typing a name or picking a color.
+Ownership is bound to the specific browser that was marked — it is verified by the same
+server-issued `browserSecret` that keeps a visitor's character stable across refreshes,
+so another browser asserting the same id without that secret gets no crown. Because the
+project stays accountless, a new device or cleared browser storage means marking owner
+once more (one click). You can mark more than one browser if you want the badge on
+several devices. Marked browser ids are stored per site under `ownerBrowserIds` in
+`.data/sites.json`.
 
 Registered sites are stored in `.data/sites.json` by default.
 Set `DATA_DIR` if the registry should live somewhere else.
@@ -273,6 +294,7 @@ Included now:
 - self-hostable single-process server
 - accountless hosted site registration with isolated scenes
 - token-protected hosted admin/moderation page
+- verified site-owner badge (server-issued crown, bound to the owner's browser)
 
 Not included yet:
 

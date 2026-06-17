@@ -160,13 +160,19 @@ function render(data) {
     row.className = "visitor-row";
     const visitorName = String(visitor.displayName || "").trim();
     const visitorLabel = visitorName || `Visitor ${visitor.id}`;
+    const ownerTag = visitor.isOwner ? " 👑 owner" : "";
     const visitorMeta = visitorName ? `Visitor ${visitor.id} · ` : "";
     row.innerHTML = `
       <div>
-        <strong>${escapeHtml(visitorLabel)}</strong>
+        <strong>${escapeHtml(visitorLabel)}${ownerTag}</strong>
         <span>${escapeHtml(visitorMeta)}${visitor.clientCount} tab${visitor.clientCount === 1 ? "" : "s"} connected</span>
       </div>
     `;
+
+    const owner = document.createElement("button");
+    owner.type = "button";
+    owner.textContent = visitor.isOwner ? "Owner ✓" : "Make owner";
+    owner.addEventListener("click", () => action("setOwnerVisitor", { visitorId: visitor.id, owner: !visitor.isOwner }));
 
     const kick = document.createElement("button");
     kick.type = "button";
@@ -178,7 +184,7 @@ function render(data) {
     block.textContent = "Block";
     block.addEventListener("click", () => action("blockVisitor", { visitorId: visitor.id }));
 
-    row.append(kick, block);
+    row.append(owner, kick, block);
     visitorList.appendChild(row);
   }
 

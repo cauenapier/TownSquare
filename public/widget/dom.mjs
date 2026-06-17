@@ -528,8 +528,11 @@ export function setAvatarProfile(avatar, profile = {}) {
     : "";
   const readingUrl = typeof profile.readingUrl === "string" ? profile.readingUrl : "";
   const readingActive = profile.readingActive !== false;
+  const isOwner = Boolean(profile.isOwner);
+  const isPeer = avatar.el.classList.contains("townsquare-avatar--peer");
   avatar.el.dataset.color = color;
   avatar.el.style.color = color || "";
+  avatar.el.classList.toggle("townsquare-avatar--owner", isOwner);
   avatar.el.classList.toggle("townsquare-avatar--has-display-name", Boolean(displayName));
   avatar.el.classList.toggle("townsquare-avatar--has-reading", Boolean(readingLabel));
   avatar.el.classList.toggle("townsquare-avatar--reading-away", Boolean(readingLabel) && !readingActive);
@@ -537,9 +540,10 @@ export function setAvatarProfile(avatar, profile = {}) {
     avatar.dot.style.background = color || "";
   }
   if (avatar.nameEl) {
-    avatar.nameEl.textContent = displayName || "you";
+    avatar.nameEl.textContent = displayName || (isPeer ? (isOwner ? "owner" : "") : "you");
     avatar.nameEl.dataset.value = displayName;
-    avatar.nameEl.toggleAttribute("hidden", !displayName && avatar.el.classList.contains("townsquare-avatar--peer"));
+    // Owners always show a nameplate so the verified crown stays visible.
+    avatar.nameEl.toggleAttribute("hidden", !displayName && !isOwner && isPeer);
   }
   if (avatar.readingEl && avatar.readingLabelEl) {
     avatar.readingLabelEl.textContent = readingLabel;
@@ -552,8 +556,8 @@ export function setAvatarProfile(avatar, profile = {}) {
     avatar.readingEl.classList.toggle("townsquare-avatar__reading--available", Boolean(readingLabel));
     avatar.readingEl.toggleAttribute("hidden", !readingLabel);
   }
-  if (avatar.below && avatar.el.classList.contains("townsquare-avatar--peer")) {
-    avatar.below.toggleAttribute("hidden", !displayName && !readingLabel);
+  if (avatar.below && isPeer) {
+    avatar.below.toggleAttribute("hidden", !displayName && !readingLabel && !isOwner);
   }
   for (const swatch of avatar.colorSwatches || []) {
     swatch.setAttribute("aria-pressed", String(swatch.dataset.color === color));

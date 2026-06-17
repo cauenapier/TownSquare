@@ -3,7 +3,25 @@
  */
 
 import { recordMessage } from "./chat.mjs";
+import { OWNER_SETUP_HASH } from "./constants.mjs";
 import { createAvatar, renderAvatar, setAvatarProfile, setFacing, updatePose, updatePropEffects } from "./dom.mjs";
+
+/**
+ * When the page URL carries the owner-setup hash, returns a hint telling the
+ * owner which visitor number to claim in their admin page. Otherwise null.
+ *
+ * @param {number | string | null} id
+ * @returns {string | null}
+ */
+function ownerSetupHint(id) {
+  if (id == null) return null;
+  try {
+    if (!window.location.hash.includes(OWNER_SETUP_HASH)) return null;
+  } catch {
+    return null;
+  }
+  return `You're visitor #${id} — open your TownSquare admin page and click "Make owner" on this visitor.`;
+}
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -30,7 +48,7 @@ export function setStatusMessage(ctx, message) {
  */
 export function updateStatus(ctx) {
   if (ctx.self.id) {
-    setStatusMessage(ctx, null);
+    setStatusMessage(ctx, ownerSetupHint(ctx.self.id));
     return;
   }
 
@@ -59,6 +77,7 @@ export function getOrCreatePeer(ctx, peer) {
     readingLabel: peer.readingLabel || "",
     readingUrl: peer.readingUrl || "",
     readingActive: peer.readingActive !== false,
+    isOwner: peer.isOwner === true,
     avatar,
     walkTimer: null,
   };
@@ -99,6 +118,7 @@ export function applySelfState(ctx, state) {
   if (typeof state.readingLabel === "string") ctx.self.readingLabel = state.readingLabel;
   if (typeof state.readingUrl === "string") ctx.self.readingUrl = state.readingUrl;
   if (typeof state.readingActive === "boolean") ctx.self.readingActive = state.readingActive;
+  if (typeof state.isOwner === "boolean") ctx.self.isOwner = state.isOwner;
   if (ctx.self.pose) {
     // The server snapped us onto a seat; abandon any pending tap destination.
     ctx.self.targetX = null;
@@ -132,6 +152,7 @@ export function applyPeerState(ctx, peerState) {
   if (typeof peerState.readingLabel === "string") peer.readingLabel = peerState.readingLabel;
   if (typeof peerState.readingUrl === "string") peer.readingUrl = peerState.readingUrl;
   if (typeof peerState.readingActive === "boolean") peer.readingActive = peerState.readingActive;
+  if (typeof peerState.isOwner === "boolean") peer.isOwner = peerState.isOwner;
   renderAvatar(peer.avatar, peer.x);
   setAvatarProfile(peer.avatar, peer);
   if (hadPeer && peer.x !== previousX) {
@@ -162,10 +183,10 @@ function applyPresenceFields(ctx, state, fields) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {{ id: string, displayName?: string, color?: string }} profile
+ * @param {{ id: string, displayName?: string, color?: string, isOwner?: boolean }} profile
  */
 export function applyProfileState(ctx, profile) {
-  applyPresenceFields(ctx, profile, ["displayName", "color"]);
+  applyPresenceFields(ctx, profile, ["displayName", "color", "isOwner"]);
 }
 
 /**

@@ -117,10 +117,18 @@ Only an admin token hash is stored in the site registry.
 
 The admin page supports the first hosted operations:
 - view install status and active visitors
+- mark/unmark an active visitor as the verified site owner
 - kick/block active visitors
 - disable chat
 - disable the site
 - clear recent in-memory messages
+
+Marking a visitor as owner stores that browser's id under `ownerBrowserIds` on the site
+record and stamps a server-issued owner badge (a crown) on that character for everyone in
+the square. The flag is re-applied on every join and is gated by the visitor's
+server-issued `browserSecret`, so it cannot be forged by typing a name or by another
+browser asserting the same id. Ownership is per-browser, in keeping with the accountless
+model; see the README "Mark the site owner" section for the owner-facing steps.
 
 Registered site records are stored in `.data/sites.json` by default.
 For production, set `DATA_DIR` to a persistent directory and `PUBLIC_ORIGIN` to the public HTTPS origin.
