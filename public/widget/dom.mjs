@@ -459,6 +459,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
 
   const openComposer = () => {
     closeProfile();
+    el.classList.add("townsquare-avatar--composing");
     plate.hidden = true;
     profileButton.hidden = true;
     composer.hidden = false;
@@ -474,6 +475,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   };
 
   const closeComposer = () => {
+    el.classList.remove("townsquare-avatar--composing");
     composer.hidden = true;
     plate.hidden = false;
     profileButton.hidden = false;

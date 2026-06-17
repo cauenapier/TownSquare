@@ -982,6 +982,21 @@
   transform: translate(-50%, 0);
 }
 
+/* composing: your tray would sit over neighbours' speech bubbles */
+.townsquare-avatar--self.townsquare-avatar--composing .townsquare-avatar__tray,
+.townsquare-avatar--self.townsquare-avatar--has-history:focus-within .townsquare-avatar__tray,
+.townsquare-avatar--self.townsquare-avatar--has-history:has(.townsquare-avatar__below:hover) .townsquare-avatar__tray {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+}
+
+.townsquare-avatar--self.townsquare-avatar--composing .townsquare-avatar__above,
+.townsquare-avatar--self.townsquare-avatar--has-history:focus-within .townsquare-avatar__above,
+.townsquare-avatar--self.townsquare-avatar--has-history:has(.townsquare-avatar__below:hover) .townsquare-avatar__above {
+  opacity: var(--bubble-fade, 1);
+}
+
 /* transparent bridge across the gap so hover survives figure → tray travel */
 .townsquare-avatar__tray::after {
   content: "";
