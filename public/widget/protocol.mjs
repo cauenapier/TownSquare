@@ -53,15 +53,15 @@ function clearPresencePoseForAction(presence) {
   setWalking(presence.avatar, false);
 }
 
+function presenceById(ctx, id) {
+  return id === ctx.self.id ? ctx.self : ctx.peers.get(id);
+}
+
 function applyJump(ctx, id) {
-  const presence = id === ctx.self.id ? ctx.self : ctx.peers.get(id);
+  const presence = presenceById(ctx, id);
   if (!presence) return;
   clearPresencePoseForAction(presence);
   playJump(presence.avatar);
-}
-
-function presenceById(ctx, id) {
-  return id === ctx.self.id ? ctx.self : ctx.peers.get(id);
 }
 
 function applyRaiseHand(ctx, id) {

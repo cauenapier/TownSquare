@@ -1,3 +1,6 @@
+import { bindCopy } from "./ui-common.mjs";
+import { createAutoRefresh, createStatusSetter, escapeHtml, formatTime, postJson } from "./hosted-common.mjs";
+
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
 const loginForm = document.getElementById("login-form");
@@ -20,18 +23,10 @@ const REFRESH_INTERVAL_MS = 5000;
 let currentSite = null;
 let siteKey = "";
 let adminToken = "";
-let refreshTimer = null;
 
-function setLoginStatus(message, isError = false) {
-  loginStatusEl.textContent = message;
-  loginStatusEl.hidden = !message;
-  loginStatusEl.classList.toggle("hosted-status--error", isError);
-}
-
-function setStatus(message, isError = false) {
-  statusEl.textContent = message;
-  statusEl.classList.toggle("hosted-status--error", isError);
-}
+const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
+const setStatus = createStatusSetter(statusEl);
+const autoRefresh = createAutoRefresh(() => loadSite({ silent: true }), REFRESH_INTERVAL_MS);
 
 function readStoredCredentials() {
   try {
@@ -71,7 +66,7 @@ function clearCredentials() {
 }
 
 function showLogin(message = "", isError = false) {
-  stopAutoRefresh();
+  autoRefresh.stop();
   adminView.hidden = true;
   loginView.hidden = false;
   setLoginStatus(message, isError);
@@ -81,49 +76,7 @@ function showLogin(message = "", isError = false) {
 function showAdmin() {
   loginView.hidden = true;
   adminView.hidden = false;
-  startAutoRefresh();
-}
-
-function startAutoRefresh() {
-  if (refreshTimer) return;
-  refreshTimer = setInterval(() => {
-    if (!document.hidden) {
-      loadSite({ silent: true });
-    }
-  }, REFRESH_INTERVAL_MS);
-}
-
-function stopAutoRefresh() {
-  if (!refreshTimer) return;
-  clearInterval(refreshTimer);
-  refreshTimer = null;
-}
-
-async function api(path, payload) {
-  try {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json();
-    return { ok: response.ok, status: response.status, body };
-  } catch {
-    return { ok: false, status: 0, body: { error: "Could not reach the server." } };
-  }
-}
-
-function formatTime(value) {
-  if (!value) return "Not seen yet";
-  return new Date(value).toLocaleString();
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+  autoRefresh.start();
 }
 
 function render(data) {
@@ -135,7 +88,7 @@ function render(data) {
       <div><dt>Site</dt><dd>${escapeHtml(currentSite.name)}</dd></div>
       <div><dt>Origin</dt><dd>${escapeHtml(currentSite.origin)}</dd></div>
       <div><dt>Status</dt><dd>${currentSite.disabled ? "Disabled" : "Enabled"}</dd></div>
-      <div><dt>Verified</dt><dd>${formatTime(currentSite.verifiedAt)}</dd></div>
+      <div><dt>Verified</dt><dd>${formatTime(currentSite.verifiedAt, "Not seen yet")}</dd></div>
       <div><dt>Active visitors</dt><dd>${scene.activeVisitors}</dd></div>
       <div><dt>Blocked</dt><dd>${currentSite.blockedCount}</dd></div>
     </dl>
@@ -204,7 +157,7 @@ async function loadSite({ silent = false } = {}) {
   }
 
   if (!siteKey) {
-    const login = await api("/api/admin/login", { adminToken });
+    const login = await postJson("/api/admin/login", { adminToken });
     if (!login.ok) {
       clearCredentials();
       showLogin(login.body.error || "Could not open admin with that token.", true);
@@ -213,7 +166,7 @@ async function loadSite({ silent = false } = {}) {
     siteKey = login.body.site.siteKey;
   }
 
-  const result = await api("/api/admin/site", { siteKey, adminToken });
+  const result = await postJson("/api/admin/site", { siteKey, adminToken });
   if (!result.ok) {
     if (result.status === 403) {
       clearCredentials();
@@ -232,7 +185,7 @@ async function loadSite({ silent = false } = {}) {
 }
 
 async function action(name, data = {}) {
-  const result = await api("/api/admin/action", { siteKey, adminToken, action: name, ...data });
+  const result = await postJson("/api/admin/action", { siteKey, adminToken, action: name, ...data });
   if (!result.ok) {
     setStatus(result.body.error || "Action failed.", true);
     return;
@@ -262,19 +215,7 @@ signOutButton.addEventListener("click", () => {
   showLogin("Signed out. Your token was forgotten on this device.");
 });
 
-copyButton.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(snippetEl.value);
-  } catch {
-    snippetEl.focus();
-    snippetEl.select();
-    return;
-  }
-  copyButton.textContent = "Copied";
-  setTimeout(() => {
-    copyButton.textContent = "Copy snippet";
-  }, 1200);
-});
+bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
 
 chatDisabledInput.addEventListener("change", () => action("setChatDisabled", { disabled: chatDisabledInput.checked }));
 clearMessagesButton.addEventListener("click", () => action("clearMessages"));

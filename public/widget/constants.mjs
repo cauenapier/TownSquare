@@ -37,5 +37,7 @@ export const MOVEMENT_SPEED = 0.22;
 export const SEND_INTERVAL_MS = 45;
 export const RAISED_HAND_MS = 5000;
 export const HIGH_FIVE_MS = 760;
+/** Jump animation length; matches the jump keyframe in widget.css. Doubles as the re-jump cooldown. */
+export const JUMP_MS = 560;
 
 export const INTERACTIVE_PROPS = PROPS.filter((prop) => prop.pose && prop.zoneRadius > 0);

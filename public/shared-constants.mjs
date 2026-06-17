@@ -24,7 +24,10 @@ export const CHARACTER_COLORS = [
 
 export const DEFAULT_CHARACTER_COLOR = CHARACTER_COLORS[0];
 
-/** @returns {number} */
-export function randomSpawnX() {
-  return MIN_X + Math.random() * (MAX_X - MIN_X);
+/**
+ * @param {() => number} [random] Generator in [0, 1); pass a seeded one for reproducible scenes.
+ * @returns {number}
+ */
+export function randomSpawnX(random = Math.random) {
+  return MIN_X + random() * (MAX_X - MIN_X);
 }

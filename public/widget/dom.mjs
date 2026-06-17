@@ -2,8 +2,9 @@
  * DOM construction and avatar/scene rendering for the TownSquare widget.
  */
 
-import { DISPLAY_NAME_MAX, HIGH_FIVE_MS, MESSAGE_MAX, PROPS, RAISED_HAND_MS, READING_LABEL_MAX } from "./constants.mjs";
+import { DISPLAY_NAME_MAX, HIGH_FIVE_MS, JUMP_MS, MESSAGE_MAX, PROPS, RAISED_HAND_MS } from "./constants.mjs";
 import { figureMarkup } from "./figure.mjs";
+import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
 
 /**
  * @typedef {Object} GhostMessage
@@ -552,13 +553,9 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
  * @param {{ displayName?: string, color?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} profile
  */
 export function setAvatarProfile(avatar, profile = {}) {
-  const displayName = typeof profile.displayName === "string"
-    ? profile.displayName.trim().replace(/\s+/g, " ").slice(0, DISPLAY_NAME_MAX)
-    : "";
+  const displayName = normalizeDisplayName(profile.displayName);
   const color = typeof profile.color === "string" ? profile.color : "";
-  const readingLabel = typeof profile.readingLabel === "string"
-    ? profile.readingLabel.trim().replace(/\s+/g, " ").slice(0, READING_LABEL_MAX)
-    : "";
+  const readingLabel = normalizeReadingLabel(profile.readingLabel);
   const readingUrl = typeof profile.readingUrl === "string" ? profile.readingUrl : "";
   const readingActive = profile.readingActive !== false;
   const isOwner = Boolean(profile.isOwner);
@@ -664,7 +661,7 @@ export function playJump(avatar) {
   avatar.jumpTimer = setTimeout(() => {
     avatar.el.classList.remove("townsquare-avatar--jumping");
     avatar.jumpTimer = null;
-  }, 560);
+  }, JUMP_MS);
 }
 
 /**

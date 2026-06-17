@@ -15,6 +15,8 @@
  * focus. Hovering a character still restores them fully via the tray.
  */
 
+import { clamp } from "./math.mjs";
+
 /**
  * @typedef {import("./dom.mjs").AvatarView} AvatarView
  */
@@ -82,15 +84,6 @@ const PROMINENCE_EPSILON = 0.01;
  * @property {number} sumIdealLeft Sum of each member's ideal cluster-left; mean gives the spot minimizing displacement.
  * @property {Array<{ column: Column, centerOffset: number }>} items Member columns with centres relative to cluster left.
  */
-
-/**
- * @param {number} value
- * @param {number} min
- * @param {number} max
- */
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
 
 /**
  * How prominent a speaker is from where you stand: 1 inside NEAR_X, easing
@@ -182,6 +175,7 @@ function mergeClusters(a, b, gap) {
  * @param {AvatarView} avatar
  * @param {number} shift
  * @param {number} tailShift
+ * @param {number} tailTip
  */
 function setShiftVars(avatar, shift, tailShift, tailTip) {
   if (Math.abs((avatar.bubbleShift ?? 0) - shift) > SHIFT_EPSILON) {
@@ -268,7 +262,7 @@ export function layoutBubbleColumns(stage, presences, selfX, config) {
     // visibility is judged by children: keep their column pinned until they
     // finish, and re-centre the empty column for the next fresh line.
     if (avatar.above.childElementCount === 0) {
-      setShiftVars(avatar, 0, 0);
+      setShiftVars(avatar, 0, 0, 0);
       continue;
     }
     const width = avatar.above.offsetWidth;

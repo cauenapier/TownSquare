@@ -1,5 +1,7 @@
 import { DEFAULT_LAYOUT_CONFIG, layoutBubbleColumns, layoutConfigFor } from "./widget/bubble-layout.mjs";
-import { sayMessage, setExpandedView } from "./widget/chat.mjs";
+import { sayMessage } from "./widget/chat.mjs";
+import { createExpandController } from "./widget/expand.mjs";
+import { clamp } from "./widget/math.mjs";
 import {
   createAvatar,
   renderAvatar,
@@ -11,7 +13,8 @@ import {
   updatePose,
   updatePropEffects,
 } from "./widget/dom.mjs";
-import { INTERACTIVE_PROPS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS } from "./widget/constants.mjs";
+import { INTERACTIVE_PROPS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, randomSpawnX } from "./widget/constants.mjs";
+import { bindCopy } from "./ui-common.mjs";
 
 const DEFAULT_CHARACTER_COUNT = 12;
 const MAX_CHARACTER_COUNT = 60;
@@ -60,10 +63,6 @@ if (
 
 let handle = null;
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
 function readCount() {
   const params = new URLSearchParams(window.location.search);
   const raw = params.get("characters") || params.get("count") || String(DEFAULT_CHARACTER_COUNT);
@@ -87,7 +86,7 @@ function seededRandom(seed) {
 
 function createActor(index, stage, random) {
   const avatar = createAvatar({ isSelf: false });
-  const x = MIN_X + random() * (MAX_X - MIN_X);
+  const x = randomSpawnX(random);
   const direction = random() < 0.5 ? -1 : 1;
   const speed = MOVEMENT_SPEED_MIN + random() * (MOVEMENT_SPEED_MAX - MOVEMENT_SPEED_MIN);
 
@@ -223,35 +222,15 @@ function mountDevScene(count, walking) {
   const { app, stage, status, helpButton, helpPanel, expandButton } = renderShell(root);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
 
-  let expanded = false;
-  let hostBodyOverflow = "";
   /** @type {import("./widget/dom.mjs").AvatarView[]} */
   let sceneAvatars = [];
 
-  const setExpanded = (next) => {
-    if (next !== expanded) {
-      if (next) {
-        hostBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = "hidden";
-      } else {
-        document.body.style.overflow = hostBodyOverflow;
-      }
-    }
-    expanded = next;
-    app.classList.toggle("townsquare--expanded", expanded);
-    expandButton.classList.toggle("townsquare__control--active", expanded);
-    expandButton.setAttribute("aria-pressed", String(expanded));
-    expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
-    setExpandedView(expanded, sceneAvatars);
-  };
-
-  const onExpandClick = () => setExpanded(!expanded);
-
-  const onEscapeExpand = (event) => {
-    if (event.key !== "Escape" || !expanded) return;
-    if (event.target instanceof HTMLInputElement) return;
-    setExpanded(false);
-  };
+  const expandController = createExpandController({
+    app,
+    expandButton,
+    getAvatars: () => sceneAvatars,
+  });
+  const onExpandClick = () => expandController.setExpanded(!expandController.isExpanded());
 
   renderProps(stage);
   status.textContent = `You plus ${count} simulated ${count === 1 ? "character" : "characters"}`;
@@ -262,7 +241,6 @@ function mountDevScene(count, walking) {
   sceneAvatars = [self.avatar, ...actors.map((actor) => actor.avatar)];
 
   expandButton.addEventListener("click", onExpandClick);
-  window.addEventListener("keydown", onEscapeExpand);
   let actorsWalking = walking;
   let frame = null;
   let lastFrameAt = performance.now();
@@ -283,7 +261,7 @@ function mountDevScene(count, walking) {
     for (const actor of actors) {
       stepActor(actor, now, dt, random, actorsWalking);
     }
-    layoutBubbleColumns(stage, [self, ...actors], self.x, layoutConfigFor(tuning.layout, expanded));
+    layoutBubbleColumns(stage, [self, ...actors], self.x, layoutConfigFor(tuning.layout, expandController.isExpanded()));
     frame = requestAnimationFrame(tick);
   };
 
@@ -305,8 +283,7 @@ function mountDevScene(count, walking) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       expandButton.removeEventListener("click", onExpandClick);
-      window.removeEventListener("keydown", onEscapeExpand);
-      setExpanded(false);
+      expandController.destroy();
       unwireHelpPanel();
       root.replaceChildren();
     },
@@ -396,16 +373,9 @@ resetButton?.addEventListener("click", () => {
   refreshReadout();
 });
 
-copyButton?.addEventListener("click", async () => {
-  if (!readout) return;
-  try {
-    await navigator.clipboard.writeText(readout.textContent || "");
-    copyButton.textContent = "Copied";
-    setTimeout(() => { copyButton.textContent = "Copy values"; }, 1200);
-  } catch {
-    copyButton.textContent = "Copy failed";
-    setTimeout(() => { copyButton.textContent = "Copy values"; }, 1200);
-  }
+bindCopy(copyButton, {
+  text: () => readout?.textContent || "",
+  failedLabel: "Copy failed",
 });
 
 refreshReadout();

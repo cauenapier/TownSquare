@@ -35,9 +35,19 @@ TownSquare currently has three practical surfaces:
 
 That separation is now reflected directly in the repo:
 - `public/townsquare.mjs` = reusable widget mount API
-- `public/widget/` = widget implementation split by concern (DOM, chat, presence, protocol, movement)
+- `public/widget/` = widget implementation split by concern: scene/DOM (`dom`,
+  `figure`), chat bubbles (`chat`, `bubble-layout`), presence/protocol
+  (`presence`, `protocol`), input/motion (`movement`), ambient `birds`,
+  host-page reading tags (`page-watch`), the fullscreen `expand` controller,
+  the shared mount `context` typedef, and small `constants`/`math`/`utils`.
+- `public/shared-constants.mjs` + `public/scene-props.mjs` +
+  `public/bird-perches.mjs` = protocol/scene definitions loaded by both the
+  browser widget and the CommonJS server (keep them browser/Node-agnostic).
 - `public/demo.mjs` + `public/index.html` = demo shell
-- `public/register.html` + `public/admin.html` + `public/service-admin.html` = hosted setup/admin shells
+- `public/register.html` + `public/admin.html` + `public/service-admin.html` =
+  hosted setup/admin shells, sharing `public/hosted-common.mjs` and
+  `public/ui-common.mjs`
+- `public/dev.html` + `public/dev-scene.mjs` + `public/walk-sandbox.*` = dev tooling
 - `server.js` = static + realtime service
 
 ## Why this boundary matters

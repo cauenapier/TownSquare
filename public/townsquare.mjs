@@ -6,9 +6,10 @@
  * new scene features can grow without turning the mount file into a monolith.
  */
 
-import { setExpandedView, submitChat } from "./widget/chat.mjs";
+import { submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds } from "./widget/birds.mjs";
 import { CHARACTER_COLORS, randomSpawnX } from "./widget/constants.mjs";
+import { createExpandController } from "./widget/expand.mjs";
 import {
   createAvatar,
   renderAvatar,
@@ -170,26 +171,13 @@ export function mountTownSquare(root, options = {}) {
     onStageClick: () => {},
   };
 
-  // Expanded mode overlays the host page, so lock its scroll while open and
-  // restore whatever inline overflow it had before.
-  let hostBodyOverflow = "";
-
-  const setExpanded = (expanded) => {
-    if (expanded !== ctx.expanded) {
-      if (expanded) {
-        hostBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = "hidden";
-      } else {
-        document.body.style.overflow = hostBodyOverflow;
-      }
-    }
-    ctx.expanded = expanded;
-    ctx.app.classList.toggle("townsquare--expanded", expanded);
-    ctx.expandButton.classList.toggle("townsquare__control--active", expanded);
-    ctx.expandButton.setAttribute("aria-pressed", String(expanded));
-    ctx.expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
-    setExpandedView(expanded, [ctx.self.avatar, ...Array.from(ctx.peers.values()).map((peer) => peer.avatar)]);
-  };
+  const expandController = createExpandController({
+    app,
+    expandButton,
+    getAvatars: () => [ctx.self.avatar, ...Array.from(ctx.peers.values(), (peer) => peer.avatar)],
+    onChange: (expanded) => { ctx.expanded = expanded; },
+  });
+  const setExpanded = expandController.setExpanded;
 
   const setQuiet = (quiet) => {
     ctx.quiet = quiet;
@@ -209,20 +197,13 @@ export function mountTownSquare(root, options = {}) {
 
   quietButton.addEventListener("click", () => setQuiet(!ctx.quiet));
   expandButton.addEventListener("click", () => {
-    setExpanded(!ctx.expanded);
+    setExpanded(!expandController.isExpanded());
   });
   const onJumpClick = () => triggerJump(ctx);
   const onHighFiveClick = () => triggerHighFive(ctx);
   jumpButton.addEventListener("click", onJumpClick);
   highFiveButton.addEventListener("click", onHighFiveClick);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
-
-  const onWindowKeyDown = (event) => {
-    if (event.key !== "Escape" || !ctx.expanded) return;
-    if (event.target instanceof HTMLInputElement) return;
-    setExpanded(false);
-  };
-  window.addEventListener("keydown", onWindowKeyDown);
 
   const unwatchPage = watchCurrentPage(ctx);
 
@@ -261,13 +242,12 @@ export function mountTownSquare(root, options = {}) {
       jumpButton.removeEventListener("click", onJumpClick);
       highFiveButton.removeEventListener("click", onHighFiveClick);
       closeTrays(ctx);
-      window.removeEventListener("keydown", onWindowKeyDown);
       unwatchPage();
       if (coarsePointer && viewport) {
         viewport.removeEventListener("resize", onViewportChange);
         viewport.removeEventListener("scroll", onViewportChange);
       }
-      setExpanded(false);
+      expandController.destroy();
       clearTimeout(ctx.reconnectTimer);
       ctx.reconnectTimer = null;
       ctx.socket.close();

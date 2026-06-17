@@ -3,7 +3,8 @@
  */
 
 import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
-import { HIGH_FIVE_DISTANCE, INTERACTIVE_PROPS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
+import { HIGH_FIVE_DISTANCE, INTERACTIVE_PROPS, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
+import { clamp } from "./math.mjs";
 import {
   playHighFive,
   playJump,
@@ -24,7 +25,7 @@ import {
  * @returns {number}
  */
 export function clampSelfX(x) {
-  return Math.max(MIN_X, Math.min(MAX_X, x));
+  return clamp(x, MIN_X, MAX_X);
 }
 
 /**
@@ -85,7 +86,8 @@ export function maybeSendMove(ctx) {
   socket.send(JSON.stringify({ type: "move", x: self.x }));
 }
 
-const JUMP_COOLDOWN_MS = 560;
+// Block re-jumping until the current jump animation finishes.
+const JUMP_COOLDOWN_MS = JUMP_MS;
 const HIGH_FIVE_COOLDOWN_MS = 360;
 
 /**

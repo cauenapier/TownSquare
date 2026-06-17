@@ -1,3 +1,6 @@
+import { bindCopy } from "./ui-common.mjs";
+import { createAutoRefresh, createStatusSetter, escapeHtml, formatTime, postJson } from "./hosted-common.mjs";
+
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
 const loginForm = document.getElementById("login-form");
@@ -16,21 +19,16 @@ const STORAGE_KEY = "townsquare-service-admin-password";
 const REFRESH_INTERVAL_MS = 5000;
 
 let password = sessionStorage.getItem(STORAGE_KEY) || "";
-let refreshTimer = null;
 
-function setLoginStatus(message, isError = false) {
-  loginStatusEl.textContent = message;
-  loginStatusEl.hidden = !message;
-  loginStatusEl.classList.toggle("hosted-status--error", isError);
-}
+const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
+const setStatus = createStatusSetter(statusEl);
+const autoRefresh = createAutoRefresh(() => loadSites({ silent: true }), REFRESH_INTERVAL_MS);
 
-function setStatus(message, isError = false) {
-  statusEl.textContent = message;
-  statusEl.classList.toggle("hosted-status--error", isError);
-}
+// Every service-admin request carries the operator password.
+const api = (path, payload = {}) => postJson(path, { password, ...payload });
 
 function showLogin(message = "", isError = false) {
-  stopAutoRefresh();
+  autoRefresh.stop();
   adminView.hidden = true;
   loginView.hidden = false;
   setLoginStatus(message, isError);
@@ -40,49 +38,7 @@ function showLogin(message = "", isError = false) {
 function showAdmin() {
   loginView.hidden = true;
   adminView.hidden = false;
-  startAutoRefresh();
-}
-
-function startAutoRefresh() {
-  if (refreshTimer) return;
-  refreshTimer = setInterval(() => {
-    if (!document.hidden) {
-      loadSites({ silent: true });
-    }
-  }, REFRESH_INTERVAL_MS);
-}
-
-function stopAutoRefresh() {
-  if (!refreshTimer) return;
-  clearInterval(refreshTimer);
-  refreshTimer = null;
-}
-
-async function api(path, payload = {}) {
-  try {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password, ...payload }),
-    });
-    const body = await response.json();
-    return { ok: response.ok, status: response.status, body };
-  } catch {
-    return { ok: false, status: 0, body: { error: "Could not reach the server." } };
-  }
-}
-
-function formatTime(value) {
-  if (!value) return "Never";
-  return new Date(value).toLocaleString();
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+  autoRefresh.start();
 }
 
 function renderSites(sites) {
@@ -235,19 +191,7 @@ signOutButton.addEventListener("click", () => {
   showLogin("Signed out. The service admin password was forgotten on this device.");
 });
 
-copyTokenButton.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(newAdminTokenEl.value);
-  } catch {
-    newAdminTokenEl.focus();
-    newAdminTokenEl.select();
-    return;
-  }
-  copyTokenButton.textContent = "Copied";
-  setTimeout(() => {
-    copyTokenButton.textContent = "Copy token";
-  }, 1200);
-});
+bindCopy(copyTokenButton, { text: () => newAdminTokenEl.value, source: newAdminTokenEl });
 
 if (password) {
   loadSites();
