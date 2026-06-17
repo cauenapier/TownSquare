@@ -2,7 +2,7 @@
  * Keyboard and stage tap input, local movement animation, and prop settle requests.
  */
 
-import { layoutBubbleColumns } from "./bubble-layout.mjs";
+import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
 import { HIGH_FIVE_DISTANCE, INTERACTIVE_PROPS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import {
   playHighFive,
@@ -229,7 +229,12 @@ export function tick(ctx, now) {
     maybeRequestPropSettle(ctx, now);
   }
 
-  layoutBubbleColumns(ctx.stage, [ctx.self, ...ctx.peers.values()], ctx.self.x);
+  layoutBubbleColumns(
+    ctx.stage,
+    [ctx.self, ...ctx.peers.values()],
+    ctx.self.x,
+    layoutConfigFor(undefined, ctx.expanded),
+  );
 
   ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
 }

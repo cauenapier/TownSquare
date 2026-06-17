@@ -1,5 +1,5 @@
-import { DEFAULT_LAYOUT_CONFIG, layoutBubbleColumns } from "./widget/bubble-layout.mjs";
-import { sayMessage } from "./widget/chat.mjs";
+import { DEFAULT_LAYOUT_CONFIG, layoutBubbleColumns, layoutConfigFor } from "./widget/bubble-layout.mjs";
+import { sayMessage, setExpandedView } from "./widget/chat.mjs";
 import {
   createAvatar,
   renderAvatar,
@@ -220,8 +220,38 @@ function stepSelf(self, now, dt) {
 function mountDevScene(count, walking) {
   root.replaceChildren();
 
-  const { stage, status, helpButton, helpPanel } = renderShell(root);
+  const { app, stage, status, helpButton, helpPanel, expandButton } = renderShell(root);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
+
+  let expanded = false;
+  let hostBodyOverflow = "";
+  /** @type {import("./widget/dom.mjs").AvatarView[]} */
+  let sceneAvatars = [];
+
+  const setExpanded = (next) => {
+    if (next !== expanded) {
+      if (next) {
+        hostBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+      } else {
+        document.body.style.overflow = hostBodyOverflow;
+      }
+    }
+    expanded = next;
+    app.classList.toggle("townsquare--expanded", expanded);
+    expandButton.classList.toggle("townsquare__control--active", expanded);
+    expandButton.setAttribute("aria-pressed", String(expanded));
+    expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
+    setExpandedView(expanded, sceneAvatars);
+  };
+
+  const onExpandClick = () => setExpanded(!expanded);
+
+  const onEscapeExpand = (event) => {
+    if (event.key !== "Escape" || !expanded) return;
+    if (event.target instanceof HTMLInputElement) return;
+    setExpanded(false);
+  };
 
   renderProps(stage);
   status.textContent = `You plus ${count} simulated ${count === 1 ? "character" : "characters"}`;
@@ -229,6 +259,10 @@ function mountDevScene(count, walking) {
   const random = seededRandom(count * 9973);
   const actors = Array.from({ length: count }, (_, index) => createActor(index, stage, random));
   const self = createSelf(stage);
+  sceneAvatars = [self.avatar, ...actors.map((actor) => actor.avatar)];
+
+  expandButton.addEventListener("click", onExpandClick);
+  window.addEventListener("keydown", onEscapeExpand);
   let actorsWalking = walking;
   let frame = null;
   let lastFrameAt = performance.now();
@@ -249,7 +283,7 @@ function mountDevScene(count, walking) {
     for (const actor of actors) {
       stepActor(actor, now, dt, random, actorsWalking);
     }
-    layoutBubbleColumns(stage, [self, ...actors], self.x, tuning.layout);
+    layoutBubbleColumns(stage, [self, ...actors], self.x, layoutConfigFor(tuning.layout, expanded));
     frame = requestAnimationFrame(tick);
   };
 
@@ -270,6 +304,9 @@ function mountDevScene(count, walking) {
       if (frame !== null) cancelAnimationFrame(frame);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      expandButton.removeEventListener("click", onExpandClick);
+      window.removeEventListener("keydown", onEscapeExpand);
+      setExpanded(false);
       unwireHelpPanel();
       root.replaceChildren();
     },

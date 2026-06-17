@@ -7,7 +7,14 @@
  * ghosts — but every bubble still expires individually, oldest first.
  */
 
-import { BUBBLE_TTL_MS, GHOST_STACK_MAX, MAX_RECENT_MESSAGES } from "./constants.mjs";
+import {
+  BUBBLE_TTL_EXPANDED_MS,
+  BUBBLE_TTL_MS,
+  GHOST_STACK_MAX,
+  GHOST_STACK_MAX_EXPANDED,
+  MAX_RECENT_MESSAGES,
+  MAX_RECENT_MESSAGES_EXPANDED,
+} from "./constants.mjs";
 import { createBubble, createTrayRow } from "./dom.mjs";
 
 /**
@@ -20,6 +27,55 @@ const FADE_MS = 320;
 
 // Monotonic speak order so overlapping bubble columns stack newest-on-top.
 let speakOrder = 1;
+let expandedView = false;
+
+function bubbleTtl() {
+  return expandedView ? BUBBLE_TTL_EXPANDED_MS : BUBBLE_TTL_MS;
+}
+
+function ghostStackMax() {
+  return expandedView ? GHOST_STACK_MAX_EXPANDED : GHOST_STACK_MAX;
+}
+
+function maxRecentMessages() {
+  return expandedView ? MAX_RECENT_MESSAGES_EXPANDED : MAX_RECENT_MESSAGES;
+}
+
+/**
+ * Switch chat linger/stack limits for expanded mode and refresh live bubbles.
+ *
+ * @param {boolean} expanded
+ * @param {AvatarView[]} [avatars]
+ */
+export function setExpandedView(expanded, avatars = []) {
+  expandedView = expanded;
+  const ttl = bubbleTtl();
+  const stackMax = ghostStackMax();
+  const recentMax = maxRecentMessages();
+
+  for (const avatar of avatars) {
+    for (const message of avatar.messages) {
+      if (message.timer) clearTimeout(message.timer);
+      message.timer = setTimeout(() => expire(avatar, message), ttl);
+    }
+
+    if (!expanded) {
+      while (avatar.messages.length > stackMax) {
+        const dropped = avatar.messages.shift();
+        if (!dropped) break;
+        clearTimeout(dropped.timer);
+        dropped.el.remove();
+      }
+      if (avatar.history.length > recentMax) {
+        avatar.history = avatar.history.slice(-recentMax);
+        avatar.trayList.replaceChildren(...avatar.history.map(createTrayRow));
+        avatar.el.classList.toggle("townsquare-avatar--has-history", avatar.history.length > 0);
+      }
+    }
+
+    renderGhostStack(avatar);
+  }
+}
 
 /**
  * Re-apply ghost classes by each bubble's distance from the newest line.
@@ -35,7 +91,8 @@ function renderGhostStack(avatar) {
     let className = "townsquare-avatar__bubble";
     if (!(distance === 0 && message.solid)) {
       className += " townsquare-avatar__bubble--ghost";
-      if (distance >= 2) className += " townsquare-avatar__bubble--far";
+      const farDistance = expandedView ? 3 : 2;
+      if (distance >= farDistance) className += " townsquare-avatar__bubble--far";
     }
     message.el.className = className;
   }
@@ -56,8 +113,8 @@ function expire(avatar, message) {
 }
 
 /**
- * Record a line into the character's recent history (the hover tray), capped at
- * MAX_RECENT_MESSAGES. Used for live lines and for backlog seeded on join — the
+ * Record a line into the character's recent history (the hover tray), capped by
+ * mode. Used for live lines and for backlog seeded on join — the latter
  * latter populates history without ever popping a live bubble.
  *
  * @param {AvatarView} avatar
@@ -68,7 +125,7 @@ export function recordMessage(avatar, message) {
     text: message.text,
     at: typeof message.at === "number" ? message.at : Date.now(),
   });
-  avatar.history = avatar.history.slice(-MAX_RECENT_MESSAGES);
+  avatar.history = avatar.history.slice(-maxRecentMessages());
 
   avatar.trayList.replaceChildren(...avatar.history.map(createTrayRow));
   avatar.el.classList.toggle("townsquare-avatar--has-history", avatar.history.length > 0);
@@ -95,14 +152,14 @@ export function sayMessage(avatar, message) {
   avatar.messages.push(entry);
 
   // If lines pile up faster than they fade, cap the stack by dropping the oldest.
-  while (avatar.messages.length > GHOST_STACK_MAX) {
+  while (avatar.messages.length > ghostStackMax()) {
     const dropped = avatar.messages.shift();
     if (!dropped) break;
     clearTimeout(dropped.timer);
     dropped.el.remove();
   }
 
-  entry.timer = setTimeout(() => expire(avatar, entry), BUBBLE_TTL_MS);
+  entry.timer = setTimeout(() => expire(avatar, entry), bubbleTtl());
   renderGhostStack(avatar);
 }
 

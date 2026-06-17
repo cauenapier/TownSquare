@@ -44,6 +44,20 @@ export const DEFAULT_LAYOUT_CONFIG = {
   scaleFloor: 0.55,
 };
 
+/** Minimum proximity opacity in expanded mode — distant chatter stays readable. */
+export const FADE_FLOOR_EXPANDED = 0.38;
+
+/**
+ * @param {LayoutConfig} [config]
+ * @param {boolean} [expanded]
+ * @returns {LayoutConfig}
+ */
+export function layoutConfigFor(config, expanded = false) {
+  const base = { ...DEFAULT_LAYOUT_CONFIG, ...config };
+  if (!expanded) return base;
+  return { ...base, fadeFloor: Math.max(base.fadeFloor, FADE_FLOOR_EXPANDED) };
+}
+
 /** The tail's base stays clear of the live bubble's rounded corners by this much. */
 const TAIL_INSET = 22;
 /** How far the tail's tip can lean past its base toward the speaker. */

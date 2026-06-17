@@ -6,7 +6,7 @@
  * new scene features can grow without turning the mount file into a monolith.
  */
 
-import { submitChat } from "./widget/chat.mjs";
+import { setExpandedView, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds } from "./widget/birds.mjs";
 import { CHARACTER_COLORS, randomSpawnX } from "./widget/constants.mjs";
 import {
@@ -188,6 +188,7 @@ export function mountTownSquare(root, options = {}) {
     ctx.expandButton.classList.toggle("townsquare__control--active", expanded);
     ctx.expandButton.setAttribute("aria-pressed", String(expanded));
     ctx.expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
+    setExpandedView(expanded, [ctx.self.avatar, ...Array.from(ctx.peers.values()).map((peer) => peer.avatar)]);
   };
 
   const setQuiet = (quiet) => {

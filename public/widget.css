@@ -983,14 +983,24 @@
 .townsquare-avatar__bubble--ghost .townsquare-avatar__tail { display: none; }
 
 .townsquare-avatar__bubble--ghost {
-  opacity: 0.5;
-  transform: scale(0.9);
+  opacity: 0.72;
+  transform: scale(0.92);
   box-shadow: none;
 }
 
 .townsquare-avatar__bubble--ghost.townsquare-avatar__bubble--far {
-  opacity: 0.26;
-  transform: scale(0.84);
+  opacity: 0.54;
+  transform: scale(0.88);
+}
+
+.townsquare--expanded .townsquare-avatar__bubble--ghost {
+  opacity: 0.82;
+  transform: scale(0.94);
+}
+
+.townsquare--expanded .townsquare-avatar__bubble--ghost.townsquare-avatar__bubble--far {
+  opacity: 0.66;
+  transform: scale(0.9);
 }
 
 /* each line fades out on its own timer, oldest first */

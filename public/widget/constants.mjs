@@ -19,6 +19,8 @@ export {
 } from "../shared-constants.mjs";
 
 export const BUBBLE_TTL_MS = 6000;
+/** Bubble linger time in expanded (fullscreen) mode — more room to read the scene. */
+export const BUBBLE_TTL_EXPANDED_MS = 12_000;
 /** URL hash flag that reveals the owner-claim hint ("You're visitor #N"). */
 export const OWNER_SETUP_HASH = "townsquare-owner";
 export const BROWSER_ID_KEY = "townsquare-browser-id";
@@ -27,6 +29,10 @@ export const PROFILE_STORAGE_KEY = "townsquare-profile";
 export const PROP_SETTLE_MS = 700;
 /** Most bubbles kept visible in a figure's ghost stack (live + lingering ghosts). */
 export const GHOST_STACK_MAX = 4;
+/** Ghost stack cap in expanded mode — the taller stage can carry more lines. */
+export const GHOST_STACK_MAX_EXPANDED = 7;
+/** Hover-tray history cap in expanded mode. */
+export const MAX_RECENT_MESSAGES_EXPANDED = 10;
 export const MOVEMENT_SPEED = 0.22;
 export const SEND_INTERVAL_MS = 45;
 export const RAISED_HAND_MS = 5000;
