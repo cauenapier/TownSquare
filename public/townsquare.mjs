@@ -6,7 +6,7 @@
  * new scene features can grow without turning the mount file into a monolith.
  */
 
-import { submitChat } from "./widget/chat.mjs";
+import { setLocalTyping, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds } from "./widget/birds.mjs";
 import { CHARACTER_COLORS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
@@ -196,6 +196,7 @@ export function mountTownSquare(root, options = {}) {
       readingLabel,
       readingUrl,
       readingActive,
+      typing: false,
       isOwner: false,
       propZoneEnteredAt: 0,
       settlePropId: null,
@@ -213,6 +214,7 @@ export function mountTownSquare(root, options = {}) {
           }
         },
         onSubmitChat: () => submitChat(ctx),
+        onTypingChange: (typing) => setLocalTyping(ctx, typing),
         composerHost: coarsePointer ? app : undefined,
       }),
       walkTimer: null,
@@ -221,6 +223,7 @@ export function mountTownSquare(root, options = {}) {
       ? { readyState: WebSocket.CLOSED, close() {}, send() {} }
       : new WebSocket(socketUrl),
     reconnectTimer: null,
+    typingTimer: null,
     quiet: false,
     expanded: false,
     disposed: false,
@@ -241,6 +244,7 @@ export function mountTownSquare(root, options = {}) {
 
   const setQuiet = (quiet) => {
     ctx.quiet = quiet;
+    if (quiet) setLocalTyping(ctx, false);
     if (quiet) setExpanded(false);
     ctx.app.classList.toggle("townsquare--quiet", quiet);
     ctx.quietButton.classList.toggle("townsquare__control--active", quiet);
@@ -335,6 +339,8 @@ export function mountTownSquare(root, options = {}) {
       expandController.destroy();
       clearTimeout(ctx.reconnectTimer);
       ctx.reconnectTimer = null;
+      clearTimeout(ctx.typingTimer);
+      ctx.typingTimer = null;
       ctx.socket.close();
       root.replaceChildren();
     },

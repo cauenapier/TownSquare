@@ -24,10 +24,30 @@ import { createBubble, createTrayRow } from "./dom.mjs";
  */
 
 const FADE_MS = 320;
+const TYPING_IDLE_MS = 2500;
 
 // Monotonic speak order so overlapping bubble columns stack newest-on-top.
 let speakOrder = 1;
 let expandedView = false;
+
+/**
+ * Publish local composer activity, stopping automatically if input events cease.
+ *
+ * @param {WidgetContext} ctx
+ * @param {boolean} typing
+ */
+export function setLocalTyping(ctx, typing) {
+  clearTimeout(ctx.typingTimer);
+  ctx.typingTimer = typing
+    ? setTimeout(() => setLocalTyping(ctx, false), TYPING_IDLE_MS)
+    : null;
+
+  if (ctx.self.typing === typing) return;
+  ctx.self.typing = typing;
+  if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
+    ctx.socket.send(JSON.stringify({ type: "typing", typing }));
+  }
+}
 
 function bubbleTtl() {
   return expandedView ? BUBBLE_TTL_EXPANDED_MS : BUBBLE_TTL_MS;
