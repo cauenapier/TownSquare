@@ -743,7 +743,10 @@ const ADMIN_ACTIONS = {
 
     if (scene.clients.size === 0) {
       scenes.delete(site.siteKey);
+      return;
     }
+
+    rebuildSceneProps(scene, site);
   },
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
@@ -1235,6 +1238,40 @@ function createScene(key, site = null) {
     nextBirdId: 1,
     nextSpawnAt: now + BIRD_FIRST_SPAWN_MS,
   };
+}
+
+/**
+ * Rebuild a live scene's props from the site's current config without dropping
+ * connected visitors. Used after a customization change so edits take effect
+ * immediately instead of waiting for the scene to empty and be recreated.
+ *
+ * @param {ReturnType<typeof createScene>} scene
+ * @param {ReturnType<typeof createSiteRecord> | null} site
+ */
+function rebuildSceneProps(scene, site) {
+  const config = getSceneConfig(site);
+  const props = getSceneProps(site);
+  const propsById = new Map(props.map((prop) => [prop.id, prop]));
+
+  scene.props = props;
+  scene.propsById = propsById;
+  scene.birdPerches = getSceneBirdPerches(site);
+  scene.maxBirds = config.birds;
+
+  // Hosted clients arbitrate settle requests against the scene's prop map.
+  for (const client of scene.clients.values()) {
+    if (client.site) client.propsById = propsById;
+  }
+
+  // Stand up anyone whose seat no longer exists or whose prop moved out from
+  // under them, so seated poses stay consistent with the new scene.
+  for (const identity of scene.identities.values()) {
+    if (!identity.pose || !identity.propId) continue;
+    const prop = propsById.get(identity.propId);
+    if (prop?.pose && Math.abs(identity.x - prop.x) <= prop.zoneRadius) continue;
+    clearPose(identity);
+    if (identity.joined) emitIdentityState(identity);
+  }
 }
 
 function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
