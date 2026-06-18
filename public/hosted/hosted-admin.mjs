@@ -52,12 +52,15 @@ bindSceneCountProse(customizationForm);
 
 const STORAGE_KEY = "townsquare-admin-session";
 const REFRESH_INTERVAL_MS = 5000;
+const AUTO_SAVE_DELAY_MS = 1500;
 
 let currentSite = null;
 let siteKey = "";
 let adminToken = "";
 let customizationBusy = false;
 let customizationSavedMessage = "";
+let autoSaveTimer = null;
+let customizationTouched = false;
 
 const preview = createCustomizationPreview({
   root: previewRoot,
@@ -107,10 +110,12 @@ function storeCredentials() {
 }
 
 function clearCredentials() {
+  clearAutoSaveTimer();
   siteKey = "";
   adminToken = "";
   currentSite = null;
   customizationSavedMessage = "";
+  customizationTouched = false;
   preview.destroy();
   sessionStorage.removeItem(STORAGE_KEY);
 }
@@ -180,19 +185,61 @@ function updateCustomizationStatus() {
   }
 
   if (customizationIsDirty()) {
-    setCustomizationStatus("Previewing unsaved changes. Save to regenerate the embed snippet and CSS.");
+    setCustomizationStatus("Unsaved changes will save automatically.");
     return;
   }
 
   setCustomizationStatus("");
 }
 
+function clearAutoSaveTimer() {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+}
+
+function scheduleAutoSave() {
+  clearAutoSaveTimer();
+  if (!currentSite || customizationBusy || !customizationIsDirty()) return;
+
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null;
+    void saveCustomization({ auto: true });
+  }, AUTO_SAVE_DELAY_MS);
+}
+
+async function saveCustomization({ auto = false } = {}) {
+  if (!currentSite || customizationBusy || !customizationIsDirty()) return false;
+
+  clearAutoSaveTimer();
+  customizationBusy = true;
+  if (!auto) customizationSavedMessage = "";
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+
+  const ok = await action("updateCustomization", readCustomizationFromForm());
+
+  customizationBusy = false;
+  if (ok) {
+    customizationTouched = false;
+    customizationSavedMessage = auto
+      ? "Customization saved."
+      : "Customization saved. Copy the refreshed snippet and CSS below.";
+  }
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+  return ok;
+}
+
 function syncCustomizationForm({ force = false } = {}) {
   if (!currentSite || !(customizationForm instanceof HTMLFormElement)) return;
-  if (force || !customizationIsDirty()) {
+  const shouldApply = force || !customizationTouched || !customizationIsDirty();
+  if (shouldApply) {
     const customization = getCurrentCustomization();
     applyConfigToForm(customizationForm, { ...customization.sceneConfig, ...customization.styleConfig });
     syncScenePositionInputs(customization.sceneConfig);
+    if (force) customizationTouched = false;
   }
   updateCustomizationButtons();
   updateCustomizationStatus();
@@ -347,32 +394,23 @@ bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnipp
 
 customizationForm.addEventListener("input", (event) => {
   customizationSavedMessage = "";
+  customizationTouched = true;
   if (isSceneCountInputName(event.target?.name || "")) {
     syncScenePositionInputs(readSceneConfigFromForm(customizationForm));
   }
   updateCustomizationButtons();
   updateCustomizationStatus();
   preview.mount();
+  scheduleAutoSave();
 });
 
 customizationForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  customizationBusy = true;
-  customizationSavedMessage = "";
-  updateCustomizationButtons();
-  updateCustomizationStatus();
-
-  const ok = await action("updateCustomization", readCustomizationFromForm());
-
-  customizationBusy = false;
-  if (ok) {
-    customizationSavedMessage = "Customization saved. Copy the refreshed snippet and CSS below.";
-  }
-  updateCustomizationButtons();
-  updateCustomizationStatus();
+  await saveCustomization();
 });
 
 resetCustomizationButton.addEventListener("click", () => {
+  clearAutoSaveTimer();
   customizationSavedMessage = "";
   syncCustomizationForm({ force: true });
 });
