@@ -221,7 +221,7 @@
   background: var(--ground);
 }
 
-#townsquare-root .prop {
+.townsquare .prop {
   position: absolute;
   bottom: 53px;
   transform: translateX(-50%);
@@ -230,14 +230,14 @@
   pointer-events: none;
 }
 
-#townsquare-root .prop svg {
+.townsquare .prop svg {
   width: 100%;
   height: 100%;
   display: block;
   overflow: visible;
 }
 
-#townsquare-root .prop svg * {
+.townsquare .prop svg * {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -297,17 +297,17 @@
   bottom: calc(18px + var(--ts-keyboard, 0px));
 }
 
-#townsquare-root .prop--tree .canopy,
-#townsquare-root .prop--tree .trunk {
+.townsquare .prop--tree .canopy,
+.townsquare .prop--tree .trunk {
   fill: currentColor;
   fill-opacity: 0.15;
 }
 
-#townsquare-root .prop--lamp {
+.townsquare .prop--lamp {
   z-index: 1;
 }
 
-#townsquare-root .prop__light {
+.townsquare .prop__light {
   position: absolute;
   top: 16%;
   left: 75%;

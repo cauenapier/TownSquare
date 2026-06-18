@@ -112,11 +112,11 @@ export function wireSocket(ctx) {
         readingUrl: self.readingUrl,
         readingActive: self.readingActive,
       };
+      socket.send(JSON.stringify(init));
       const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
       if (!siteKey && ctx.options.scene) {
-        init.sceneConfig = ctx.options.scene;
+        socket.send(JSON.stringify({ type: "sceneConfig", sceneConfig: ctx.options.scene }));
       }
-      socket.send(JSON.stringify(init));
     });
 
     socket.addEventListener("error", () => {
