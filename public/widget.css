@@ -1087,7 +1087,7 @@
   scrollbar-gutter: stable;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 4px);
+  transform: translate(calc(-50% + var(--tray-shift, 0px)), 4px);
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
@@ -1096,7 +1096,7 @@
 .townsquare-avatar--tray-open .townsquare-avatar__tray {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(-50%, 0);
+  transform: translate(calc(-50% + var(--tray-shift, 0px)), 0);
 }
 
 /* composing: your tray would sit over neighbours' speech bubbles */
@@ -1105,7 +1105,7 @@
 .townsquare-avatar--self.townsquare-avatar--has-history:has(.townsquare-avatar__below:hover) .townsquare-avatar__tray {
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 4px);
+  transform: translate(calc(-50% + var(--tray-shift, 0px)), 4px);
 }
 
 .townsquare-avatar--self.townsquare-avatar--composing .townsquare-avatar__above,
