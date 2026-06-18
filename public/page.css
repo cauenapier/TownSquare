@@ -568,21 +568,12 @@ body {
 }
 
 .hosted-shell--compact .hosted-form .hosted-color-control {
-  justify-content: flex-end;
-  width: 100%;
+  justify-content: stretch;
 }
 
 .hosted-shell--compact .scene-counts {
   font-size: 0.92rem;
   line-height: 1.7;
-}
-
-.hosted-shell--compact [aria-labelledby="style-config-title"] > .hosted-grid {
-  grid-template-columns: 1fr;
-}
-
-.hosted-shell--compact [aria-labelledby="style-config-title"] .hosted-grid label {
-  grid-template-columns: minmax(6.5rem, 9.5rem) minmax(0, 1fr);
 }
 
 .hosted-shell--compact .hosted-section {
@@ -702,19 +693,56 @@ body {
   gap: 12px;
 }
 
-.hosted-style-modes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+.hosted-style-hint {
+  margin: -2px 0 12px;
+  font-size: 0.86rem;
 }
 
-.hosted-style-col__head {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: 0.72rem;
+.hosted-style-matrix {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--surface) 72%, transparent);
+}
+
+.hosted-style-matrix__head,
+.hosted-style-matrix__row {
+  display: grid;
+  grid-template-columns: minmax(6.75rem, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.hosted-style-matrix__head {
+  padding-block: 7px;
+  border-bottom: 1px solid var(--hair-2);
+  background: color-mix(in oklab, var(--surface-2) 55%, transparent);
+  color: var(--ink-faint);
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+
+.hosted-style-matrix__head span:not(.hosted-style-matrix__token) {
+  text-align: center;
+}
+
+.hosted-style-matrix__row + .hosted-style-matrix__row {
+  border-top: 1px solid var(--hair-2);
+}
+
+.hosted-style-matrix__label {
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.hosted-style-matrix__cell {
+  min-width: 0;
 }
 
 .hosted-preview-modes {
@@ -761,40 +789,130 @@ body {
 .hosted-color-control {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
-.hosted-form .hosted-color-control input[type="color"] {
-  width: 3rem;
-  max-width: 3rem;
-  height: 38px;
-  padding: 4px;
-  flex: none;
-}
-
-.hosted-color-clear {
-  min-height: 38px;
-  border: 0;
-  border-radius: 10px;
-  padding: 0 10px;
-  background: var(--surface-2);
-  color: var(--ink-soft);
-  font: 650 0.8rem var(--font);
-  box-shadow: inset 0 0 0 1px var(--hair-2);
+.hosted-color-swatch {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--hair-2);
+  overflow: hidden;
   cursor: pointer;
+  background:
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+  box-shadow: inset 0 1px 2px rgba(42, 41, 38, 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hosted-color-swatch:hover {
+  border-color: color-mix(in oklab, var(--ink-faint) 42%, var(--hair-2));
+}
+
+.hosted-color-swatch:focus-within {
+  outline: 2px solid color-mix(in oklab, var(--you) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.hosted-form .hosted-color-swatch input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.hosted-form .hosted-color-swatch input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.hosted-form .hosted-color-swatch input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+
+.hosted-form .hosted-color-swatch input[type="color"]::-moz-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+
+.hosted-color-swatch__state {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.hosted-color-none {
   flex: none;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--hair-2);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  color: var(--ink-faint);
+  font: 650 0.67rem/1 var(--font);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: none;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.hosted-color-clear[aria-pressed="true"] {
-  background: var(--you-tint);
+.hosted-color-none:hover,
+.hosted-color-none:focus-visible {
+  color: var(--ink-soft);
+  border-color: color-mix(in oklab, var(--ink-faint) 36%, var(--hair-2));
+  background: color-mix(in oklab, var(--surface-2) 90%, transparent);
+}
+
+.hosted-color-none:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--you) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.hosted-color-none[aria-pressed="true"] {
   color: var(--you-deep);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--you) 34%, var(--hair-2));
+  border-color: color-mix(in oklab, var(--you) 34%, var(--hair-2));
+  background: var(--you-tint);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--you) 20%, transparent);
 }
 
-.hosted-color-control--transparent input[type="color"] {
-  opacity: 0.45;
+.hosted-color-control--transparent .hosted-color-swatch {
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--ink-faint) 34%, var(--hair-2));
+  cursor: pointer;
+}
+
+.hosted-color-control--transparent .hosted-color-swatch__state {
+  opacity: 1;
+}
+
+.hosted-color-control--transparent .hosted-color-swatch input[type="color"] {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .scene-counts {
@@ -1624,8 +1742,23 @@ body {
   .hosted-shell--compact .hosted-form .hosted-color-control {
     justify-content: stretch;
   }
-  .hosted-shell--compact .hosted-color-clear {
-    margin-left: auto;
+  .hosted-style-matrix__head {
+    display: none;
+  }
+  .hosted-style-matrix__row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .hosted-style-matrix__cell::before {
+    content: attr(data-mode);
+    display: block;
+    margin-bottom: 5px;
+    color: var(--ink-faint);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
   .hosted-grid,
   .hosted-kv,

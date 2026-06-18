@@ -2,12 +2,14 @@ import { bindCopy } from "../lib/ui-common.mjs";
 import { setStatus } from "./hosted-common.mjs";
 import {
   applyConfigToForm,
+  applySceneConfigToForm,
   bindSceneCountProse,
   bindStyleColorFields,
   isSceneCountInputName,
   readSceneConfigFromForm,
   readStyleConfigFromForm,
   renderScenePositionFields,
+  renderStyleOverrideFields,
   sanitizeSceneConfig,
 } from "../shared/site-config.mjs";
 import { mountTownSquare } from "../townsquare.mjs";
@@ -24,6 +26,7 @@ const adminTokenEl = document.getElementById("admin-token");
 const adminLink = document.getElementById("admin-link");
 const previewRoot = document.getElementById("townsquare-root");
 const scenePositionFields = document.getElementById("scene-position-fields");
+const styleOverrideFields = document.getElementById("style-override-fields");
 
 let previewHandle = null;
 let previewMode = "light";
@@ -32,7 +35,7 @@ const previewModeButtons = document.querySelectorAll("[data-preview-mode]");
 function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(form)) {
   const next = sanitizeSceneConfig(sceneConfig);
   renderScenePositionFields(scenePositionFields, next);
-  applyConfigToForm(form, next);
+  applySceneConfigToForm(form, next);
 }
 
 function mountPreview({ remount = false } = {}) {
@@ -125,6 +128,7 @@ form.addEventListener("submit", async (event) => {
 bindCopy("copy-token", { text: () => adminTokenEl.value, source: adminTokenEl });
 bindCopy("copy-snippet", { text: () => snippetEl.value, source: snippetEl });
 bindCopy("copy-style", { text: () => styleSnippetEl.value, source: styleSnippetEl });
+renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(form);
 bindSceneCountProse(form);
 applyConfigToForm(form);

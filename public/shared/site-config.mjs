@@ -390,7 +390,7 @@ export function readStyleConfigFromForm(form) {
   return { light: readPalette("light"), dark: readPalette("dark") };
 }
 
-export function applyConfigToForm(form, config = {}) {
+export function applySceneConfigToForm(form, config = {}) {
   for (const field of SCENE_FIELDS) {
     const input = form.elements.namedItem(field.inputName);
     if (input && "value" in input) {
@@ -411,6 +411,12 @@ export function applyConfigToForm(form, config = {}) {
     birdsInput.value = String(config[SCENE_BIRDS_FIELD.key] ?? SCENE_BIRDS_FIELD.defaultValue);
   }
 
+  syncSceneCountProse(form);
+}
+
+export function applyConfigToForm(form, config = {}) {
+  applySceneConfigToForm(form, config);
+
   for (const mode of STYLE_MODES) {
     const palette = isPlainObject(config[mode]) ? config[mode] : {};
     const defaults = mode === "dark" ? DEFAULT_SITE_STYLE_DARK : DEFAULT_SITE_STYLE_LIGHT;
@@ -425,7 +431,6 @@ export function applyConfigToForm(form, config = {}) {
   }
 
   syncStyleColorFields(form);
-  syncSceneCountProse(form);
 }
 
 export function getSceneCountNoun(field, count) {
@@ -502,25 +507,30 @@ export function bindStyleColorFields(form) {
 
       const picker = control.querySelector("[data-style-picker]");
       const clearButton = control.querySelector("[data-style-clear]");
+      const swatch = control.querySelector(".hosted-color-swatch");
 
       const syncFromValue = () => {
-        const transparent = isTransparentStyleValue(valueInput.value);
-        if (picker instanceof HTMLInputElement) {
-          picker.disabled = transparent;
-          if (!transparent && /^#[0-9a-f]{6}$/i.test(valueInput.value)) {
-            picker.value = valueInput.value;
-          }
-        }
-        if (clearButton instanceof HTMLButtonElement) {
-          clearButton.setAttribute("aria-pressed", transparent ? "true" : "false");
-        }
-        control.classList.toggle("hosted-color-control--transparent", transparent);
+        syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault });
       };
 
       if (picker instanceof HTMLInputElement) {
         picker.addEventListener("input", () => {
           valueInput.value = picker.value;
           syncFromValue();
+          valueInput.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+      }
+
+      if (swatch instanceof HTMLLabelElement) {
+        swatch.addEventListener("click", (event) => {
+          if (!isTransparentStyleValue(valueInput.value)) return;
+          event.preventDefault();
+          valueInput.value = fieldDefault;
+          if (picker instanceof HTMLInputElement) {
+            picker.value = fieldDefault;
+            syncFromValue();
+            picker.click();
+          }
           valueInput.dispatchEvent(new Event("input", { bubbles: true }));
         });
       }
@@ -542,11 +552,49 @@ export function bindStyleColorFields(form) {
   }
 }
 
+function syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault }) {
+  const transparent = isTransparentStyleValue(valueInput.value);
+  const swatch = control.querySelector(".hosted-color-swatch");
+
+  if (picker instanceof HTMLInputElement) {
+    picker.disabled = transparent;
+    if (!transparent && /^#[0-9a-f]{6}$/i.test(valueInput.value)) {
+      picker.value = valueInput.value;
+    }
+  }
+
+  if (swatch instanceof HTMLLabelElement) {
+    if (transparent) {
+      swatch.removeAttribute("for");
+      swatch.title = "Transparent — click to set a color";
+    } else {
+      swatch.htmlFor = picker instanceof HTMLInputElement ? picker.id : "";
+      swatch.removeAttribute("title");
+    }
+  }
+
+  if (clearButton instanceof HTMLButtonElement) {
+    clearButton.setAttribute("aria-pressed", transparent ? "true" : "false");
+    clearButton.title = transparent
+      ? "Transparent (no color) — click to set a color"
+      : "Set transparent (no color)";
+    clearButton.setAttribute(
+      "aria-label",
+      transparent
+        ? "Transparent, no color set; click to choose a color"
+        : "Set this color to transparent (no color)",
+    );
+  }
+
+  control.classList.toggle("hosted-color-control--transparent", transparent);
+}
+
 export function syncStyleColorFields(form) {
   if (!(form instanceof HTMLFormElement)) return;
 
   for (const mode of STYLE_MODES) {
     for (const field of STYLE_FIELDS) {
+      const fieldDefault = mode === "dark" ? field.darkValue : field.defaultValue;
       const valueInput = form.querySelector(`input[type="hidden"][name="${styleInputName(mode, field)}"]`);
       if (!(valueInput instanceof HTMLInputElement)) continue;
 
@@ -555,19 +603,99 @@ export function syncStyleColorFields(form) {
 
       const picker = control.querySelector("[data-style-picker]");
       const clearButton = control.querySelector("[data-style-clear]");
-      const transparent = isTransparentStyleValue(valueInput.value);
-
-      if (picker instanceof HTMLInputElement) {
-        picker.disabled = transparent;
-        if (!transparent && /^#[0-9a-f]{6}$/i.test(valueInput.value)) {
-          picker.value = valueInput.value;
-        }
-      }
-      if (clearButton instanceof HTMLButtonElement) {
-        clearButton.setAttribute("aria-pressed", transparent ? "true" : "false");
-      }
-      control.classList.toggle("hosted-color-control--transparent", transparent);
+      syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault });
     }
+  }
+}
+
+const STYLE_OVERRIDE_FIELDS = STYLE_FIELDS.slice(0, 5);
+
+function createStyleColorControl(mode, field) {
+  const defaultValue = mode === "dark" ? field.darkValue : field.defaultValue;
+  const inputName = styleInputName(mode, field);
+  const modeLabel = mode === "dark" ? "Dark" : "Light";
+
+  const control = document.createElement("div");
+  control.className = "hosted-color-control";
+
+  const swatchLabel = document.createElement("label");
+  swatchLabel.className = "hosted-color-swatch";
+
+  const picker = document.createElement("input");
+  picker.type = "color";
+  picker.id = inputName;
+  picker.value = defaultValue;
+  picker.dataset.stylePicker = inputName;
+
+  const hidden = document.createElement("input");
+  hidden.type = "hidden";
+  hidden.name = inputName;
+  hidden.value = defaultValue;
+
+  const state = document.createElement("span");
+  state.className = "hosted-color-swatch__state";
+  state.setAttribute("aria-hidden", "true");
+  state.textContent = "None";
+
+  const clearButton = document.createElement("button");
+  clearButton.type = "button";
+  clearButton.className = "hosted-color-none";
+  clearButton.dataset.styleClear = inputName;
+  clearButton.setAttribute("aria-pressed", "false");
+  clearButton.setAttribute("aria-label", `Set ${modeLabel.toLowerCase()} ${field.label.toLowerCase()} to transparent (no color)`);
+  clearButton.title = "Set transparent (no color)";
+  clearButton.textContent = "None";
+
+  swatchLabel.htmlFor = inputName;
+  swatchLabel.append(state, picker);
+  control.append(swatchLabel, hidden, clearButton);
+  return control;
+}
+
+export function renderStyleOverrideFields(container) {
+  if (!(container instanceof HTMLElement)) return;
+
+  container.replaceChildren();
+  container.className = "hosted-style-matrix";
+  container.setAttribute("role", "group");
+  container.setAttribute("aria-label", "Style color overrides");
+
+  const head = document.createElement("div");
+  head.className = "hosted-style-matrix__head";
+  head.setAttribute("aria-hidden", "true");
+
+  const tokenHead = document.createElement("span");
+  tokenHead.className = "hosted-style-matrix__token";
+
+  const lightHead = document.createElement("span");
+  lightHead.textContent = "Light";
+
+  const darkHead = document.createElement("span");
+  darkHead.textContent = "Dark";
+
+  head.append(tokenHead, lightHead, darkHead);
+  container.appendChild(head);
+
+  for (const field of STYLE_OVERRIDE_FIELDS) {
+    const row = document.createElement("div");
+    row.className = "hosted-style-matrix__row";
+
+    const label = document.createElement("span");
+    label.className = "hosted-style-matrix__label";
+    label.textContent = field.label;
+
+    const lightCell = document.createElement("div");
+    lightCell.className = "hosted-style-matrix__cell";
+    lightCell.dataset.mode = "Light";
+    lightCell.appendChild(createStyleColorControl("light", field));
+
+    const darkCell = document.createElement("div");
+    darkCell.className = "hosted-style-matrix__cell";
+    darkCell.dataset.mode = "Dark";
+    darkCell.appendChild(createStyleColorControl("dark", field));
+
+    row.append(label, lightCell, darkCell);
+    container.appendChild(row);
   }
 }
 

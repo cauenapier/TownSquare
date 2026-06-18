@@ -9,6 +9,7 @@ import {
 } from "./hosted-common.mjs";
 import {
   applyConfigToForm,
+  applySceneConfigToForm,
   bindSceneCountProse,
   bindStyleColorFields,
   getSceneSummaryEntries,
@@ -16,6 +17,7 @@ import {
   readSceneConfigFromForm,
   readStyleConfigFromForm,
   renderScenePositionFields,
+  renderStyleOverrideFields,
   sanitizeSceneConfig,
   sanitizeSiteStyle,
 } from "../shared/site-config.mjs";
@@ -36,6 +38,7 @@ const saveCustomizationButton = document.getElementById("save-customization");
 const resetCustomizationButton = document.getElementById("reset-customization");
 const previewRoot = document.getElementById("townsquare-root");
 const scenePositionFields = document.getElementById("scene-position-fields");
+const styleOverrideFields = document.getElementById("style-override-fields");
 const snippetEl = document.getElementById("embed-snippet");
 const styleSnippetEl = document.getElementById("style-snippet");
 const sceneSummaryEl = document.getElementById("scene-summary");
@@ -46,6 +49,7 @@ const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
 const visitorList = document.getElementById("visitor-list");
 
+renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(customizationForm);
 bindSceneCountProse(customizationForm);
 
@@ -144,7 +148,7 @@ function renderSceneSummary(sceneConfig = {}) {
 function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(customizationForm)) {
   const next = sanitizeSceneConfig(sceneConfig);
   renderScenePositionFields(scenePositionFields, next);
-  applyConfigToForm(customizationForm, next);
+  applySceneConfigToForm(customizationForm, next);
 }
 
 function getCurrentCustomization() {
@@ -219,7 +223,6 @@ function syncCustomizationForm({ force = false } = {}) {
     const customization = getCurrentCustomization();
     applyConfigToForm(customizationForm, { ...customization.sceneConfig, ...customization.styleConfig });
     syncScenePositionInputs(customization.sceneConfig);
-    applyConfigToForm(customizationForm, { ...customization.sceneConfig, ...customization.styleConfig });
   }
   updateCustomizationButtons();
   updateCustomizationStatus();
