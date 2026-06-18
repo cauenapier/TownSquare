@@ -28,6 +28,18 @@ const PORT = Number(process.env.PORT || 8787);
 const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const PLAUSIBLE_DOMAIN = String(process.env.PLAUSIBLE_DOMAIN || "").trim();
+const PLAUSIBLE_UPSTREAM = String(process.env.PLAUSIBLE_UPSTREAM || "https://plausible.io").replace(/\/$/, "");
+const PLAUSIBLE_SCRIPT_SRC = String(process.env.PLAUSIBLE_SCRIPT_SRC || "/js/script.js").trim();
+const PLAUSIBLE_API_PATH = process.env.PLAUSIBLE_API_PATH === undefined
+  ? "/api/event"
+  : String(process.env.PLAUSIBLE_API_PATH).trim();
+const PLAUSIBLE_HTML_PAGES = new Set([
+  "/index.html",
+  "/docs.html",
+  "/changelog.html",
+  "/hosted/register.html",
+]);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
@@ -406,6 +418,110 @@ function getStaticHeaders(filePath) {
   }
 
   return headers;
+}
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function plausibleScriptPath() {
+  if (!PLAUSIBLE_SCRIPT_SRC.startsWith("/")) return null;
+  return PLAUSIBLE_SCRIPT_SRC.split("?")[0];
+}
+
+function getPublicRelativePath(filePath) {
+  return `/${path.relative(PUBLIC_DIR, filePath).split(path.sep).join("/")}`;
+}
+
+function shouldInjectPlausible(filePath) {
+  if (!PLAUSIBLE_DOMAIN) return false;
+  return PLAUSIBLE_HTML_PAGES.has(getPublicRelativePath(filePath));
+}
+
+function buildPlausibleSnippet() {
+  const attrs = [
+    "defer",
+    `data-domain="${escapeHtmlAttr(PLAUSIBLE_DOMAIN)}"`,
+    `src="${escapeHtmlAttr(PLAUSIBLE_SCRIPT_SRC)}"`,
+  ];
+  if (PLAUSIBLE_API_PATH) {
+    attrs.splice(2, 0, `data-api="${escapeHtmlAttr(PLAUSIBLE_API_PATH)}"`);
+  }
+  return `<script ${attrs.join(" ")}></script>`;
+}
+
+function injectPlausibleIntoHtml(html) {
+  const snippet = buildPlausibleSnippet();
+  const headClose = html.indexOf("</head>");
+  if (headClose === -1) return html;
+  return `${html.slice(0, headClose)}    ${snippet}\n  ${html.slice(headClose)}`;
+}
+
+async function proxyPlausibleScript(req, res) {
+  try {
+    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/js/script.js`, {
+      headers: { "user-agent": req.headers["user-agent"] || "TownSquare" },
+    });
+    if (!response.ok) {
+      res.writeHead(response.status, { "content-type": "text/plain; charset=utf-8" });
+      res.end("upstream error");
+      return;
+    }
+
+    res.writeHead(200, {
+      "content-type": response.headers.get("content-type") || "application/javascript; charset=utf-8",
+      "cache-control": "public, max-age=86400, immutable",
+    });
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    console.warn(`Plausible script proxy failed: ${error.message}`);
+    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+    res.end("bad gateway");
+  }
+}
+
+function proxyPlausibleEvent(req, res) {
+  const chunks = [];
+
+  req.on("data", (chunk) => {
+    chunks.push(chunk);
+    if (chunks.reduce((size, part) => size + part.length, 0) > 4096) {
+      res.writeHead(413, { "content-type": "text/plain; charset=utf-8" });
+      res.end("payload too large");
+      req.destroy();
+    }
+  });
+
+  req.on("end", () => {
+    void forwardPlausibleEvent(req, res, Buffer.concat(chunks));
+  });
+}
+
+async function forwardPlausibleEvent(req, res, body) {
+  try {
+    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/api/event`, {
+      method: "POST",
+      headers: {
+        "content-type": req.headers["content-type"] || "application/json",
+        "user-agent": req.headers["user-agent"] || "",
+        "x-forwarded-for": getRequestIp(req),
+      },
+      body,
+    });
+
+    res.writeHead(response.status, {
+      "content-type": response.headers.get("content-type") || "text/plain; charset=utf-8",
+    });
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    console.warn(`Plausible event proxy failed: ${error.message}`);
+    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+    res.end("bad gateway");
+  }
 }
 
 function resolvePublicFile(requestUrl, hostHeader) {
@@ -1465,6 +1581,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (PLAUSIBLE_DOMAIN) {
+    const scriptPath = plausibleScriptPath();
+    if (scriptPath && req.method === "GET" && url.pathname === scriptPath) {
+      void proxyPlausibleScript(req, res);
+      return;
+    }
+
+    if (PLAUSIBLE_API_PATH && req.method === "POST" && url.pathname === PLAUSIBLE_API_PATH) {
+      proxyPlausibleEvent(req, res);
+      return;
+    }
+  }
+
   const filePath = resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
 
   if (!filePath) {
@@ -1482,8 +1611,13 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    let body = data;
+    if (path.extname(filePath) === ".html" && shouldInjectPlausible(filePath)) {
+      body = Buffer.from(injectPlausibleIntoHtml(data.toString("utf8")), "utf8");
+    }
+
     res.writeHead(200, getStaticHeaders(filePath));
-    res.end(data);
+    res.end(body);
   });
 });
 
