@@ -602,13 +602,14 @@
   pointer-events: none;
 }
 
-.townsquare-avatar--typing::after {
+.townsquare-avatar--typing:not(.townsquare-avatar--raised-hand)::after {
   content: "";
   position: absolute;
   left: 50%;
   top: -16px;
   width: 26px;
   height: 15px;
+  padding: 0;
   transform: translateX(-50%);
   border-radius: 999px;
   background-color: color-mix(in oklab, var(--surface) 88%, transparent);
