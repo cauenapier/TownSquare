@@ -134,9 +134,10 @@ export function openConnectionsModal(ctx, side) {
   if (!connections || connections.length === 0) return;
   closeConnectionsModal(ctx);
 
-  // The admin/customization preview mounts the real widget; never navigate the
-  // owner away from their own page while they are configuring.
-  const inert = ctx.options.preview === true || ctx.options.simulate === true;
+  // The admin/customization preview mounts the real widget. Opening a town there
+  // should not navigate the owner away from their own page mid-configuration, so
+  // links open in a new tab instead of travelling in place.
+  const newTab = ctx.options.preview === true || ctx.options.simulate === true;
 
   const overlay = document.createElement("div");
   overlay.className = "townsquare-connections";
@@ -175,6 +176,7 @@ export function openConnectionsModal(ctx, side) {
     link.className = "townsquare-connections__item";
     link.href = connection.url;
     link.rel = "noopener";
+    if (newTab) link.target = "_blank";
 
     const name = document.createElement("span");
     name.className = "townsquare-connections__item-name";
@@ -189,9 +191,6 @@ export function openConnectionsModal(ctx, side) {
     go.textContent = `walk over ${SIDE_ARROWS[side]}`;
 
     link.append(name, host, go);
-    if (inert) {
-      link.addEventListener("click", (event) => event.preventDefault());
-    }
     item.appendChild(link);
     list.appendChild(item);
   }
