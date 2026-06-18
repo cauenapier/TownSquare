@@ -23,7 +23,7 @@ Environment variables:
 Notes:
 - By default the script will source ./.env.deploy.local if it exists.
 - By default the script deploys the local production tag.
-- Use --promote-main to fetch origin/main, move the deploy tag to that commit, and deploy it.
+- Use --promote-main to fetch origin/main, move the deploy tag to that commit, deploy it, and push the tag to origin.
 - Use --tag for another tag. It resolves only refs/tags/<git-tag>.
 - Remote mode uses ssh/scp, so it should be run from a machine with access to the server.
 - Local mode deploys directly on the current host and may use sudo.
@@ -270,6 +270,12 @@ if [[ -n "$HEALTHCHECK_URL" ]]; then
   echo
   echo "== public health check =="
   curl -fsS "$HEALTHCHECK_URL"
+fi
+
+if [[ "$PROMOTE_MAIN" -eq 1 ]]; then
+  echo
+  echo "== push tag to origin: $TAG =="
+  git push origin "refs/tags/$TAG" --force
 fi
 
 echo

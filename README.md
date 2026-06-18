@@ -230,7 +230,8 @@ scripts/deploy.sh --env-file ./ops/my-deploy.env
 ```
 
 By default, the script deploys the local `production` tag. Use `--promote-main`
-to fetch `origin/main`, move the deploy tag to that commit, and deploy it. Use
+to fetch `origin/main`, move the deploy tag to that commit, deploy it, and push
+the tag to `origin` after a successful deploy. Use
 `--tag` for another tag. It resolves only real Git tags, so annotated and
 lightweight tags both deploy the commit the tag points to. Keep `--ref` for
 explicit branch, SHA, or rollback deploys without retagging.
