@@ -80,8 +80,9 @@ async function assertCustomizationPersists() {
     typeof body.styleSnippet === "string"
       && body.styleSnippet.includes("#townsquare-root#townsquare-root")
       && body.styleSnippet.includes('[data-townsquare-theme="dark"]')
-      && body.styleSnippet.includes("#ffcc00"),
-    "style snippet missing the doubled-specificity selector or the dark palette block",
+      && body.styleSnippet.includes("#ffcc00")
+      && body.styleSnippet.includes(".townsquare__stage"),
+    "style snippet missing the doubled-specificity selector, dark palette, or stage surface rules",
   );
 
   // Legacy flat styleConfig normalizes: flat becomes light, dark falls back to defaults.

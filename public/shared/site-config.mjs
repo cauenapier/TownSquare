@@ -857,8 +857,8 @@ export function buildBirdPerches(props = []) {
 
 /**
  * Apply one flat palette to a root element as inline CSS variables. Used by the
- * JS-owned path (the registration/admin live preview). The hosted embed leaves
- * theming to CSS — see buildSiteCss.
+ * registration/admin live preview. Sets `data-townsquare-surface` so the shared
+ * widget paints the stage; hosted embeds rely on pasted CSS from buildSiteCss.
  *
  * @param {HTMLElement} root
  * @param {Record<string, string>} [palette=DEFAULT_SITE_STYLE_LIGHT]
@@ -872,6 +872,25 @@ export function applySiteStyle(root, palette = DEFAULT_SITE_STYLE_LIGHT) {
   root.style.setProperty("--you-deep", next.accent);
   root.style.setProperty("--text", next.ink);
   root.style.setProperty("--muted", next.ink);
+  root.dataset.townsquareSurface = "";
+}
+
+function stageSurfaceCss(scope) {
+  return [
+    `${scope} .townsquare__stage {`,
+    "  background: linear-gradient(",
+    "    180deg,",
+    "    var(--scene) 0%,",
+    "    var(--scene) 72%,",
+    "    var(--scene-edge) 72%,",
+    "    var(--page) 72.4%,",
+    "    var(--page) 100%",
+    "  );",
+    "}",
+    `${scope} .townsquare__ground {`,
+    "  background: var(--ground);",
+    "}",
+  ].join("\n");
 }
 
 function paletteDeclarations(palette) {
@@ -911,6 +930,7 @@ export function buildSiteCss(style = DEFAULT_SITE_STYLE, selector = "#townsquare
     paletteDeclarations(next.dark),
     "  }",
     "}",
+    stageSurfaceCss(scope),
   ].join("\n");
 }
 

@@ -202,14 +202,7 @@
   position: relative;
   height: 180px;
   border-radius: var(--r) var(--r) 0 0;
-  background: linear-gradient(
-    180deg,
-    var(--scene) 0%,
-    var(--scene) 72%,
-    var(--scene-edge) 72%,
-    var(--page) 72.4%,
-    var(--page) 100%
-  );
+  background: transparent;
   /* taps move the character; keep page panning, drop double-tap zoom */
   touch-action: manipulation;
 }
@@ -218,6 +211,22 @@
   position: absolute;
   inset: auto 0 52px;
   height: 1px;
+  background: transparent;
+}
+
+/* Painted scene/ground only when a customization layer is active (preview or pasted site CSS). */
+#townsquare-root[data-townsquare-surface] .townsquare__stage {
+  background: linear-gradient(
+    180deg,
+    var(--scene) 0%,
+    var(--scene) 72%,
+    var(--scene-edge) 72%,
+    var(--page) 72.4%,
+    var(--page) 100%
+  );
+}
+
+#townsquare-root[data-townsquare-surface] .townsquare__ground {
   background: var(--ground);
 }
 
