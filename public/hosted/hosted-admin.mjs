@@ -139,10 +139,14 @@ function customizationIsDirty() {
   return serializeCustomization(readCustomizationFromForm()) !== serializeCustomization(getCurrentCustomization());
 }
 
+function customizationDiffersFromDefaults() {
+  return serializeCustomization(readCustomizationFromForm()) !== serializeCustomization(getDefaultCustomization());
+}
+
 function updateCustomizationButtons() {
   const dirty = customizationIsDirty();
   saveCustomizationButton.disabled = customizationBusy || !dirty;
-  resetCustomizationButton.disabled = customizationBusy || !dirty;
+  resetCustomizationButton.disabled = customizationBusy || !customizationDiffersFromDefaults();
 }
 
 function updateCustomizationStatus() {
