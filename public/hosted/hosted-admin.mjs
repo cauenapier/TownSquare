@@ -1,6 +1,7 @@
 import { bindCopy } from "../lib/ui-common.mjs";
 import {
   createAutoRefresh,
+  createCredentialStore,
   createStatusSetter,
   escapeHtml,
   formatTime,
@@ -25,6 +26,7 @@ const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
 const loginForm = document.getElementById("login-form");
 const loginTokenEl = document.getElementById("login-token");
+const rememberMeEl = document.getElementById("login-remember");
 const loginSubmitButton = document.getElementById("login-submit");
 const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
@@ -54,9 +56,12 @@ const STORAGE_KEY = "townsquare-admin-session";
 const REFRESH_INTERVAL_MS = 5000;
 const AUTO_SAVE_DELAY_MS = 1500;
 
+const credentialStore = createCredentialStore(STORAGE_KEY);
+
 let currentSite = null;
 let siteKey = "";
 let adminToken = "";
+let rememberMe = false;
 let customizationBusy = false;
 let customizationSavedMessage = "";
 let autoSaveTimer = null;
@@ -80,13 +85,11 @@ const setCustomizationStatus = createStatusSetter(customizationStatusEl, { toggl
 const autoRefresh = createAutoRefresh(() => loadSite({ silent: true }), REFRESH_INTERVAL_MS);
 
 function readStoredCredentials() {
-  try {
-    const stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY));
-    if (stored && typeof stored.adminToken === "string") {
-      return { siteKey: stored.siteKey || "", adminToken: stored.adminToken };
-    }
-  } catch {
-    // fall through to empty credentials
+  const stored = credentialStore.read();
+  const value = stored?.value;
+  if (value && typeof value.adminToken === "string") {
+    rememberMe = stored.remembered;
+    return { siteKey: value.siteKey || "", adminToken: value.adminToken };
   }
   return { siteKey: "", adminToken: "" };
 }
@@ -106,7 +109,7 @@ function readCredentials() {
 }
 
 function storeCredentials() {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ siteKey, adminToken }));
+  credentialStore.save({ siteKey, adminToken }, rememberMe);
 }
 
 function clearCredentials() {
@@ -117,7 +120,7 @@ function clearCredentials() {
   customizationSavedMessage = "";
   customizationTouched = false;
   preview.destroy();
-  sessionStorage.removeItem(STORAGE_KEY);
+  credentialStore.clear();
 }
 
 function showLogin(message = "", isError = false) {
@@ -374,6 +377,7 @@ loginForm.addEventListener("submit", async (event) => {
   setLoginStatus("Checking token...");
 
   adminToken = loginTokenEl.value.trim();
+  rememberMe = rememberMeEl.checked;
   siteKey = "";
   await loadSite();
 
@@ -422,6 +426,7 @@ disableSiteButton.addEventListener("click", () => action("disableSite", { disabl
 const credentials = readCredentials();
 siteKey = credentials.siteKey;
 adminToken = credentials.adminToken;
+rememberMeEl.checked = rememberMe;
 
 if (adminToken) {
   loadSite();

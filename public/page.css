@@ -1281,6 +1281,26 @@ body {
   accent-color: var(--you);
 }
 
+/* Inside a form, `.hosted-form label`/`input` defaults would stack the box
+   above the text and stretch it into a full-width 44px pill — keep the toggle
+   a tidy inline row with a real checkbox. */
+.hosted-form .hosted-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.hosted-form .hosted-toggle input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+}
+
 .visitor-list {
   display: grid;
   gap: 10px;
