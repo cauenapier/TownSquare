@@ -210,9 +210,10 @@ const MESSAGE_HANDLERS = {
   sceneConfig: handleSceneConfig,
   settle: handleSettle,
   say: handleSay,
+  typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws, scene, site, origin = "") {
   return {
     connectionId,
@@ -227,6 +228,7 @@ function createClient(connectionId, ws, scene, site, origin = "") {
     lastMoveAt: 0,
     lastActionAt: 0,
     lastChatAt: 0,
+    typing: false,
   };
 }
 
@@ -1899,6 +1901,17 @@ function handleSay(client, message) {
   );
 }
 
+function handleTyping(client, message) {
+  if (!client.identity || typeof message.typing !== "boolean") return;
+
+  const wasTyping = Array.from(client.identity.clients).some((candidate) => candidate.typing);
+  client.typing = message.typing;
+  const typing = Array.from(client.identity.clients).some((candidate) => candidate.typing);
+  if (typing === wasTyping) return;
+
+  broadcast(client.scene, { type: "typing", id: client.identity.id, typing });
+}
+
 function handleClientMessage(client, raw) {
   let message;
   try {
@@ -1920,10 +1933,14 @@ function handleClientClose(client) {
   if (!client.joined || !client.identity) return;
 
   const identity = client.identity;
+  const wasTyping = Array.from(identity.clients).some((candidate) => candidate.typing);
   identity.clients.delete(client);
   client.joined = false;
   client.identity = null;
   client.readingActive = false;
+  if (wasTyping && !Array.from(identity.clients).some((candidate) => candidate.typing)) {
+    broadcast(identity.scene, { type: "typing", id: identity.id, typing: false });
+  }
 
   if (identity.clients.size > 0) {
     if (refreshIdentityReadingActive(identity)) {

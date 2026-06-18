@@ -27,6 +27,7 @@
  * @property {string} readingLabel
  * @property {string} readingUrl
  * @property {boolean} readingActive
+ * @property {boolean} typing
  * @property {number} propZoneEnteredAt
  * @property {string | null} settlePropId
  * @property {boolean} settleRequested
@@ -61,6 +62,7 @@
  * @property {Map<string, import("../shared/scene-props.mjs").SceneProp>} propsById
  * @property {Map<string, import("../shared/bird-perches.mjs").BirdPerch>} birdPerchesById
  * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
+ * @property {ReturnType<typeof setTimeout> | null} typingTimer
  * @property {HTMLElement} app
  * @property {HTMLElement} stage
  * @property {HTMLElement} statusRowEl

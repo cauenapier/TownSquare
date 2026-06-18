@@ -527,6 +527,12 @@ async function main() {
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "move", x: 0.58 }));
   await delay(100);
+  secondSameBrowser.ws.send(JSON.stringify({ type: "typing", typing: true }));
+  await delay(100);
+  assert(third.seen.some((message) => message.type === "typing" && message.id === first.id && message.typing === true), "different browser did not observe typing start");
+  secondSameBrowser.ws.send(JSON.stringify({ type: "typing", typing: false }));
+  await delay(100);
+  assert(third.seen.some((message) => message.type === "typing" && message.id === first.id && message.typing === false), "different browser did not observe typing stop");
   secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: "hello from shared browser" }));
   await delay(100);
   secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: "this should be rate-limited away" }));

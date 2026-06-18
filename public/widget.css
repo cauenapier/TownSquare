@@ -602,6 +602,41 @@
   pointer-events: none;
 }
 
+.townsquare-avatar--typing:not(.townsquare-avatar--raised-hand)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -16px;
+  width: 26px;
+  height: 15px;
+  padding: 0;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background-color: color-mix(in oklab, var(--surface) 88%, transparent);
+  background-image:
+    radial-gradient(circle, currentColor 2px, transparent 2.5px),
+    radial-gradient(circle, currentColor 2px, transparent 2.5px),
+    radial-gradient(circle, currentColor 2px, transparent 2.5px);
+  background-position: 5px 6px, 11px 8px, 17px 8px;
+  background-repeat: no-repeat;
+  background-size: 5px 5px;
+  color: color-mix(in oklab, currentColor 62%, transparent);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  animation: presence-typing 900ms ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes presence-typing {
+  0%, 80%, 100% { background-position: 5px 8px, 11px 8px, 17px 8px; }
+  20% { background-position: 5px 4px, 11px 8px, 17px 8px; }
+  40% { background-position: 5px 8px, 11px 4px, 17px 8px; }
+  60% { background-position: 5px 8px, 11px 8px, 17px 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .townsquare-avatar--typing::after { animation: none; }
+}
+
 .townsquare-avatar--raised-hand::after {
   content: "🙌";
   position: absolute;

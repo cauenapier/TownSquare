@@ -245,11 +245,12 @@ export function wireHelpPanel(helpButton, helpPanel) {
  *   colors?: Array<string>,
  *   onProfileChange?: (profile: { displayName: string, color: string }) => void,
  *   onSubmitChat?: () => void,
+ *   onTypingChange?: (typing: boolean) => void,
  *   composerHost?: HTMLElement
  * }} options
  * @returns {AvatarView}
  */
-export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChange, onSubmitChat, composerHost }) {
+export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChange, onSubmitChat, onTypingChange, composerHost }) {
   const el = document.createElement("div");
   el.className = `townsquare-avatar ${isSelf ? "townsquare-avatar--self" : "townsquare-avatar--peer"}`;
   el.innerHTML = figureMarkup('aria-hidden="true"');
@@ -512,6 +513,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     profileButton.hidden = false;
     input.value = "";
     setSendReady(selfAvatar, false);
+    onTypingChange?.(false);
   };
 
   plate.addEventListener("click", openComposer);
@@ -519,6 +521,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
 
   input.addEventListener("input", () => {
     setSendReady(selfAvatar, input.value.trim().length > 0);
+    onTypingChange?.(input.value.trim().length > 0);
   });
 
   input.addEventListener("keydown", (event) => {
@@ -537,6 +540,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   composer.addEventListener("submit", (event) => {
     event.preventDefault();
     onSubmitChat?.();
+    onTypingChange?.(false);
     if (composerHost) {
       // Docked bar stays open for back-and-forth; reopening costs a tiny tap.
       input.value = "";
