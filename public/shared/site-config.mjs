@@ -68,17 +68,22 @@ export const SCENE_BIRDS_FIELD = Object.freeze({
 
 export const STYLE_MODES = Object.freeze(["light", "dark"]);
 
+/** Muted prop/bird/tree tone; kept in sync with `--prop-ink` in public/tokens.css. */
+export const PROP_INK_MIX = "color-mix(in oklab, var(--text) 58%, var(--muted) 42%)";
+
 // `defaultValue` is the light palette default; `darkValue` mirrors the dark
 // tokens in public/tokens.css so a brand-new site's dark palette matches the
 // stock dark theme out of the box.
 export const STYLE_FIELDS = Object.freeze([
-  Object.freeze({ key: "scene", label: "Background", inputName: "style-scene", defaultValue: "#e4e2dd", darkValue: "#242521", cssVar: "--scene" }),
-  Object.freeze({ key: "page", label: "Ground", inputName: "style-page", defaultValue: "#efede9", darkValue: "#181917", cssVar: "--page" }),
-  Object.freeze({ key: "surface", label: "Buttons and Tags", inputName: "style-surface", defaultValue: "#fdf8f4", darkValue: "#24231f", cssVar: "--surface" }),
-  Object.freeze({ key: "ink", label: "Ink", inputName: "style-ink", defaultValue: "#2a2926", darkValue: "#f2eee6", cssVar: "--ink" }),
-  Object.freeze({ key: "accent", label: "Accent", inputName: "style-accent", defaultValue: "#c8641f", darkValue: "#df8a43", cssVar: "--you" }),
-  Object.freeze({ key: "other", label: "Other", inputName: "style-other", defaultValue: "#26241f", darkValue: "#ddd7cc", cssVar: "--other" }),
-  Object.freeze({ key: "ground", label: "Ground line", inputName: "style-ground", defaultValue: "rgba(42, 41, 38, 0.16)", darkValue: "rgba(242, 238, 230, 0.18)", cssVar: "--ground" }),
+  Object.freeze({ key: "scene", label: "Background", defaultValue: "#e4e2dd", darkValue: "#242521", cssVar: "--scene", overrideUI: true }),
+  Object.freeze({ key: "page", label: "Ground", defaultValue: "#efede9", darkValue: "#181917", cssVar: "--page", overrideUI: true }),
+  Object.freeze({ key: "surface", label: "Buttons and Tags", defaultValue: "#fdf8f4", darkValue: "#24231f", cssVar: "--surface", overrideUI: true }),
+  Object.freeze({ key: "ink", label: "Ink", defaultValue: "#2a2926", darkValue: "#f2eee6", cssVar: "--ink", overrideUI: true }),
+  Object.freeze({ key: "accent", label: "Accent", defaultValue: "#c8641f", darkValue: "#df8a43", cssVar: "--you", overrideUI: true }),
+  Object.freeze({ key: "treeTrunk", label: "Tree trunk", defaultValue: PROP_INK_MIX, darkValue: PROP_INK_MIX, cssVar: "--tree-trunk", overrideUI: true }),
+  Object.freeze({ key: "treeCanopy", label: "Tree leaves", defaultValue: PROP_INK_MIX, darkValue: PROP_INK_MIX, cssVar: "--tree-canopy", overrideUI: true }),
+  Object.freeze({ key: "other", label: "Other", defaultValue: "#26241f", darkValue: "#ddd7cc", cssVar: "--other", overrideUI: false }),
+  Object.freeze({ key: "ground", label: "Ground line", defaultValue: "rgba(42, 41, 38, 0.16)", darkValue: "rgba(242, 238, 230, 0.18)", cssVar: "--ground", overrideUI: false }),
 ]);
 
 const SCENE_FIELD_BY_KEY = new Map(SCENE_FIELDS.map((field) => [field.key, field]));
@@ -158,7 +163,7 @@ const TREE_SVG = `
  * @property {boolean} [faceAway]
  * @property {number} [shadeRadius]
  * @property {number} [lightRadius]
- * @property {string} [kind]
+ * @property {string} kind
  * @property {string} svg
  */
 
@@ -603,7 +608,11 @@ export function syncStyleColorFields(form) {
   }
 }
 
-const STYLE_OVERRIDE_FIELDS = STYLE_FIELDS.slice(0, 5);
+const STYLE_OVERRIDE_FIELDS = STYLE_FIELDS.filter((field) => field.overrideUI);
+
+function stylePickerValue(value) {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : "#7c766c";
+}
 
 function createStyleColorControl(mode, field) {
   const defaultValue = mode === "dark" ? field.darkValue : field.defaultValue;
@@ -619,7 +628,7 @@ function createStyleColorControl(mode, field) {
   const picker = document.createElement("input");
   picker.type = "color";
   picker.id = inputName;
-  picker.value = defaultValue;
+  picker.value = stylePickerValue(defaultValue);
   picker.dataset.stylePicker = inputName;
 
   const hidden = document.createElement("input");

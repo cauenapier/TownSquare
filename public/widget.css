@@ -238,7 +238,7 @@
   position: absolute;
   bottom: 53px;
   transform: translateX(-50%);
-  color: color-mix(in oklab, var(--text) 58%, var(--muted) 42%);
+  color: var(--prop-ink);
   opacity: 0.5;
   pointer-events: none;
 }
@@ -310,10 +310,14 @@
   bottom: calc(18px + var(--ts-keyboard, 0px));
 }
 
-.townsquare .prop--tree .canopy,
+.townsquare .prop--tree .canopy {
+  fill: var(--tree-canopy);
+  stroke: var(--tree-canopy);
+}
+
 .townsquare .prop--tree .trunk {
-  fill: currentColor;
-  fill-opacity: 0.15;
+  fill: var(--tree-trunk);
+  stroke: var(--tree-trunk);
 }
 
 .townsquare .prop--lamp {
@@ -351,7 +355,7 @@
   width: 12px;
   height: 8px;
   transform: translateX(-50%);
-  color: color-mix(in oklab, var(--text) 58%, var(--muted) 42%);
+  color: var(--prop-ink);
   opacity: 0.45;
   pointer-events: none;
 }

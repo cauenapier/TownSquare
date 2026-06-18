@@ -613,7 +613,7 @@ function setSendReady(avatar, ready) {
 export function renderProps(container, props = []) {
   for (const prop of props) {
     const el = document.createElement("div");
-    el.className = `prop prop--${prop.id}`;
+    el.className = `prop prop--${prop.kind}`;
     el.style.left = `${(prop.x * 100).toFixed(2)}%`;
     el.style.width = `${prop.width}px`;
     el.style.height = `${prop.height}px`;
