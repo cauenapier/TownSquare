@@ -57,7 +57,29 @@
           </div>
         </section>
 
-        <section class="service-sites" id="site-list" aria-live="polite"></section>
+        <section class="service-sites" id="site-list" aria-live="polite">
+          <div class="service-toolbar">
+            <label class="service-filter">
+              <span class="service-filter-label">Filter</span>
+              <input
+                type="search"
+                id="site-filter"
+                placeholder="Name, origin, email, or site key"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+            <p class="service-filter-meta" id="site-filter-meta" hidden></p>
+          </div>
+          <div class="service-table-wrap" id="site-table-wrap" hidden>
+            <table class="service-table" id="site-table">
+              <thead id="site-table-head"></thead>
+              <tbody id="site-table-body"></tbody>
+            </table>
+          </div>
+          <p class="hosted-note" id="site-empty" hidden>No registered websites yet.</p>
+          <p class="hosted-note" id="site-no-matches" hidden>No websites match this filter.</p>
+        </section>
       </section>
     </main>
 

@@ -1213,6 +1213,7 @@
   background: color-mix(in oklab, var(--surface) 82%, transparent);
   color: currentColor;
   box-shadow: 0 6px 12px -10px rgba(60, 40, 20, 0.34);
+  overflow: hidden;
 }
 
 .townsquare-avatar__peer-name {
@@ -1246,7 +1247,9 @@
   display: none;
   align-items: baseline;
   gap: 3px;
-  max-width: 170px;
+  align-self: stretch;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   color: var(--ink-faint);
   font-size: 10.5px;
@@ -1271,6 +1274,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .townsquare-avatar__reading:hover,
