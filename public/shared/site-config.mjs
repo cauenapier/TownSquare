@@ -162,19 +162,11 @@ const PROP_PX = Object.freeze({
 });
 
 /**
- * @param {number} pxWidth
- * @returns {number}
- */
-function propWidthFraction(pxWidth) {
-  return Number((pxWidth / REFERENCE_STAGE_WIDTH).toFixed(4));
-}
-
-/**
  * @typedef {Object} SceneProp
  * @property {string} id
  * @property {number} x
- * @property {number} width Normalized stage width (0–1); settle zone is width / 2.
- * @property {number} height Render height in px (art aspect ratio).
+ * @property {number} width Render width in px.
+ * @property {number} height Render height in px.
  * @property {string} [pose]
  * @property {Array<number>} [seats]
  * @property {boolean} [faceAway]
@@ -249,7 +241,7 @@ function createBench(index, x) {
     id: uniqueId("bench", index),
     kind: "bench",
     x,
-    width: propWidthFraction(width),
+    width,
     height,
     pose: "sitting",
     seats: [-0.01, 0.01],
@@ -263,7 +255,7 @@ function createLamp(index, x) {
     id: uniqueId("lamp", index),
     kind: "lamp",
     x,
-    width: propWidthFraction(width),
+    width,
     height,
     lightRadius: 0.045,
     svg: LAMP_SVG,
@@ -276,7 +268,7 @@ function createTree(index, x) {
     id: uniqueId("tree", index),
     kind: "tree",
     x,
-    width: propWidthFraction(width),
+    width,
     height,
     pose: "resting",
     seats: [-0.008, 0.008],

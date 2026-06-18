@@ -615,7 +615,7 @@ export function renderProps(container, props = []) {
     const el = document.createElement("div");
     el.className = `prop prop--${prop.kind}`;
     el.style.left = `${(prop.x * 100).toFixed(2)}%`;
-    el.style.width = `${(prop.width * 100).toFixed(4)}%`;
+    el.style.width = `${prop.width}px`;
     el.style.height = `${prop.height}px`;
     el.innerHTML = prop.svg;
     if (prop.lightRadius) {
