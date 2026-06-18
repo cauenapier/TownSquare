@@ -56,6 +56,9 @@
   --bg: var(--page);
   --text: var(--ink);
   --muted: var(--ink-soft);
+  --prop-ink: color-mix(in oklab, var(--text) 58%, var(--muted) 42%);
+  --tree-trunk: var(--prop-ink);
+  --tree-canopy: var(--prop-ink);
   --line: var(--hair-2);
   --accent: var(--you);
   --shadow: var(--bshadow);
@@ -82,6 +85,9 @@
 
   --other: #ddd7cc;
   --ground: rgba(242, 238, 230, 0.18);
+  --prop-ink: color-mix(in oklab, var(--text) 58%, var(--muted) 42%);
+  --tree-trunk: var(--prop-ink);
+  --tree-canopy: var(--prop-ink);
 
   --bshadow: 0 9px 18px -12px rgba(0, 0, 0, 0.78), 0 2px 5px -2px rgba(0, 0, 0, 0.5);
   --tray-shadow: 0 16px 34px -18px rgba(0, 0, 0, 0.82), 0 3px 8px -4px rgba(0, 0, 0, 0.58);
@@ -108,6 +114,9 @@
 
     --other: #ddd7cc;
     --ground: rgba(242, 238, 230, 0.18);
+    --prop-ink: color-mix(in oklab, var(--text) 58%, var(--muted) 42%);
+    --tree-trunk: var(--prop-ink);
+    --tree-canopy: var(--prop-ink);
 
     --bshadow: 0 9px 18px -12px rgba(0, 0, 0, 0.78), 0 2px 5px -2px rgba(0, 0, 0, 0.5);
     --tray-shadow: 0 16px 34px -18px rgba(0, 0, 0, 0.82), 0 3px 8px -4px rgba(0, 0, 0, 0.58);

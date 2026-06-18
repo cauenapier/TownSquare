@@ -205,7 +205,8 @@ docker run --rm -p 8787:8787 -e HOST=0.0.0.0 townsquare</code></pre>
 
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "https://your-townsquare-host",
-    socketPath: "/live"
+    socketPath: "/live",
+    theme: "host"
   });
 &lt;/script&gt;</code></pre>
               <p>
@@ -220,12 +221,14 @@ docker run --rm -p 8787:8787 -e HOST=0.0.0.0 townsquare</code></pre>
                   <tr><td><code>serverOrigin</code></td><td>The TownSquare origin to load assets from and connect to.</td></tr>
                   <tr><td><code>socketPath</code></td><td>WebSocket path on that origin (defaults to <code>/live</code>).</td></tr>
                   <tr><td><code>siteKey</code></td><td>Only needed when one hosted server runs several registered sites.</td></tr>
+                  <tr><td><code>theme</code></td><td>Use <code>"host"</code> to follow common host-page dark mode signals. Defaults to <code>"auto"</code>.</td></tr>
                 </tbody>
               </table>
               <p class="docs-note">
-                Per-site scene and color customization is turned off for now, so the square
-                uses a single default look. The registration snippet above is the standard
-                way to embed a hosted site.
+                The registration snippet above is the standard way to embed a hosted site.
+                It keeps TownSquare in sync with common host-page dark mode signals
+                such as <code>html.dark</code>, <code>data-theme</code>, and
+                <code>data-color-mode</code>.
               </p>
             </section>
 
@@ -241,7 +244,10 @@ docker run --rm -p 8787:8787 -e HOST=0.0.0.0 townsquare</code></pre>
                 On a custom socket path like <code>/townsquare/live</code>, pass it
                 explicitly with <code>socketPath</code>. The repo ships a deploy helper at
                 <code>scripts/deploy.sh</code> (copy <code>.env.deploy.example</code> to
-                <code>.env.deploy.local</code> first), and a health endpoint at
+                <code>.env.deploy.local</code> first). By default it deploys the local
+                <code>production</code> tag. Use <code>--tag &lt;git-tag&gt;</code> for another
+                tag, and use <code>--ref</code> only when deploying an explicit branch or
+                commit. The server also exposes a health endpoint at
                 <code>/healthz</code> that simply returns <code>ok</code>.
               </p>
               <p class="docs-note">

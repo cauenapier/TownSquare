@@ -1,42 +1,96 @@
 import { bindCopy } from "../lib/ui-common.mjs";
-import { createAutoRefresh, createStatusSetter, escapeHtml, formatTime, postJson } from "./hosted-common.mjs";
+import {
+  createAutoRefresh,
+  createCredentialStore,
+  createStatusSetter,
+  escapeHtml,
+  formatTime,
+  postJson,
+} from "./hosted-common.mjs";
+import {
+  applyConfigToForm,
+  applySceneConfigToForm,
+  bindSceneCountProse,
+  bindStyleColorFields,
+  isSceneCountInputName,
+  readSceneConfigFromForm,
+  readStyleConfigFromForm,
+  renderScenePositionFields,
+  renderStyleOverrideFields,
+  sanitizeSceneConfig,
+  sanitizeSiteStyle,
+} from "../shared/site-config.mjs";
+import { createCustomizationPreview } from "./hosted-preview.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
 const loginForm = document.getElementById("login-form");
 const loginTokenEl = document.getElementById("login-token");
+const rememberMeEl = document.getElementById("login-remember");
 const loginSubmitButton = document.getElementById("login-submit");
 const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const metaEl = document.getElementById("site-meta");
+const customizationForm = document.getElementById("customization-form");
+const customizationStatusEl = document.getElementById("customization-status");
+const saveCustomizationButton = document.getElementById("save-customization");
+const resetCustomizationButton = document.getElementById("reset-customization");
+const previewRoot = document.getElementById("townsquare-root");
+const scenePositionFields = document.getElementById("scene-position-fields");
+const styleOverrideFields = document.getElementById("style-override-fields");
 const snippetEl = document.getElementById("embed-snippet");
+const styleSnippetEl = document.getElementById("style-snippet");
 const copyButton = document.getElementById("copy-snippet");
+const copyStyleButton = document.getElementById("copy-style");
 const chatDisabledInput = document.getElementById("chat-disabled");
 const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
 const chatThread = document.getElementById("chat-thread");
 const visitorList = document.getElementById("visitor-list");
 
+renderStyleOverrideFields(styleOverrideFields);
+bindStyleColorFields(customizationForm);
+bindSceneCountProse(customizationForm);
+
 const STORAGE_KEY = "townsquare-admin-session";
 const REFRESH_INTERVAL_MS = 5000;
+const AUTO_SAVE_DELAY_MS = 1500;
+
+const credentialStore = createCredentialStore(STORAGE_KEY);
 
 let currentSite = null;
 let siteKey = "";
 let adminToken = "";
+let rememberMe = false;
+let customizationBusy = false;
+let customizationSavedMessage = "";
+let autoSaveTimer = null;
+let customizationTouched = false;
+
+const preview = createCustomizationPreview({
+  root: previewRoot,
+  readingLabel: () => (currentSite ? `${currentSite.name} preview` : "Admin preview"),
+  readConfig: (mode) => {
+    const customization = currentSite ? readCustomizationFromForm() : getCurrentCustomization();
+    return { scene: customization.sceneConfig, style: customization.styleConfig[mode] };
+  },
+});
+
+const previewModeButtons = document.querySelectorAll("[data-preview-mode]");
+preview.bindThemeToggle(previewModeButtons);
 
 const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
 const setStatus = createStatusSetter(statusEl);
+const setCustomizationStatus = createStatusSetter(customizationStatusEl, { toggleHidden: true });
 const autoRefresh = createAutoRefresh(() => loadSite({ silent: true }), REFRESH_INTERVAL_MS);
 
 function readStoredCredentials() {
-  try {
-    const stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY));
-    if (stored && typeof stored.adminToken === "string") {
-      return { siteKey: stored.siteKey || "", adminToken: stored.adminToken };
-    }
-  } catch {
-    // fall through to empty credentials
+  const stored = credentialStore.read();
+  const value = stored?.value;
+  if (value && typeof value.adminToken === "string") {
+    rememberMe = stored.remembered;
+    return { siteKey: value.siteKey || "", adminToken: value.adminToken };
   }
   return { siteKey: "", adminToken: "" };
 }
@@ -56,18 +110,23 @@ function readCredentials() {
 }
 
 function storeCredentials() {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ siteKey, adminToken }));
+  credentialStore.save({ siteKey, adminToken }, rememberMe);
 }
 
 function clearCredentials() {
+  clearAutoSaveTimer();
   siteKey = "";
   adminToken = "";
   currentSite = null;
-  sessionStorage.removeItem(STORAGE_KEY);
+  customizationSavedMessage = "";
+  customizationTouched = false;
+  preview.destroy();
+  credentialStore.clear();
 }
 
 function showLogin(message = "", isError = false) {
   autoRefresh.stop();
+  preview.destroy();
   adminView.hidden = true;
   loginView.hidden = false;
   setLoginStatus(message, isError);
@@ -78,6 +137,119 @@ function showAdmin() {
   loginView.hidden = true;
   adminView.hidden = false;
   autoRefresh.start();
+}
+
+function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(customizationForm)) {
+  const next = sanitizeSceneConfig(sceneConfig);
+  renderScenePositionFields(scenePositionFields, next);
+  applySceneConfigToForm(customizationForm, next);
+}
+
+function getCurrentCustomization() {
+  return {
+    sceneConfig: sanitizeSceneConfig(currentSite?.sceneConfig || {}),
+    styleConfig: sanitizeSiteStyle(currentSite?.styleConfig || {}),
+  };
+}
+
+function readCustomizationFromForm() {
+  return {
+    sceneConfig: sanitizeSceneConfig(readSceneConfigFromForm(customizationForm)),
+    styleConfig: sanitizeSiteStyle(readStyleConfigFromForm(customizationForm)),
+  };
+}
+
+function serializeCustomization(customization) {
+  return JSON.stringify({
+    sceneConfig: sanitizeSceneConfig(customization?.sceneConfig || {}),
+    styleConfig: sanitizeSiteStyle(customization?.styleConfig || {}),
+  });
+}
+
+function customizationIsDirty() {
+  if (!currentSite) return false;
+  return serializeCustomization(readCustomizationFromForm()) !== serializeCustomization(getCurrentCustomization());
+}
+
+function updateCustomizationButtons() {
+  const dirty = customizationIsDirty();
+  saveCustomizationButton.disabled = customizationBusy || !dirty;
+  resetCustomizationButton.disabled = customizationBusy || !dirty;
+}
+
+function updateCustomizationStatus() {
+  if (customizationBusy) {
+    setCustomizationStatus("Saving customization...");
+    return;
+  }
+
+  if (customizationSavedMessage) {
+    setCustomizationStatus(customizationSavedMessage);
+    return;
+  }
+
+  if (customizationIsDirty()) {
+    setCustomizationStatus("Unsaved changes will save automatically.");
+    return;
+  }
+
+  setCustomizationStatus("");
+}
+
+function clearAutoSaveTimer() {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+}
+
+function scheduleAutoSave() {
+  clearAutoSaveTimer();
+  if (!currentSite || customizationBusy || !customizationIsDirty()) return;
+
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null;
+    void saveCustomization({ auto: true });
+  }, AUTO_SAVE_DELAY_MS);
+}
+
+async function saveCustomization({ auto = false } = {}) {
+  if (!currentSite || customizationBusy || !customizationIsDirty()) return false;
+
+  clearAutoSaveTimer();
+  customizationBusy = true;
+  if (!auto) customizationSavedMessage = "";
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+
+  const ok = await action("updateCustomization", readCustomizationFromForm());
+
+  customizationBusy = false;
+  if (ok) {
+    customizationTouched = false;
+    customizationSavedMessage = auto
+      ? "Customization saved."
+      : "Customization saved. Copy the refreshed snippet and CSS below.";
+  }
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+  return ok;
+}
+
+function syncCustomizationForm({ force = false } = {}) {
+  if (!currentSite || !(customizationForm instanceof HTMLFormElement)) return;
+  const shouldApply = force || !customizationTouched || !customizationIsDirty();
+  if (shouldApply) {
+    const customization = getCurrentCustomization();
+    applyConfigToForm(customizationForm, { ...customization.sceneConfig, ...customization.styleConfig });
+    syncScenePositionInputs(customization.sceneConfig);
+    if (force) customizationTouched = false;
+  }
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+  if (force || !preview.mounted) {
+    preview.mount({ remount: force });
+  }
 }
 
 function render(data) {
@@ -98,8 +270,12 @@ function render(data) {
   if (document.activeElement !== snippetEl) {
     snippetEl.value = data.embedSnippet;
   }
+  if (document.activeElement !== styleSnippetEl) {
+    styleSnippetEl.value = data.styleSnippet;
+  }
   chatDisabledInput.checked = currentSite.chatDisabled;
   disableSiteButton.textContent = currentSite.disabled ? "Enable site" : "Disable site";
+  syncCustomizationForm();
 
   renderThread(scene.visitors);
 
@@ -262,10 +438,11 @@ async function action(name, data = {}) {
   const result = await postJson("/api/admin/action", { siteKey, adminToken, action: name, ...data });
   if (!result.ok) {
     setStatus(result.body.error || "Action failed.", true);
-    return;
+    return false;
   }
 
   await loadSite();
+  return true;
 }
 
 loginForm.addEventListener("submit", async (event) => {
@@ -274,6 +451,7 @@ loginForm.addEventListener("submit", async (event) => {
   setLoginStatus("Checking token...");
 
   adminToken = loginTokenEl.value.trim();
+  rememberMe = rememberMeEl.checked;
   siteKey = "";
   await loadSite();
 
@@ -290,6 +468,30 @@ signOutButton.addEventListener("click", () => {
 });
 
 bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
+bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnippetEl });
+
+customizationForm.addEventListener("input", (event) => {
+  customizationSavedMessage = "";
+  customizationTouched = true;
+  if (isSceneCountInputName(event.target?.name || "")) {
+    syncScenePositionInputs(readSceneConfigFromForm(customizationForm));
+  }
+  updateCustomizationButtons();
+  updateCustomizationStatus();
+  preview.mount();
+  scheduleAutoSave();
+});
+
+customizationForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveCustomization();
+});
+
+resetCustomizationButton.addEventListener("click", () => {
+  clearAutoSaveTimer();
+  customizationSavedMessage = "";
+  syncCustomizationForm({ force: true });
+});
 
 chatDisabledInput.addEventListener("change", () => action("setChatDisabled", { disabled: chatDisabledInput.checked }));
 clearMessagesButton.addEventListener("click", () => action("clearMessages"));
@@ -298,6 +500,7 @@ disableSiteButton.addEventListener("click", () => action("disableSite", { disabl
 const credentials = readCredentials();
 siteKey = credentials.siteKey;
 adminToken = credentials.adminToken;
+rememberMeEl.checked = rememberMe;
 
 if (adminToken) {
   loadSite();

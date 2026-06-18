@@ -1,10 +1,18 @@
 import { bindCopy } from "../lib/ui-common.mjs";
-import { createAutoRefresh, createStatusSetter, escapeHtml, formatTime, postJson } from "./hosted-common.mjs";
+import {
+  createAutoRefresh,
+  createCredentialStore,
+  createStatusSetter,
+  escapeHtml,
+  formatTime,
+  postJson,
+} from "./hosted-common.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
 const loginForm = document.getElementById("login-form");
 const loginPasswordEl = document.getElementById("login-password");
+const rememberMeEl = document.getElementById("login-remember");
 const loginSubmitButton = document.getElementById("login-submit");
 const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
@@ -18,7 +26,11 @@ const copyTokenButton = document.getElementById("copy-token");
 const STORAGE_KEY = "townsquare-service-admin-password";
 const REFRESH_INTERVAL_MS = 5000;
 
-let password = sessionStorage.getItem(STORAGE_KEY) || "";
+const credentialStore = createCredentialStore(STORAGE_KEY);
+
+const stored = credentialStore.read();
+let password = typeof stored?.value === "string" ? stored.value : "";
+let rememberMe = stored?.remembered ?? false;
 
 const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
 const setStatus = createStatusSetter(statusEl);
@@ -62,6 +74,7 @@ function renderSites(sites) {
         <code>${escapeHtml(site.siteKey)}</code>
       </div>
       <dl class="service-site-meta">
+        ${site.email ? `<div><dt>Email</dt><dd>${escapeHtml(site.email)}</dd></div>` : ""}
         <div><dt>Status</dt><dd>${site.disabled ? "Disabled" : "Enabled"}</dd></div>
         <div><dt>Chat</dt><dd>${site.chatDisabled ? "Disabled" : "Enabled"}</dd></div>
         <div><dt>Verified</dt><dd>${formatTime(site.verifiedAt)}</dd></div>
@@ -113,7 +126,7 @@ async function loadSites({ silent = false } = {}) {
   const result = await api("/api/service-admin/sites");
   if (!result.ok) {
     if (result.status === 403) {
-      sessionStorage.removeItem(STORAGE_KEY);
+      credentialStore.clear();
       password = "";
       showLogin(result.body.error || "Could not open service admin.", true);
       return;
@@ -122,7 +135,7 @@ async function loadSites({ silent = false } = {}) {
     return;
   }
 
-  sessionStorage.setItem(STORAGE_KEY, password);
+  credentialStore.save(password, rememberMe);
   showAdmin();
   if (!silent) {
     tokenResult.hidden = true;
@@ -176,6 +189,7 @@ loginForm.addEventListener("submit", async (event) => {
   setLoginStatus("Checking password...");
 
   password = loginPasswordEl.value.trim();
+  rememberMe = rememberMeEl.checked;
   await loadSites();
 
   loginSubmitButton.disabled = false;
@@ -187,11 +201,13 @@ loginForm.addEventListener("submit", async (event) => {
 
 signOutButton.addEventListener("click", () => {
   password = "";
-  sessionStorage.removeItem(STORAGE_KEY);
+  credentialStore.clear();
   showLogin("Signed out. The service admin password was forgotten on this device.");
 });
 
 bindCopy(copyTokenButton, { text: () => newAdminTokenEl.value, source: newAdminTokenEl });
+
+rememberMeEl.checked = rememberMe;
 
 if (password) {
   loadSites();

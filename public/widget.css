@@ -205,32 +205,52 @@
   background: transparent;
   /* taps move the character; keep page panning, drop double-tap zoom */
   touch-action: manipulation;
+  /* Speech bubbles, trays, and composers size against the stage (cqw), not the
+     viewport — otherwise a long line in a narrow embed renders wider than the
+     stage and bleeds past its clipped edge. */
+  container-type: inline-size;
 }
 
 .townsquare__ground {
   position: absolute;
   inset: auto 0 52px;
   height: 1px;
+  background: transparent;
+}
+
+/* Painted scene/ground only when a customization layer is active (preview or pasted site CSS). */
+#townsquare-root[data-townsquare-surface] .townsquare__stage {
+  background: linear-gradient(
+    180deg,
+    var(--scene) 0%,
+    var(--scene) 72%,
+    var(--scene-edge) 72%,
+    var(--page) 72.4%,
+    var(--page) 100%
+  );
+}
+
+#townsquare-root[data-townsquare-surface] .townsquare__ground {
   background: var(--ground);
 }
 
-.prop {
+.townsquare .prop {
   position: absolute;
   bottom: 53px;
   transform: translateX(-50%);
-  color: color-mix(in oklab, var(--text) 58%, var(--muted) 42%);
+  color: var(--prop-ink);
   opacity: 0.5;
   pointer-events: none;
 }
 
-.prop svg {
+.townsquare .prop svg {
   width: 100%;
   height: 100%;
   display: block;
   overflow: visible;
 }
 
-.prop svg * {
+.townsquare .prop svg * {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -290,17 +310,21 @@
   bottom: calc(18px + var(--ts-keyboard, 0px));
 }
 
-.prop--tree .canopy,
-.prop--tree .trunk {
-  fill: currentColor;
-  fill-opacity: 0.15;
+.townsquare .prop--tree .canopy {
+  fill: var(--tree-canopy);
+  stroke: var(--tree-canopy);
 }
 
-.prop--lamp {
+.townsquare .prop--tree .trunk {
+  fill: var(--tree-trunk);
+  stroke: var(--tree-trunk);
+}
+
+.townsquare .prop--lamp {
   z-index: 1;
 }
 
-.prop__light {
+.townsquare .prop__light {
   position: absolute;
   top: 16%;
   left: 75%;
@@ -331,7 +355,7 @@
   width: 12px;
   height: 8px;
   transform: translateX(-50%);
-  color: color-mix(in oklab, var(--text) 58%, var(--muted) 42%);
+  color: var(--prop-ink);
   opacity: 0.45;
   pointer-events: none;
 }
@@ -925,7 +949,7 @@
   align-items: center;
   gap: 8px;
   width: max-content;
-  max-width: min(240px, 72vw);
+  max-width: min(240px, 72cqw);
   pointer-events: none;
   transition: opacity 140ms ease, transform 160ms ease;
 }
@@ -1016,8 +1040,8 @@
   bottom: calc(100% + 12px);
   z-index: 3;
   width: max-content;
-  min-width: min(220px, 88vw);
-  max-width: min(360px, 88vw);
+  min-width: min(220px, 88cqw);
+  max-width: min(360px, 88cqw);
   max-height: min(280px, 58vh);
   padding: 5px 4px;
   border-radius: 16px;
@@ -1349,7 +1373,7 @@
   gap: 9px;
   padding: 7px 7px 7px 19px;
   min-width: 300px;
-  max-width: min(340px, 80vw);
+  max-width: min(340px, 80cqw);
   border-radius: 26px;
   background: var(--surface);
   box-shadow: var(--tray-shadow);
@@ -1399,7 +1423,7 @@
 
 @media (max-width: 640px) {
   .townsquare__status { flex-direction: column; gap: 4px; }
-  .townsquare-avatar__composer { min-width: min(260px, 80vw); }
+  .townsquare-avatar__composer { min-width: min(260px, 80cqw); }
 }
 
 /* ── Touch: docked composer ──

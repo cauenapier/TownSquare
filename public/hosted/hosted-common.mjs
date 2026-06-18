@@ -89,3 +89,109 @@ export function createAutoRefresh(callback, intervalMs) {
     },
   };
 }
+
+/**
+ * Set the text/error state of a `.hosted-status` element in one call.
+ *
+ * @param {HTMLElement} element
+ * @param {string} message
+ * @param {boolean} [isError]
+ * @param {{ hideWhenEmpty?: boolean }} [options]
+ */
+export function setStatus(element, message, isError = false, { hideWhenEmpty = false } = {}) {
+  element.textContent = message;
+  element.classList.toggle("hosted-status--error", isError);
+  if (hideWhenEmpty) {
+    element.hidden = !message;
+  }
+}
+
+/**
+ * Write `value` into an input unless the user is actively editing it.
+ *
+ * @param {HTMLInputElement | HTMLTextAreaElement} input
+ * @param {string} value
+ */
+export function setValueIfIdle(input, value) {
+  if (document.activeElement !== input) {
+    input.value = value;
+  }
+}
+
+const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Persist a login credential across requests. By default it lives in
+ * `sessionStorage` (forgotten when the tab closes); when the caller opts into
+ * "remember me" it moves to `localStorage` with an expiry stamp so it survives
+ * browser restarts but is dropped automatically after `ttlMs`.
+ *
+ * The credential `value` is opaque — a token string, password, or object —
+ * wrapped as `{ value, expiresAt? }`. Legacy unwrapped entries are ignored, so
+ * an older session simply prompts for login once.
+ *
+ * @param {string} key Storage key shared by both backing stores.
+ * @param {{ ttlMs?: number }} [options]
+ * @returns {{
+ *   read: () => { value: any, remembered: boolean } | null,
+ *   save: (value: any, remember: boolean) => void,
+ *   clear: () => void,
+ * }}
+ */
+export function createCredentialStore(key, { ttlMs = REMEMBER_TTL_MS } = {}) {
+  function readEntry(storage, remembered) {
+    let parsed;
+    try {
+      parsed = JSON.parse(storage.getItem(key) || "");
+    } catch {
+      return null;
+    }
+    if (!parsed || typeof parsed !== "object" || !("value" in parsed)) return null;
+    if (remembered && typeof parsed.expiresAt === "number" && Date.now() > parsed.expiresAt) {
+      storage.removeItem(key);
+      return null;
+    }
+    return { value: parsed.value, remembered };
+  }
+
+  return {
+    read() {
+      return readEntry(localStorage, true) || readEntry(sessionStorage, false);
+    },
+    save(value, remember) {
+      this.clear();
+      if (remember) {
+        localStorage.setItem(key, JSON.stringify({ value, expiresAt: Date.now() + ttlMs }));
+      } else {
+        sessionStorage.setItem(key, JSON.stringify({ value }));
+      }
+    },
+    clear() {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    },
+  };
+}
+
+/**
+ * Render `{ label, value }` entries as a `<dl>` definition list.
+ *
+ * @param {HTMLElement} container
+ * @param {Array<{ label: string, value: unknown }>} entries
+ */
+export function renderDefinitionList(container, entries) {
+  container.replaceChildren();
+  const list = document.createElement("dl");
+
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    const key = document.createElement("dt");
+    const value = document.createElement("dd");
+    key.textContent = entry.label;
+    value.textContent = String(entry.value);
+    row.append(key, value);
+    list.appendChild(row);
+  }
+
+  container.appendChild(list);
+}

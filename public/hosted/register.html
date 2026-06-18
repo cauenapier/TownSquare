@@ -2,17 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Add TownSquare to your website</title>
+    <link rel="stylesheet" href="/widget.css" />
     <link rel="stylesheet" href="/page.css" />
   </head>
   <body>
-    <main class="hosted-shell">
+    <main class="hosted-shell hosted-shell--compact">
       <section class="hosted-panel" id="register-view" aria-labelledby="register-title">
         <p class="eyebrow">Hosted TownSquare</p>
         <h1 id="register-title">Add TownSquare to your website</h1>
         <p class="hosted-copy">
-          Enter your site URL, get a snippet, paste it into your page. No account required.
+          Set up your square, preview it, then copy the snippet and CSS into your site.
         </p>
 
         <form class="hosted-form" id="register-form">
@@ -31,10 +32,88 @@
             <span>Site name <small>optional</small></span>
             <input id="site-name" name="name" type="text" placeholder="My site" maxlength="80" />
           </label>
+          <label>
+            <span>Email <small>optional</small></span>
+            <input
+              id="site-email"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              autocomplete="email"
+              maxlength="254"
+            />
+          </label>
+
+          <section class="hosted-section" aria-labelledby="scene-config-title">
+            <div class="hosted-section-head">
+              <h2 id="scene-config-title">Scene props</h2>
+            </div>
+            <p class="scene-counts">
+              <span class="scene-counts__lead">Your square has</span>
+              <span class="scene-counts__run">
+                <span class="scene-counts__chunk">
+                  <span class="scene-count">
+                    <span class="scene-count__slot" aria-hidden="true">[</span>
+                    <input id="scene-benches" name="scene-benches" type="number" min="0" max="6" step="1" value="2" inputmode="numeric" aria-label="Benches" />
+                    <span class="scene-count__slot" aria-hidden="true">]</span>
+                    <span class="scene-count__noun" data-singular="bench" data-plural="benches">benches</span>
+                  </span><span class="scene-counts__sep">,</span>
+                </span>
+                <span class="scene-counts__chunk">
+                  <span class="scene-count">
+                    <span class="scene-count__slot" aria-hidden="true">[</span>
+                    <input id="scene-trees" name="scene-trees" type="number" min="0" max="6" step="1" value="1" inputmode="numeric" aria-label="Trees" />
+                    <span class="scene-count__slot" aria-hidden="true">]</span>
+                    <span class="scene-count__noun" data-singular="tree" data-plural="trees">tree</span>
+                  </span><span class="scene-counts__sep">,</span>
+                </span>
+                <span class="scene-counts__chunk">
+                  <span class="scene-count">
+                    <span class="scene-count__slot" aria-hidden="true">[</span>
+                    <input id="scene-lamps" name="scene-lamps" type="number" min="0" max="4" step="1" value="1" inputmode="numeric" aria-label="Lamps" />
+                    <span class="scene-count__slot" aria-hidden="true">]</span>
+                    <span class="scene-count__noun" data-singular="lamp" data-plural="lamps">lamp</span>
+                  </span><span class="scene-counts__sep">,</span>
+                </span>
+                <span class="scene-counts__chunk scene-counts__chunk--last">
+                  <span class="scene-counts__and">and</span>
+                  <span class="scene-count">
+                    <span class="scene-count__slot" aria-hidden="true">[</span>
+                    <input id="scene-birds" name="scene-birds" type="number" min="0" max="18" step="1" value="3" inputmode="numeric" aria-label="Birds" />
+                    <span class="scene-count__slot" aria-hidden="true">]</span>
+                    <span class="scene-count__noun" data-singular="bird" data-plural="birds">birds</span>
+                  </span><span class="scene-counts__end">.</span>
+                </span>
+              </span>
+            </p>
+            <div class="hosted-position-groups" id="scene-position-fields"></div>
+          </section>
+
+          <section class="hosted-section" aria-labelledby="style-config-title">
+            <div class="hosted-section-head">
+              <h2 id="style-config-title">Style overrides</h2>
+            </div>
+            <p class="hosted-style-hint hosted-note">Pick a color for each swatch, or toggle None to make it transparent. Click a transparent swatch to set a color.</p>
+            <div id="style-override-fields"></div>
+          </section>
+
           <button type="submit" id="register-submit">Create my TownSquare</button>
         </form>
 
         <p class="hosted-status" id="register-status" role="status" hidden></p>
+
+        <section class="hosted-section hosted-preview-dock" aria-labelledby="preview-title">
+          <div class="hosted-section-head">
+            <h2 id="preview-title">Preview</h2>
+            <div class="hosted-preview-modes" role="group" aria-label="Preview theme">
+              <button type="button" class="hosted-preview-mode is-active" data-preview-mode="light" aria-pressed="true">Light</button>
+              <button type="button" class="hosted-preview-mode" data-preview-mode="dark" aria-pressed="false">Dark</button>
+            </div>
+          </div>
+          <div class="townsquare-host">
+            <div id="townsquare-root"></div>
+          </div>
+        </section>
 
         <p class="hosted-note hosted-footnote">
           Already registered? <a href="/admin">Open your admin page</a> with your admin token.
@@ -61,10 +140,18 @@
           </li>
           <li>
             <h2>Paste this snippet into your page</h2>
-            <p class="hosted-note">Anywhere in your HTML works. The square appears where you put it.</p>
-            <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
+            <p class="hosted-note">Put the mount where you want the square to appear.</p>
+            <textarea id="embed-snippet" readonly rows="10" spellcheck="false"></textarea>
             <div class="hosted-actions">
               <button type="button" id="copy-snippet">Copy snippet</button>
+            </div>
+          </li>
+          <li>
+            <h2>Paste this CSS into your site</h2>
+            <p class="hosted-note">This is the customization layer you can keep editing later.</p>
+            <textarea id="style-snippet" readonly rows="10" spellcheck="false"></textarea>
+            <div class="hosted-actions">
+              <button type="button" id="copy-style">Copy CSS</button>
             </div>
           </li>
           <li>

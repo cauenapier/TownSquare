@@ -3,7 +3,7 @@
  */
 
 import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
-import { HIGH_FIVE_DISTANCE, INTERACTIVE_PROPS, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
+import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import { clamp } from "./math.mjs";
 import {
   playHighFive,
@@ -38,17 +38,55 @@ export function resetPropSettle(ctx) {
 }
 
 /**
+ * @param {import("../shared/scene-props.mjs").SceneProp[]} sceneProps
+ * @param {number} x
+ * @returns {import("../shared/scene-props.mjs").SceneProp | undefined}
+ */
+function findSettleProp(sceneProps, x) {
+  return sceneProps
+    .filter((candidate) => candidate.pose && candidate.zoneRadius > 0)
+    .find((candidate) => Math.abs(x - candidate.x) < candidate.zoneRadius);
+}
+
+/**
+ * @param {import("../shared/scene-props.mjs").SceneProp} prop
+ * @param {number} requestedX
+ * @returns {number}
+ */
+function findNearestSeatX(prop, requestedX) {
+  const seats = Array.isArray(prop.seats) && prop.seats.length > 0 ? prop.seats : [0];
+  return seats
+    .map((offset) => prop.x + offset)
+    .reduce((best, seatX) => (
+      Math.abs(seatX - requestedX) < Math.abs(best - requestedX) ? seatX : best
+    ));
+}
+
+/**
+ * @param {WidgetContext} ctx
+ * @param {import("../shared/scene-props.mjs").SceneProp} prop
+ */
+function applyLocalPropSettle(ctx, prop) {
+  const { self } = ctx;
+  self.settleRequested = true;
+  self.targetX = null;
+  self.x = findNearestSeatX(prop, self.x);
+  self.pose = prop.pose;
+  self.propId = prop.id;
+  renderAvatar(self.avatar, self.x);
+  updatePose(self.avatar, self.pose);
+  updatePropEffects(self.avatar, self.x, self.propId, ctx.sceneProps);
+}
+
+/**
  * @param {WidgetContext} ctx
  * @param {number} now
  */
 export function maybeRequestPropSettle(ctx, now) {
   const { self, socket } = ctx;
   if (self.pose) return;
-  if (socket.readyState !== WebSocket.OPEN) return;
 
-  const prop = INTERACTIVE_PROPS.find((candidate) => (
-    Math.abs(self.x - candidate.x) < candidate.zoneRadius
-  ));
+  const prop = findSettleProp(ctx.sceneProps, self.x);
   if (!prop) {
     resetPropSettle(ctx);
     return;
@@ -63,6 +101,13 @@ export function maybeRequestPropSettle(ctx, now) {
   if (self.settleRequested || now - self.propZoneEnteredAt < PROP_SETTLE_MS) {
     return;
   }
+
+  if (ctx.options.preview === true) {
+    applyLocalPropSettle(ctx, prop);
+    return;
+  }
+
+  if (socket.readyState !== WebSocket.OPEN) return;
 
   self.settleRequested = true;
   socket.send(JSON.stringify({ type: "settle", propId: prop.id }));
@@ -109,7 +154,7 @@ function clearSelfPoseForAction(ctx) {
   ctx.self.pose = null;
   ctx.self.propId = null;
   updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
   setWalking(ctx.self.avatar, false);
 }
 
@@ -222,18 +267,18 @@ export function tick(ctx, now) {
     }
     renderAvatar(ctx.self.avatar, ctx.self.x);
     setFacing(ctx.self.avatar, direction < 0);
-    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
     setWalking(ctx.self.avatar, true);
     maybeSendMove(ctx);
   } else {
     setWalking(ctx.self.avatar, false);
-    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId);
+    updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
     maybeRequestPropSettle(ctx, now);
   }
 
   layoutBubbleColumns(
     ctx.stage,
-    [ctx.self, ...ctx.peers.values()],
+    ctx.options.preview === true || ctx.options.solo === true ? [ctx.self] : [ctx.self, ...ctx.peers.values()],
     ctx.self.x,
     layoutConfigFor(undefined, ctx.expanded),
   );
@@ -273,6 +318,11 @@ export function wireKeyboard(ctx) {
     }
     if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "h") {
       triggerHighFive(ctx);
+    }
+    if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "t") {
+      // The keystroke would otherwise land in the input we're about to focus.
+      event.preventDefault();
+      ctx.self.avatar.openComposer?.();
     }
   };
 

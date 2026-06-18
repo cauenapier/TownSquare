@@ -2,7 +2,7 @@
  * DOM construction and avatar/scene rendering for the TownSquare widget.
  */
 
-import { DISPLAY_NAME_MAX, HIGH_FIVE_MS, JUMP_MS, MESSAGE_MAX, PROPS, RAISED_HAND_MS } from "./constants.mjs";
+import { DISPLAY_NAME_MAX, HIGH_FIVE_MS, JUMP_MS, MESSAGE_MAX, RAISED_HAND_MS } from "./constants.mjs";
 import { figureMarkup } from "./figure.mjs";
 import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
 
@@ -39,6 +39,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLFormElement} [composer]
  * @property {HTMLInputElement} [input]
  * @property {HTMLButtonElement} [send]
+ * @property {() => void} [openComposer] Open the composer and focus the chat input.
  * @property {ReturnType<typeof setTimeout> | null} [jumpTimer]
  * @property {ReturnType<typeof setTimeout> | null} [raisedHandTimer]
  * @property {ReturnType<typeof setTimeout> | null} [highFiveTimer]
@@ -138,7 +139,7 @@ export function renderShell(container) {
 
   const instructions = document.createElement("p");
   instructions.textContent =
-    "Move with the arrow keys or tap where you want to walk. Press J to jump and H to show a high-five; on touch, use the action buttons. Tap your nameplate to chat, and tap a character to see their recent messages.";
+    "Move with the arrow keys or tap where you want to walk. Press J to jump and H to show a high-five; on touch, use the action buttons. Press T or tap your nameplate to chat, and tap a character to see their recent messages.";
 
   const link = document.createElement("a");
   link.href = TOWNSQUARE_URL;
@@ -514,6 +515,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   };
 
   plate.addEventListener("click", openComposer);
+  selfAvatar.openComposer = openComposer;
 
   input.addEventListener("input", () => {
     setSendReady(selfAvatar, input.value.trim().length > 0);
@@ -606,11 +608,12 @@ function setSendReady(avatar, ready) {
 
 /**
  * @param {HTMLElement} container
+ * @param {Array<import("../shared/scene-props.mjs").SceneProp>} props
  */
-export function renderProps(container) {
-  for (const prop of PROPS) {
+export function renderProps(container, props = []) {
+  for (const prop of props) {
     const el = document.createElement("div");
-    el.className = `prop prop--${prop.id}`;
+    el.className = `prop prop--${prop.kind}`;
     el.style.left = `${(prop.x * 100).toFixed(2)}%`;
     el.style.width = `${prop.width}px`;
     el.style.height = `${prop.height}px`;
@@ -724,20 +727,21 @@ export function updatePose(avatar, pose) {
  * @param {AvatarView} avatar
  * @param {number} x
  * @param {string | null} propId
+ * @param {Array<import("../shared/scene-props.mjs").SceneProp>} props
  */
-export function updatePropEffects(avatar, x, propId) {
-  const activeProp = PROPS.find((prop) => prop.id === propId);
+export function updatePropEffects(avatar, x, propId, props = []) {
+  const activeProp = props.find((prop) => prop.id === propId);
   if (activeProp?.faceAway) {
     setFacing(avatar, x >= activeProp.x);
   }
 
   avatar.el.classList.toggle(
     "townsquare-avatar--shaded",
-    PROPS.some((prop) => prop.shadeRadius && Math.abs(x - prop.x) < prop.shadeRadius),
+    props.some((prop) => prop.shadeRadius && Math.abs(x - prop.x) < prop.shadeRadius),
   );
   avatar.el.classList.toggle(
     "townsquare-avatar--lit",
-    PROPS.some((prop) => prop.lightRadius && Math.abs(x - prop.x) < prop.lightRadius),
+    props.some((prop) => prop.lightRadius && Math.abs(x - prop.x) < prop.lightRadius),
   );
 }
 

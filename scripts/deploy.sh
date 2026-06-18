@@ -3,10 +3,10 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Deploy the current TownSquare checkout as a new release.
+Deploy a TownSquare git ref or tag as a new release.
 
 Usage:
-  scripts/deploy.sh [--local] [--skip-checks] [--ref <git-ref>] [--env-file <path>] [--help]
+  scripts/deploy.sh [--local] [--skip-checks] [--promote-main] [--tag <git-tag> | --ref <git-ref>] [--env-file <path>] [--help]
 
 Environment variables:
   DEPLOY_MODE           Optional. local or remote. Default: remote.
@@ -22,6 +22,9 @@ Environment variables:
 
 Notes:
 - By default the script will source ./.env.deploy.local if it exists.
+- By default the script deploys the local production tag.
+- Use --promote-main to fetch origin/main, move the deploy tag to that commit, and deploy it.
+- Use --tag for another tag. It resolves only refs/tags/<git-tag>.
 - Remote mode uses ssh/scp, so it should be run from a machine with access to the server.
 - Local mode deploys directly on the current host and may use sudo.
 - It creates a timestamped release under <DEPLOY_ROOT>/releases/<timestamp>-<sha>.
@@ -30,7 +33,11 @@ EOF
 }
 
 SKIP_CHECKS=0
-REF="HEAD"
+PROMOTE_MAIN=0
+REF=""
+REF_SPECIFIED=0
+TAG="production"
+TAG_SPECIFIED=0
 CLI_ENV_FILE=""
 CLI_DEPLOY_MODE=""
 
@@ -44,12 +51,26 @@ while [[ $# -gt 0 ]]; do
       SKIP_CHECKS=1
       shift
       ;;
+    --promote-main)
+      PROMOTE_MAIN=1
+      shift
+      ;;
     --ref)
       REF="${2:-}"
       if [[ -z "$REF" ]]; then
         echo "--ref requires a git ref" >&2
         exit 1
       fi
+      REF_SPECIFIED=1
+      shift 2
+      ;;
+    --tag)
+      TAG="${2:-}"
+      if [[ -z "$TAG" ]]; then
+        echo "--tag requires a git tag" >&2
+        exit 1
+      fi
+      TAG_SPECIFIED=1
       shift 2
       ;;
     --env-file)
@@ -106,6 +127,29 @@ HEALTHCHECK_URL="${HEALTHCHECK_URL:-}"
 SSH_OPTS="${SSH_OPTS:-}"
 
 require_cmd git
+
+if [[ "$REF_SPECIFIED" -eq 1 && "$TAG_SPECIFIED" -eq 1 ]]; then
+  echo "--tag and --ref cannot be used together" >&2
+  exit 1
+fi
+
+if [[ "$PROMOTE_MAIN" -eq 1 && "$REF_SPECIFIED" -eq 1 ]]; then
+  echo "--promote-main and --ref cannot be used together" >&2
+  exit 1
+fi
+
+if [[ "$PROMOTE_MAIN" -eq 1 ]]; then
+  echo "== promote origin/main to tag: $TAG =="
+  git fetch origin main
+  git tag -f "$TAG" origin/main
+fi
+
+if [[ "$REF_SPECIFIED" -ne 1 ]]; then
+  if ! REF="$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}")"; then
+    echo "tag not found or does not point to a commit: $TAG" >&2
+    exit 1
+  fi
+fi
 
 case "$DEPLOY_MODE" in
   local|remote)

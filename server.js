@@ -28,6 +28,18 @@ const PORT = Number(process.env.PORT || 8787);
 const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const PLAUSIBLE_DOMAIN = String(process.env.PLAUSIBLE_DOMAIN || "").trim();
+const PLAUSIBLE_UPSTREAM = String(process.env.PLAUSIBLE_UPSTREAM || "https://plausible.io").replace(/\/$/, "");
+const PLAUSIBLE_SCRIPT_SRC = String(process.env.PLAUSIBLE_SCRIPT_SRC || "/js/script.js").trim();
+const PLAUSIBLE_API_PATH = process.env.PLAUSIBLE_API_PATH === undefined
+  ? "/api/event"
+  : String(process.env.PLAUSIBLE_API_PATH).trim();
+const PLAUSIBLE_HTML_PAGES = new Set([
+  "/index.html",
+  "/docs.html",
+  "/changelog.html",
+  "/hosted/register.html",
+]);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
@@ -46,7 +58,9 @@ const MAX_BROWSER_SECRET_LEN = 64;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
 const MAX_READING_URL_LEN = 240;
 const MAX_SITE_NAME_LEN = 80;
+const MAX_EMAIL_LEN = 254;
 const MAX_ORIGIN_LEN = 240;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
@@ -59,7 +73,6 @@ const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS
 const HEARTBEAT_INTERVAL_MS = 30000;
 const BIRD_TICK_INTERVAL_MS = 1000;
 const TELEGRAM_API_TIMEOUT_MS = 5000;
-const MAX_BIRDS = 3;
 const BIRD_FLEE_RADIUS = 0.07;
 const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
@@ -113,6 +126,16 @@ function loadEnvFile(filePath = path.join(__dirname, ".env")) {
 let PROPS_BY_ID = new Map();
 /** @type {Array<import("./public/shared/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
+let DEFAULT_SITE_SCENE_CONFIG = { benches: 2, trees: 1, lamps: 1, birds: 3 };
+let DEFAULT_SITE_STYLE = {
+  light: { scene: "#e4e2dd", page: "#efede9", surface: "#fdf8f4", ink: "#2a2926", accent: "#c8641f", other: "#26241f", ground: "rgba(42, 41, 38, 0.16)" },
+  dark: { scene: "#242521", page: "#181917", surface: "#24231f", ink: "#f2eee6", accent: "#df8a43", other: "#ddd7cc", ground: "rgba(242, 238, 230, 0.18)" },
+};
+let sanitizeSceneConfig = (config) => ({ ...DEFAULT_SITE_SCENE_CONFIG, ...(config || {}) });
+let sanitizeSiteStyle = (style) => (style && (style.light || style.dark) ? style : { ...DEFAULT_SITE_STYLE, light: { ...DEFAULT_SITE_STYLE.light, ...(style || {}) } });
+let buildSceneProps = () => [];
+let buildBirdPerches = () => [];
+let buildSiteCss = () => "";
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -182,17 +205,20 @@ const MESSAGE_HANDLERS = {
   move: handleMove,
   profile: handleProfile,
   reading: handleReading,
+  sceneConfig: handleSceneConfig,
   settle: handleSettle,
   say: handleSay,
 };
 
-/** @returns {{connectionId:number,ws:any,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
-function createClient(connectionId, ws, scene, site) {
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+function createClient(connectionId, ws, scene, site, origin = "") {
   return {
     connectionId,
     ws,
     scene,
     site,
+    origin,
+    propsById: scene.propsById,
     identity: null,
     joined: false,
     readingActive: false,
@@ -200,6 +226,17 @@ function createClient(connectionId, ws, scene, site) {
     lastActionAt: 0,
     lastChatAt: 0,
   };
+}
+
+function syncClientSceneProps(client, message) {
+  if (client.site) {
+    client.propsById = client.scene.propsById;
+    return;
+  }
+
+  const config = isPlainObject(message.sceneConfig) ? message.sceneConfig : DEFAULT_SITE_SCENE_CONFIG;
+  const props = buildSceneProps(sanitizeSceneConfig(config));
+  client.propsById = new Map(props.map((prop) => [prop.id, prop]));
 }
 
 /** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
@@ -272,6 +309,49 @@ function sanitizeReadingUrl(readingUrl) {
   }
 }
 
+function parseReadingUrl(readingUrl) {
+  const sanitized = sanitizeReadingUrl(readingUrl);
+  if (!sanitized) return null;
+  try {
+    return new URL(sanitized);
+  } catch {
+    return null;
+  }
+}
+
+function labelFromReadingUrl(url) {
+  const segment = url.pathname.split("/").filter(Boolean).pop() || "";
+  if (!segment) return sanitizeReadingLabel(url.hostname.replace(/^www\./, ""));
+
+  try {
+    return sanitizeReadingLabel(decodeURIComponent(segment)
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/[-_]+/g, " "));
+  } catch {
+    return sanitizeReadingLabel(segment.replace(/[-_]+/g, " "));
+  }
+}
+
+function readingUrlAllowedForClient(client, url) {
+  const urlOrigin = normalizeOrigin(url.origin);
+  if (!urlOrigin) return false;
+  if (client.site) return urlOrigin === client.site.origin;
+  return !client.origin || urlOrigin === client.origin;
+}
+
+function sanitizeReadingState(client, message, fallback = {}) {
+  const hasReadingUrl = Object.hasOwn(message, "readingUrl");
+  const readingUrl = hasReadingUrl ? parseReadingUrl(message.readingUrl) : parseReadingUrl(fallback.readingUrl || "");
+  if (!readingUrl || !readingUrlAllowedForClient(client, readingUrl)) {
+    return { readingLabel: "", readingUrl: "" };
+  }
+
+  return {
+    readingLabel: labelFromReadingUrl(readingUrl),
+    readingUrl: readingUrl.href,
+  };
+}
+
 function sanitizeCharacterColor(color) {
   return CHARACTER_COLORS.has(color) ? color : DEFAULT_CHARACTER_COLOR;
 }
@@ -285,6 +365,13 @@ function sanitizeSiteName(name, origin) {
   } catch {
     return "Untitled site";
   }
+}
+
+function parseOptionalEmail(email) {
+  const clean = typeof email === "string" ? email.trim().slice(0, MAX_EMAIL_LEN) : "";
+  if (!clean) return { ok: true, email: null };
+  if (!EMAIL_RE.test(clean)) return { ok: false, email: null };
+  return { ok: true, email: clean };
 }
 
 function createToken(prefix, bytes = 18) {
@@ -331,6 +418,110 @@ function getStaticHeaders(filePath) {
   }
 
   return headers;
+}
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function plausibleScriptPath() {
+  if (!PLAUSIBLE_SCRIPT_SRC.startsWith("/")) return null;
+  return PLAUSIBLE_SCRIPT_SRC.split("?")[0];
+}
+
+function getPublicRelativePath(filePath) {
+  return `/${path.relative(PUBLIC_DIR, filePath).split(path.sep).join("/")}`;
+}
+
+function shouldInjectPlausible(filePath) {
+  if (!PLAUSIBLE_DOMAIN) return false;
+  return PLAUSIBLE_HTML_PAGES.has(getPublicRelativePath(filePath));
+}
+
+function buildPlausibleSnippet() {
+  const attrs = [
+    "defer",
+    `data-domain="${escapeHtmlAttr(PLAUSIBLE_DOMAIN)}"`,
+    `src="${escapeHtmlAttr(PLAUSIBLE_SCRIPT_SRC)}"`,
+  ];
+  if (PLAUSIBLE_API_PATH) {
+    attrs.splice(2, 0, `data-api="${escapeHtmlAttr(PLAUSIBLE_API_PATH)}"`);
+  }
+  return `<script ${attrs.join(" ")}></script>`;
+}
+
+function injectPlausibleIntoHtml(html) {
+  const snippet = buildPlausibleSnippet();
+  const headClose = html.indexOf("</head>");
+  if (headClose === -1) return html;
+  return `${html.slice(0, headClose)}    ${snippet}\n  ${html.slice(headClose)}`;
+}
+
+async function proxyPlausibleScript(req, res) {
+  try {
+    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/js/script.js`, {
+      headers: { "user-agent": req.headers["user-agent"] || "TownSquare" },
+    });
+    if (!response.ok) {
+      res.writeHead(response.status, { "content-type": "text/plain; charset=utf-8" });
+      res.end("upstream error");
+      return;
+    }
+
+    res.writeHead(200, {
+      "content-type": response.headers.get("content-type") || "application/javascript; charset=utf-8",
+      "cache-control": "public, max-age=86400, immutable",
+    });
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    console.warn(`Plausible script proxy failed: ${error.message}`);
+    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+    res.end("bad gateway");
+  }
+}
+
+function proxyPlausibleEvent(req, res) {
+  const chunks = [];
+
+  req.on("data", (chunk) => {
+    chunks.push(chunk);
+    if (chunks.reduce((size, part) => size + part.length, 0) > 4096) {
+      res.writeHead(413, { "content-type": "text/plain; charset=utf-8" });
+      res.end("payload too large");
+      req.destroy();
+    }
+  });
+
+  req.on("end", () => {
+    void forwardPlausibleEvent(req, res, Buffer.concat(chunks));
+  });
+}
+
+async function forwardPlausibleEvent(req, res, body) {
+  try {
+    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/api/event`, {
+      method: "POST",
+      headers: {
+        "content-type": req.headers["content-type"] || "application/json",
+        "user-agent": req.headers["user-agent"] || "",
+        "x-forwarded-for": getRequestIp(req),
+      },
+      body,
+    });
+
+    res.writeHead(response.status, {
+      "content-type": response.headers.get("content-type") || "text/plain; charset=utf-8",
+    });
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    console.warn(`Plausible event proxy failed: ${error.message}`);
+    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+    res.end("bad gateway");
+  }
 }
 
 function resolvePublicFile(requestUrl, hostHeader) {
@@ -465,6 +656,26 @@ async function sendTelegramChatNotification(site, identity, text, at) {
   }
 }
 
+function getSceneConfig(site) {
+  return sanitizeSceneConfig(site?.sceneConfig || DEFAULT_SITE_SCENE_CONFIG);
+}
+
+function getStyleConfig(site) {
+  return sanitizeSiteStyle(site?.styleConfig || DEFAULT_SITE_STYLE);
+}
+
+function getSceneProps(site) {
+  return site ? buildSceneProps(getSceneConfig(site)) : Array.from(PROPS_BY_ID.values());
+}
+
+function getSceneBirdPerches(site) {
+  return site ? buildBirdPerches(getSceneProps(site)) : BIRD_PERCHES;
+}
+
+function buildStyleSnippet(site) {
+  return buildSiteCss(getStyleConfig(site));
+}
+
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
 
@@ -475,7 +686,9 @@ function buildEmbedSnippet(req, site) {
 
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "${serverOrigin}",
-    siteKey: "${site.siteKey}"
+    siteKey: "${site.siteKey}",
+    scene: ${JSON.stringify(getSceneConfig(site))},
+    theme: "host"
   });
 </script>`;
 }
@@ -554,7 +767,19 @@ function handleRegisterSite(req, res) {
       return;
     }
 
-    const { site, adminToken } = createSiteRecord({ name: body.name, origin });
+    const parsedEmail = parseOptionalEmail(body.email);
+    if (!parsedEmail.ok) {
+      sendJson(res, 400, { error: "Enter a valid email address, or leave the field empty." });
+      return;
+    }
+
+    const { site, adminToken } = createSiteRecord({
+      name: body.name,
+      origin,
+      email: parsedEmail.email,
+      sceneConfig: body.sceneConfig,
+      styleConfig: body.styleConfig,
+    });
     sitesByKey.set(site.siteKey, site);
     saveSites();
 
@@ -563,6 +788,7 @@ function handleRegisterSite(req, res) {
       adminToken,
       adminUrl: buildAdminUrl(req, adminToken),
       embedSnippet: buildEmbedSnippet(req, site),
+      styleSnippet: buildStyleSnippet(site),
     });
   });
 }
@@ -577,7 +803,8 @@ function sendAdminSite(req, res, site, adminToken) {
     site: publicSite(site),
     adminUrl: buildAdminUrl(req, adminToken),
     embedSnippet: buildEmbedSnippet(req, site),
-    scene: getSceneStats(getScene(site.siteKey)),
+    styleSnippet: buildStyleSnippet(site),
+    scene: getSceneStats(getScene(site.siteKey, site)),
   });
 }
 
@@ -625,6 +852,18 @@ function handleAdminLogin(req, res) {
 }
 
 const ADMIN_ACTIONS = {
+  updateCustomization(site, scene, body) {
+    site.sceneConfig = sanitizeSceneConfig(body.sceneConfig);
+    site.styleConfig = sanitizeSiteStyle(body.styleConfig);
+    touchSite(site);
+
+    if (scene.clients.size === 0) {
+      scenes.delete(site.siteKey);
+      return;
+    }
+
+    rebuildSceneProps(scene, site);
+  },
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
     touchSite(site);
@@ -698,7 +937,7 @@ function handleAdminAction(req, res) {
       return;
     }
 
-    const scene = getScene(site.siteKey);
+    const scene = getScene(site.siteKey, site);
     ADMIN_ACTIONS[action](site, scene, body);
     sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene) });
   });
@@ -1031,7 +1270,7 @@ function occupiedBirdPerchIds(scene) {
 
 function pickFreeBirdPerch(scene) {
   const occupied = occupiedBirdPerchIds(scene);
-  const free = BIRD_PERCHES.filter((perch) => !occupied.has(perch.id));
+  const free = scene.birdPerches.filter((perch) => !occupied.has(perch.id));
   if (free.length === 0) return null;
   return free[Math.floor(Math.random() * free.length)];
 }
@@ -1064,7 +1303,7 @@ function maybeFleeBirds(scene, playerX) {
 }
 
 function spawnBird(scene) {
-  if (scene.birds.size >= MAX_BIRDS) return false;
+  if (scene.birds.size >= scene.maxBirds) return false;
 
   const perch = pickFreeBirdPerch(scene);
   if (!perch) return false;
@@ -1092,15 +1331,21 @@ function spawnBird(scene) {
 
 function tickSceneBirds(scene, now) {
   if (!sceneHasJoinedClients(scene)) return;
-  if (scene.birds.size >= MAX_BIRDS) return;
+  if (scene.birds.size >= scene.maxBirds) return;
   if (now < scene.nextSpawnAt) return;
   spawnBird(scene);
 }
 
-function createScene(key) {
+function createScene(key, site = null) {
   const now = Date.now();
+  const config = getSceneConfig(site);
+  const props = getSceneProps(site);
   return {
     key,
+    props,
+    propsById: new Map(props.map((prop) => [prop.id, prop])),
+    birdPerches: getSceneBirdPerches(site),
+    maxBirds: config.birds,
     clients: new Map(),
     identities: new Map(),
     identityByBrowser: new Map(),
@@ -1111,7 +1356,41 @@ function createScene(key) {
   };
 }
 
-function createSiteRecord({ name, origin }) {
+/**
+ * Rebuild a live scene's props from the site's current config without dropping
+ * connected visitors. Used after a customization change so edits take effect
+ * immediately instead of waiting for the scene to empty and be recreated.
+ *
+ * @param {ReturnType<typeof createScene>} scene
+ * @param {ReturnType<typeof createSiteRecord> | null} site
+ */
+function rebuildSceneProps(scene, site) {
+  const config = getSceneConfig(site);
+  const props = getSceneProps(site);
+  const propsById = new Map(props.map((prop) => [prop.id, prop]));
+
+  scene.props = props;
+  scene.propsById = propsById;
+  scene.birdPerches = getSceneBirdPerches(site);
+  scene.maxBirds = config.birds;
+
+  // Hosted clients arbitrate settle requests against the scene's prop map.
+  for (const client of scene.clients.values()) {
+    if (client.site) client.propsById = propsById;
+  }
+
+  // Stand up anyone whose seat no longer exists or whose prop moved out from
+  // under them, so seated poses stay consistent with the new scene.
+  for (const identity of scene.identities.values()) {
+    if (!identity.pose || !identity.propId) continue;
+    const prop = propsById.get(identity.propId);
+    if (prop?.pose && Math.abs(identity.x - prop.x) <= prop.zoneRadius) continue;
+    clearPose(identity);
+    if (identity.joined) emitIdentityState(identity);
+  }
+}
+
+function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -1121,6 +1400,9 @@ function createSiteRecord({ name, origin }) {
       adminTokenHash: hashAdminToken(adminToken),
       name: sanitizeSiteName(name, origin),
       origin,
+      email: email || null,
+      sceneConfig: sanitizeSceneConfig(sceneConfig),
+      styleConfig: sanitizeSiteStyle(styleConfig),
       disabled: false,
       chatDisabled: false,
       verifiedAt: null,
@@ -1183,6 +1465,9 @@ function publicSite(site) {
     siteKey: site.siteKey,
     name: site.name,
     origin: site.origin,
+    email: site.email || null,
+    sceneConfig: getSceneConfig(site),
+    styleConfig: getStyleConfig(site),
     disabled: site.disabled,
     chatDisabled: site.chatDisabled,
     verifiedAt: site.verifiedAt,
@@ -1192,11 +1477,11 @@ function publicSite(site) {
   };
 }
 
-function getScene(sceneKey) {
+function getScene(sceneKey, site = null) {
   const existing = scenes.get(sceneKey);
   if (existing) return existing;
 
-  const scene = createScene(sceneKey);
+  const scene = createScene(sceneKey, site);
   scenes.set(sceneKey, scene);
   return scene;
 }
@@ -1223,7 +1508,7 @@ function validateSiteAccess(reqUrl) {
   const url = new URL(reqUrl, `http://${HOST}:${PORT}`);
   const siteKey = url.searchParams.get("siteKey") || "";
   if (!siteKey) {
-    return { ok: true, scene: getScene("default"), site: null };
+    return { ok: true, scene: getScene("default", null), site: null };
   }
 
   const site = sitesByKey.get(siteKey);
@@ -1231,7 +1516,7 @@ function validateSiteAccess(reqUrl) {
     return { ok: false, status: 403, reason: "site disabled or unknown" };
   }
 
-  return { ok: true, scene: getScene(site.siteKey), site };
+  return { ok: true, scene: getScene(site.siteKey, site), site };
 }
 
 function isOriginAllowedForSite(origin, site) {
@@ -1296,6 +1581,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (PLAUSIBLE_DOMAIN) {
+    const scriptPath = plausibleScriptPath();
+    if (scriptPath && req.method === "GET" && url.pathname === scriptPath) {
+      void proxyPlausibleScript(req, res);
+      return;
+    }
+
+    if (PLAUSIBLE_API_PATH && req.method === "POST" && url.pathname === PLAUSIBLE_API_PATH) {
+      proxyPlausibleEvent(req, res);
+      return;
+    }
+  }
+
   const filePath = resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
 
   if (!filePath) {
@@ -1313,8 +1611,13 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    let body = data;
+    if (path.extname(filePath) === ".html" && shouldInjectPlausible(filePath)) {
+      body = Buffer.from(injectPlausibleIntoHtml(data.toString("utf8")), "utf8");
+    }
+
     res.writeHead(200, getStaticHeaders(filePath));
-    res.end(data);
+    res.end(body);
   });
 });
 
@@ -1326,6 +1629,8 @@ const wss = new WebSocketServer({
 
 function handleInit(client, message) {
   if (client.joined) return;
+
+  syncClientSceneProps(client, message);
 
   const nextX = clampPosition(message.x);
   const fallbackX = nextX ?? randomSpawnX();
@@ -1341,11 +1646,10 @@ function handleInit(client, message) {
   const previousReadingLabel = identity.readingLabel;
   const previousReadingUrl = identity.readingUrl;
   const previousReadingActive = identity.readingActive;
-  if (Object.hasOwn(message, "readingLabel")) {
-    identity.readingLabel = sanitizeReadingLabel(message.readingLabel);
-  }
   if (Object.hasOwn(message, "readingUrl")) {
-    identity.readingUrl = sanitizeReadingUrl(message.readingUrl);
+    const reading = sanitizeReadingState(client, message);
+    identity.readingLabel = reading.readingLabel;
+    identity.readingUrl = reading.readingUrl;
   }
   client.readingActive = message.readingActive !== false;
 
@@ -1484,8 +1788,8 @@ function handleProfile(client, message) {
 function handleReading(client, message) {
   if (!client.identity) return;
 
-  const readingLabel = sanitizeReadingLabel(message.readingLabel);
-  const readingUrl = sanitizeReadingUrl(message.readingUrl);
+  const reading = sanitizeReadingState(client, message, client.identity);
+  const { readingLabel, readingUrl } = reading;
   const readingActive = message.readingActive !== false;
   const previousReadingLabel = client.identity.readingLabel;
   const previousReadingUrl = client.identity.readingUrl;
@@ -1520,9 +1824,14 @@ function handleReading(client, message) {
   });
 }
 
+function handleSceneConfig(client, message) {
+  if (client.site) return;
+  syncClientSceneProps(client, message);
+}
+
 function handleSettle(client, message) {
   if (!client.identity) return;
-  const prop = PROPS_BY_ID.get(message.propId);
+  const prop = client.propsById.get(message.propId);
   if (!prop?.pose) return;
 
   const identity = client.identity;
@@ -1660,6 +1969,7 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
+  const origin = normalizeOrigin(req.headers.origin || "");
   const originAllowed = access.site
     ? isOriginAllowedForSite(req.headers.origin, access.site)
     : isAllowedOrigin(req.headers.origin, req.headers.host);
@@ -1674,7 +1984,7 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  const client = createClient(nextConnectionId++, ws, access.scene, access.site);
+  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "");
   access.scene.clients.set(client.connectionId, client);
   ws.isAlive = true;
 
@@ -1698,11 +2008,7 @@ wss.on("close", () => {
 });
 
 async function startServer() {
-  const { PROPS } = await import("./public/shared/scene-props.mjs");
-  PROPS_BY_ID = new Map(PROPS.map((prop) => [prop.id, prop]));
-
-  const birdPerches = await import("./public/shared/bird-perches.mjs");
-  BIRD_PERCHES = birdPerches.BIRD_PERCHES;
+  await loadSharedModules();
 
   const shared = await import("./public/shared/shared-constants.mjs");
   MIN_X = shared.MIN_X;
@@ -1718,6 +2024,25 @@ async function startServer() {
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
   });
+}
+
+async function loadSharedModules() {
+  const [siteConfig, scenePropsModule, birdPerchesModule] = await Promise.all([
+    import("./public/shared/site-config.mjs"),
+    import("./public/shared/scene-props.mjs"),
+    import("./public/shared/bird-perches.mjs"),
+  ]);
+
+  DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
+  DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
+  sanitizeSceneConfig = siteConfig.sanitizeSceneConfig;
+  sanitizeSiteStyle = siteConfig.sanitizeSiteStyle;
+  buildSceneProps = siteConfig.buildSceneProps;
+  buildBirdPerches = siteConfig.buildBirdPerches;
+  buildSiteCss = siteConfig.buildSiteCss;
+
+  PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
+  BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;
 }
 
 startServer().catch((error) => {

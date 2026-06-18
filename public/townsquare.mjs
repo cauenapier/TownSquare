@@ -8,7 +8,7 @@
 
 import { submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds } from "./widget/birds.mjs";
-import { CHARACTER_COLORS, randomSpawnX } from "./widget/constants.mjs";
+import { CHARACTER_COLORS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
 import {
   createAvatar,
@@ -17,6 +17,7 @@ import {
   renderShell,
   wireHelpPanel,
   updatePose,
+  updatePropEffects,
 } from "./widget/dom.mjs";
 import { watchCurrentPage } from "./widget/page-watch.mjs";
 import {
@@ -30,8 +31,15 @@ import {
   wireKeyboard,
   wireStagePointer,
 } from "./widget/movement.mjs";
-import { updateStatus } from "./widget/presence.mjs";
+import { setStatusMessage, updateStatus } from "./widget/presence.mjs";
 import { wireSocket } from "./widget/protocol.mjs";
+import {
+  applySiteStyle,
+  buildBirdPerches,
+  buildSceneProps,
+  DEFAULT_SCENE_CONFIG,
+  sanitizeSceneConfig,
+} from "./shared/site-config.mjs";
 import {
   applyWidgetTheme,
   buildSocketUrl,
@@ -48,15 +56,42 @@ import {
  * @property {string} [serverOrigin] TownSquare server origin for static assets and WebSocket traffic.
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
  * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
+ * @property {{ benches?: number, trees?: number, lamps?: number, branches?: number, benchXs?: number[], treeXs?: number[], lampXs?: number[], branchXs?: number[] }} [scene] Scene prop counts and optional per-prop X positions (0..1).
+ * @property {{ scene?: string, page?: string, surface?: string, ink?: string, accent?: string, treeTrunk?: string, treeCanopy?: string, other?: string, ground?: string }} [style] A single flat palette written as inline CSS variables on the mount root. Pass this only when you want JS to own the palette for the current `theme` (e.g. the live preview). Omit it to theme via CSS instead — set the same tokens (`--scene`, `--page`, `--surface`, `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`, `--ground`) on `#townsquare-root` in your own stylesheet; when `style` is absent the widget writes nothing inline so your rules win.
  * @property {string} [readingLabel] Explicit page label. Defaults to the page heading, then document title.
  * @property {string} [readingUrl] Explicit page URL. Defaults to the current browser URL.
- * @property {"auto" | "light" | "dark"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; use `dark` when the host page has a manual dark toggle.
+ * @property {"auto" | "light" | "dark" | "host"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; `host` follows common host-page dark mode signals.
+ * @property {boolean} [preview=false] Static customization preview: fixed spawn, local prop settle, no socket, in-place scene/style updates via the mount handle.
+ * @property {boolean} [solo=false] Live socket, but hide other visitors on the client.
  */
 
 /**
  * @typedef {Object} TownSquareHandle
+ * @property {(config?: { scene?: MountOptions["scene"], style?: MountOptions["style"] }) => void} updateConfig Refresh scene props and/or style tokens without remounting.
  * @property {() => void} destroy Tear down listeners, animation, socket, and mounted DOM.
  */
+
+const PREVIEW_SPAWN_X = (MIN_X + MAX_X) / 2;
+
+/**
+ * @param {import("./widget/context.mjs").WidgetContext} ctx
+ * @param {ReturnType<typeof sanitizeSceneConfig>} sceneConfig
+ */
+function refreshScene(ctx, sceneConfig) {
+  const sceneProps = buildSceneProps(sceneConfig);
+  const birdPerches = buildBirdPerches(sceneProps);
+  ctx.sceneProps = sceneProps;
+  ctx.propsById = new Map(sceneProps.map((prop) => [prop.id, prop]));
+  ctx.birdPerchesById = new Map(birdPerches.map((perch) => [perch.id, perch]));
+  for (const el of ctx.stage.querySelectorAll(".prop")) {
+    el.remove();
+  }
+  renderProps(ctx.stage, sceneProps);
+  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
+  for (const peer of ctx.peers.values()) {
+    updatePropEffects(peer.avatar, peer.x, peer.propId, ctx.sceneProps);
+  }
+}
 
 /**
  * Mount a TownSquare widget into any host page.
@@ -80,16 +115,21 @@ export function mountTownSquare(root, options = {}) {
   );
   const siteKey = options.siteKey || root.dataset.townsquareSiteKey || "";
   const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey);
+  const sceneConfig = sanitizeSceneConfig(options.scene || DEFAULT_SCENE_CONFIG);
+  const sceneProps = buildSceneProps(sceneConfig);
+  const birdPerches = buildBirdPerches(sceneProps);
   const browserId = getBrowserId();
   const profile = getStoredProfile();
   const { readingLabel, readingUrl } = readCurrentPage(root, options);
   const readingActive = document.visibilityState === "visible" && document.hasFocus();
-  const spawnX = randomSpawnX();
+  const preview = options.preview === true;
+  const solo = options.solo === true;
+  const spawnX = preview || solo ? PREVIEW_SPAWN_X : randomSpawnX();
   const peers = new Map();
   const coarsePointer = typeof window.matchMedia === "function"
     && window.matchMedia("(pointer: coarse)").matches;
 
-  applyWidgetTheme(root, resolveWidgetTheme(root, options));
+  const unwatchTheme = applyWidgetTheme(root, resolveWidgetTheme(root, options));
   root.replaceChildren();
 
   const {
@@ -105,7 +145,14 @@ export function mountTownSquare(root, options = {}) {
     highFiveButton,
   } = renderShell(root);
 
-  renderProps(stage);
+  // Only write palette tokens inline when the host explicitly passes `style`
+  // (e.g. the live registration/admin preview). Otherwise leave theming to the
+  // cascade — tokens.css defaults plus any host stylesheet rules on
+  // #townsquare-root — so inline styles never beat host CSS.
+  if (options.style) {
+    applySiteStyle(root, options.style);
+  }
+  renderProps(stage, sceneProps);
 
   /** @type {import("./widget/context.mjs").WidgetContext} */
   const ctx = {
@@ -115,6 +162,9 @@ export function mountTownSquare(root, options = {}) {
     socketUrl,
     browserId,
     peers,
+    sceneProps,
+    propsById: new Map(sceneProps.map((prop) => [prop.id, prop])),
+    birdPerchesById: new Map(birdPerches.map((perch) => [perch.id, perch])),
     app,
     stage,
     statusRowEl: statusRow,
@@ -159,7 +209,9 @@ export function mountTownSquare(root, options = {}) {
       }),
       walkTimer: null,
     },
-    socket: new WebSocket(socketUrl),
+    socket: preview
+      ? { readyState: WebSocket.CLOSED, close() {}, send() {} }
+      : new WebSocket(socketUrl),
     reconnectTimer: null,
     quiet: false,
     expanded: false,
@@ -220,20 +272,44 @@ export function mountTownSquare(root, options = {}) {
     viewport.addEventListener("scroll", onViewportChange);
   }
 
-  initBirds(ctx);
+  if (!preview) {
+    initBirds(ctx);
+  }
   stage.appendChild(ctx.self.avatar.el);
   renderAvatar(ctx.self.avatar, ctx.self.x);
   updatePose(ctx.self.avatar, ctx.self.pose);
-  updateStatus(ctx);
+  if (preview) {
+    setStatusMessage(ctx, null);
+  } else {
+    updateStatus(ctx);
+  }
 
-  wireSocket(ctx);
+  if (!preview) {
+    wireSocket(ctx);
+  }
   wireKeyboard(ctx);
   wireStagePointer(ctx);
   startGameLoop(ctx);
 
   return {
+    updateConfig({ scene, style } = {}) {
+      if (scene) {
+        const sceneConfig = sanitizeSceneConfig(scene);
+        ctx.options = { ...ctx.options, scene: sceneConfig };
+        refreshScene(ctx, sceneConfig);
+        const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
+        if (!preview && !siteKey && ctx.socket.readyState === WebSocket.OPEN) {
+          ctx.socket.send(JSON.stringify({ type: "sceneConfig", sceneConfig }));
+        }
+      }
+      if (style) {
+        ctx.options = { ...ctx.options, style };
+        applySiteStyle(root, style);
+      }
+    },
     destroy() {
       ctx.disposed = true;
+      unwatchTheme();
       stopGameLoop(ctx);
       destroyBirds(ctx);
       unwireKeyboard(ctx);

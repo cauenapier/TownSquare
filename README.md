@@ -120,7 +120,8 @@ A site can embed the widget by loading the CSS plus the module from the TownSqua
 
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "https://your-townsquare-host",
-    socketPath: "/live"
+    socketPath: "/live",
+    theme: "host"
   });
 </script>
 ```
@@ -130,6 +131,9 @@ Notes:
 - `serverOrigin` is the realtime/backend origin the widget should connect to.
 - `socketPath` defaults to `/live`; set it explicitly when your reverse proxy exposes TownSquare on a different websocket path such as `/townsquare/live`.
 - `siteKey` is only needed when using one hosted TownSquare server for multiple registered sites.
+- `theme: "host"` syncs with common host-page dark mode signals such as
+  `html.dark`, `body.dark`, `data-theme`, `data-bs-theme`, and `data-color-mode`.
+  Omit it to use `auto`, which follows `prefers-color-scheme`.
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
 
@@ -217,16 +221,24 @@ DEPLOY_PORT=8788
 Useful flags:
 
 ```bash
+scripts/deploy.sh --promote-main
 scripts/deploy.sh --local
 scripts/deploy.sh --skip-checks
+scripts/deploy.sh --tag staging
 scripts/deploy.sh --ref origin/main
 scripts/deploy.sh --env-file ./ops/my-deploy.env
 ```
 
+By default, the script deploys the local `production` tag. Use `--promote-main`
+to fetch `origin/main`, move the deploy tag to that commit, and deploy it. Use
+`--tag` for another tag. It resolves only real Git tags, so annotated and
+lightweight tags both deploy the commit the tag points to. Keep `--ref` for
+explicit branch, SHA, or rollback deploys without retagging.
+
 The script:
 
 - runs local syntax checks unless skipped
-- archives the chosen git ref
+- archives the chosen git tag or ref
 - uploads it to the server for remote deploys, or deploys directly in local mode
 - creates a new release under `/opt/townsquare/releases`
 - runs `npm ci --omit=dev`
