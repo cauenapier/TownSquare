@@ -1896,6 +1896,301 @@ body {
   border-top: 1px solid var(--hair-2);
 }
 
+.map-page {
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.map-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.map-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(240px, 430px);
+  align-items: end;
+  gap: 18px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--hair);
+  background: color-mix(in oklab, var(--surface) 86%, transparent);
+  backdrop-filter: blur(10px);
+  z-index: 2;
+}
+
+.map-header h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 3.5vw, 2.4rem);
+  line-height: 1;
+}
+
+.map-header p:not(.eyebrow) {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.map-home {
+  align-self: center;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.map-home:hover {
+  color: var(--ink);
+}
+
+.map-stage {
+  position: relative;
+  min-height: 0;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(200, 100, 31, 0.08), transparent 26%),
+    linear-gradient(180deg, var(--page), var(--scene-edge));
+}
+
+.map-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.map-canvas.is-panning {
+  cursor: grabbing;
+}
+
+.map-canvas:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--you-tint);
+}
+
+.map-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.map-land {
+  fill: color-mix(in oklab, var(--surface-2) 78%, #b7c7a6 22%);
+  stroke: color-mix(in oklab, var(--ink) 34%, transparent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-land--east {
+  fill: color-mix(in oklab, var(--surface-2) 72%, #b6c9ad 28%);
+}
+
+.map-land--south {
+  fill: color-mix(in oklab, var(--surface-2) 76%, #d2c79c 24%);
+}
+
+.map-river,
+.map-path,
+.map-mountain,
+.map-tree {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-river {
+  stroke: color-mix(in oklab, #6f9caf 78%, var(--ink) 22%);
+  stroke-width: 12;
+  stroke-dasharray: 34 13 19 10;
+  opacity: 0.68;
+}
+
+.map-path {
+  stroke: color-mix(in oklab, var(--you) 38%, var(--ink-soft) 62%);
+  stroke-width: 5;
+  stroke-dasharray: 2 16;
+  opacity: 0.5;
+}
+
+.map-mountain {
+  stroke: color-mix(in oklab, var(--ink) 58%, transparent);
+  stroke-width: 4;
+  opacity: 0.72;
+}
+
+.map-tree {
+  stroke: color-mix(in oklab, #5f7d55 76%, var(--ink) 24%);
+  stroke-width: 4;
+  opacity: 0.78;
+}
+
+.map-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.map-node__halo {
+  fill: var(--surface);
+  stroke: var(--hair-2);
+  stroke-width: 2;
+  opacity: 0.9;
+}
+
+.map-node__dot {
+  fill: var(--you);
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.map-node__label {
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 7;
+  stroke-linejoin: round;
+  font: 650 24px var(--font);
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.map-node:hover .map-node__halo,
+.map-node:focus-visible .map-node__halo,
+.map-node.is-selected .map-node__halo {
+  fill: var(--you-tint);
+  stroke: var(--you);
+}
+
+.map-node.is-selected .map-node__dot {
+  fill: var(--ink);
+}
+
+.map-toolbar,
+.map-status,
+.map-detail {
+  position: absolute;
+  z-index: 1;
+}
+
+.map-toolbar {
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  box-shadow: var(--bshadow);
+}
+
+.map-toolbar button,
+.map-detail__close {
+  min-width: 34px;
+  height: 34px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 700 0.92rem var(--font);
+  cursor: pointer;
+}
+
+.map-toolbar button:hover,
+.map-detail__close:hover {
+  background: var(--surface-2);
+}
+
+.map-status {
+  left: 16px;
+  bottom: 16px;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 9px 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: var(--bshadow);
+}
+
+.map-detail {
+  right: 16px;
+  bottom: 16px;
+  width: min(330px, calc(100% - 32px));
+  padding: 18px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--surface) 94%, transparent);
+  box-shadow: var(--tray-shadow);
+}
+
+.map-detail__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.map-detail h2 {
+  margin: 0 38px 7px 0;
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+
+.map-detail__origin {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--you-deep);
+  font-size: 0.94rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.map-detail dl {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.map-detail dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+
+.map-detail dt {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.map-detail dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 650;
+  text-align: right;
+}
+
+.map-detail__visit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 @media (max-width: 640px) {
   :root {
     --hosted-preview-dock-height: min(42dvh, 13.75rem);
@@ -1987,5 +2282,28 @@ body {
   }
   .walk-stage {
     min-height: 58vh;
+  }
+  .map-header {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 8px;
+    padding: 14px;
+  }
+  .map-canvas {
+    min-height: calc(100vh - 190px);
+  }
+  .map-toolbar {
+    top: 10px;
+    left: 10px;
+  }
+  .map-status {
+    left: 10px;
+    bottom: 10px;
+    max-width: calc(100% - 20px);
+  }
+  .map-detail {
+    right: 10px;
+    bottom: 56px;
+    width: calc(100% - 20px);
   }
 }

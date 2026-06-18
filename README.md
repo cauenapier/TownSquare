@@ -31,6 +31,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `public/index.html` — demo host page for local development
 - `public/hosted/` — hosted registration/admin pages and scripts, served at `/register`, `/admin`, `/service-admin`
 - `public/dev/` — local dev tooling: `dev.html` (simulation, `/dev`) and `walk-sandbox.html` (`/walk-sandbox`)
+- `public/map.html` — public map of verified, enabled TownSquares, served at `/map`
 - `scripts/smoke-test.js` — automated websocket smoke test
 - `spec.md` — product truth
 - `roadmap.md` — product-facing sequencing

@@ -540,6 +540,7 @@ function resolvePublicFile(requestUrl, hostHeader) {
     ["/changelog", "/changelog.html"],
     ["/dev", "/dev/dev.html"],
     ["/walk-sandbox", "/dev/walk-sandbox.html"],
+    ["/map", "/map.html"],
   ]);
   const pathname = aliases.get(url.pathname) || url.pathname;
   const normalized = path.normalize(pathname).replace(/^\.+/, "");
@@ -796,6 +797,24 @@ function handleRegisterSite(req, res) {
       styleSnippet: buildStyleSnippet(site),
     });
   });
+}
+
+function publicMapSite(site) {
+  return {
+    siteKey: site.siteKey,
+    name: site.name,
+    origin: site.origin,
+    verifiedAt: site.verifiedAt,
+    lastSeenAt: site.lastSeenAt,
+  };
+}
+
+function handleMap(req, res) {
+  const sites = Array.from(sitesByKey.values())
+    .filter((site) => site.verifiedAt && !site.disabled)
+    .map(publicMapSite);
+
+  sendJson(res, 200, { sites });
 }
 
 function sendAdminSite(req, res, site, adminToken) {
@@ -1565,6 +1584,11 @@ const server = http.createServer((req, res) => {
   }
 
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+
+  if (req.method === "GET" && url.pathname === "/api/map") {
+    handleMap(req, res);
+    return;
+  }
 
   if (req.method === "POST" && url.pathname === "/api/sites") {
     handleRegisterSite(req, res);
