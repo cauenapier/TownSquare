@@ -50,7 +50,7 @@ import {
  * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
  * @property {string} [readingLabel] Explicit page label. Defaults to the page heading, then document title.
  * @property {string} [readingUrl] Explicit page URL. Defaults to the current browser URL.
- * @property {"auto" | "light" | "dark"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; use `dark` when the host page has a manual dark toggle.
+ * @property {"auto" | "light" | "dark" | "host"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; `host` follows common host-page dark mode signals.
  */
 
 /**
@@ -89,7 +89,7 @@ export function mountTownSquare(root, options = {}) {
   const coarsePointer = typeof window.matchMedia === "function"
     && window.matchMedia("(pointer: coarse)").matches;
 
-  applyWidgetTheme(root, resolveWidgetTheme(root, options));
+  const unwatchTheme = applyWidgetTheme(root, resolveWidgetTheme(root, options));
   root.replaceChildren();
 
   const {
@@ -234,6 +234,7 @@ export function mountTownSquare(root, options = {}) {
   return {
     destroy() {
       ctx.disposed = true;
+      unwatchTheme();
       stopGameLoop(ctx);
       destroyBirds(ctx);
       unwireKeyboard(ctx);

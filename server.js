@@ -475,7 +475,8 @@ function buildEmbedSnippet(req, site) {
 
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "${serverOrigin}",
-    siteKey: "${site.siteKey}"
+    siteKey: "${site.siteKey}",
+    theme: "host"
   });
 </script>`;
 }

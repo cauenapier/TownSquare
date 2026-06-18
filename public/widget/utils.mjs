@@ -129,14 +129,37 @@ function labelFromPath() {
   }
 }
 
-/** @typedef {"auto" | "light" | "dark"} WidgetTheme */
+/** @typedef {"auto" | "light" | "dark" | "host"} WidgetTheme */
+
+const HOST_THEME_ATTRIBUTE_FILTER = ["class", "data-theme", "data-bs-theme", "data-color-mode"];
+const HOST_THEME_SELECTORS = Object.freeze({
+  dark: Object.freeze([
+    "html.dark",
+    "body.dark",
+    "html[data-theme='dark']",
+    "body[data-theme='dark']",
+    "html[data-bs-theme='dark']",
+    "body[data-bs-theme='dark']",
+    "html[data-color-mode='dark']",
+    "body[data-color-mode='dark']",
+  ]),
+  light: Object.freeze([
+    "html.light",
+    "body.light",
+    "html[data-theme='light']",
+    "body[data-theme='light']",
+    "html[data-bs-theme='light']",
+    "body[data-bs-theme='light']",
+    "html[data-color-mode='light']",
+    "body[data-color-mode='light']",
+  ]),
+});
 
 /**
  * Resolve the widget color theme from mount options or a pre-set root attribute.
  *
- * `auto` (default) follows `prefers-color-scheme`. Host pages with a manual
- * dark toggle should pass `theme: "dark"` or set `data-townsquare-theme="dark"`
- * on the mount root before calling `mountTownSquare`.
+ * `auto` (default) follows `prefers-color-scheme`. `host` follows common
+ * host-page theme signals such as `html.dark` and `data-theme="dark"`.
  *
  * @param {HTMLElement} root
  * @param {{ theme?: string }} [options]
@@ -146,8 +169,23 @@ export function resolveWidgetTheme(root, options = {}) {
   const raw = options.theme || root.dataset.townsquareTheme || "auto";
   if (typeof raw !== "string") return "auto";
   const theme = raw.trim().toLowerCase();
-  if (theme === "light" || theme === "dark") return theme;
+  if (theme === "light" || theme === "dark" || theme === "host") return theme;
   return "auto";
+}
+
+/**
+ * @param {HTMLElement} root
+ */
+function syncHostTheme(root) {
+  const dark = HOST_THEME_SELECTORS.dark.some((selector) => document.querySelector(selector));
+  const light = HOST_THEME_SELECTORS.light.some((selector) => document.querySelector(selector));
+
+  if (!dark && !light) {
+    root.removeAttribute("data-townsquare-theme");
+    return;
+  }
+
+  root.dataset.townsquareTheme = dark ? "dark" : "light";
 }
 
 /**
@@ -155,13 +193,34 @@ export function resolveWidgetTheme(root, options = {}) {
  *
  * @param {HTMLElement} root
  * @param {WidgetTheme} theme
+ * @returns {() => void}
  */
 export function applyWidgetTheme(root, theme) {
+  if (theme === "host") {
+    syncHostTheme(root);
+    if (typeof MutationObserver !== "function") return () => {};
+
+    const observer = new MutationObserver(() => syncHostTheme(root));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: HOST_THEME_ATTRIBUTE_FILTER,
+    });
+    if (document.body) {
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: HOST_THEME_ATTRIBUTE_FILTER,
+      });
+    }
+
+    return () => observer.disconnect();
+  }
+
   if (theme === "auto") {
     root.removeAttribute("data-townsquare-theme");
-    return;
+    return () => {};
   }
   root.dataset.townsquareTheme = theme;
+  return () => {};
 }
 
 /**
