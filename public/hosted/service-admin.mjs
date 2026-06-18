@@ -62,6 +62,7 @@ function renderSites(sites) {
         <code>${escapeHtml(site.siteKey)}</code>
       </div>
       <dl class="service-site-meta">
+        ${site.email ? `<div><dt>Email</dt><dd>${escapeHtml(site.email)}</dd></div>` : ""}
         <div><dt>Status</dt><dd>${site.disabled ? "Disabled" : "Enabled"}</dd></div>
         <div><dt>Chat</dt><dd>${site.chatDisabled ? "Disabled" : "Enabled"}</dd></div>
         <div><dt>Verified</dt><dd>${formatTime(site.verifiedAt)}</dd></div>

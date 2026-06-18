@@ -1,10 +1,7 @@
 /**
- * Shared timing, movement, and scene constants for the embeddable widget.
+ * Shared timing and movement constants for the embeddable widget.
  */
 
-import { PROPS } from "../shared/scene-props.mjs";
-
-export { PROPS };
 export {
   CHARACTER_COLORS,
   DEFAULT_CHARACTER_COLOR,
@@ -39,5 +36,3 @@ export const RAISED_HAND_MS = 5000;
 export const HIGH_FIVE_MS = 760;
 /** Jump animation length; matches the jump keyframe in widget.css. Doubles as the re-jump cooldown. */
 export const JUMP_MS = 560;
-
-export const INTERACTIVE_PROPS = PROPS.filter((prop) => prop.pose && prop.zoneRadius > 0);

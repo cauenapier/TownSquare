@@ -120,7 +120,8 @@ A site can embed the widget by loading the CSS plus the module from the TownSqua
 
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "https://your-townsquare-host",
-    socketPath: "/live"
+    socketPath: "/live",
+    theme: "host"
   });
 </script>
 ```
@@ -130,6 +131,9 @@ Notes:
 - `serverOrigin` is the realtime/backend origin the widget should connect to.
 - `socketPath` defaults to `/live`; set it explicitly when your reverse proxy exposes TownSquare on a different websocket path such as `/townsquare/live`.
 - `siteKey` is only needed when using one hosted TownSquare server for multiple registered sites.
+- `theme: "host"` syncs with common host-page dark mode signals such as
+  `html.dark`, `body.dark`, `data-theme`, `data-bs-theme`, and `data-color-mode`.
+  Omit it to use `auto`, which follows `prefers-color-scheme`.
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
 
