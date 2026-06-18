@@ -6,13 +6,18 @@ import {
   applySceneConfigToForm,
   bindSceneCountProse,
   bindStyleColorFields,
+  CONNECTION_LABEL_MAX,
+  CONNECTION_SIDES,
+  CONNECTION_URL_MAX,
   DEFAULT_SCENE_CONFIG,
   DEFAULT_SITE_STYLE,
   isSceneCountInputName,
+  MAX_CONNECTIONS_PER_SIDE,
   readSceneConfigFromForm,
   readStyleConfigFromForm,
   renderScenePositionFields,
   renderStyleOverrideFields,
+  sanitizeConnections,
   sanitizeSceneConfig,
   sanitizeSiteStyle,
 } from "../shared/site-config.mjs";
@@ -39,6 +44,10 @@ const snippetEl = document.getElementById("embed-snippet");
 const styleSnippetEl = document.getElementById("style-snippet");
 const copyButton = document.getElementById("copy-snippet");
 const copyStyleButton = document.getElementById("copy-style");
+const connectionsList = document.getElementById("connections-list");
+const addConnectionButton = document.getElementById("add-connection");
+const saveConnectionsButton = document.getElementById("save-connections");
+const connectionsStatusEl = document.getElementById("connections-status");
 const chatDisabledInput = document.getElementById("chat-disabled");
 const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
@@ -56,12 +65,22 @@ let customizationSavedMessage = "";
 let autoSaveTimer = null;
 let customizationTouched = false;
 
+/** Working copy of the connections editor; `touched` guards it from polls. */
+let connectionsDraft = [];
+let connectionsTouched = false;
+let connectionsBusy = false;
+let connectionsSavedMessage = "";
+
 const preview = createCustomizationPreview({
   root: previewRoot,
   readingLabel: () => (currentSite ? `${currentSite.name} preview` : "Admin preview"),
   readConfig: (mode) => {
     const customization = currentSite ? readCustomizationFromForm() : getCurrentCustomization();
-    return { scene: customization.sceneConfig, style: customization.styleConfig[mode] };
+    return {
+      scene: customization.sceneConfig,
+      style: customization.styleConfig[mode],
+      connections: sanitizeConnections(connectionsDraft),
+    };
   },
 });
 
@@ -70,6 +89,7 @@ preview.bindThemeToggle(previewModeButtons);
 
 const setStatus = createStatusSetter(statusEl);
 const setCustomizationStatus = createStatusSetter(customizationStatusEl, { toggleHidden: true });
+const setConnectionsStatus = createStatusSetter(connectionsStatusEl, { toggleHidden: true });
 
 const session = createAdminSession({
   redirectPath: "/admin",
@@ -91,6 +111,9 @@ const session = createAdminSession({
     currentSite = null;
     customizationSavedMessage = "";
     customizationTouched = false;
+    connectionsDraft = [];
+    connectionsTouched = false;
+    connectionsSavedMessage = "";
     preview.destroy();
   },
 });
@@ -222,6 +245,152 @@ function syncCustomizationForm({ force = false } = {}) {
   }
 }
 
+function getServerConnections() {
+  return sanitizeConnections(currentSite?.connections || []);
+}
+
+function connectionsAreDirty() {
+  if (!currentSite) return false;
+  return JSON.stringify(sanitizeConnections(connectionsDraft)) !== JSON.stringify(getServerConnections());
+}
+
+function updateConnectionsControls() {
+  const total = connectionsDraft.length;
+  addConnectionButton.disabled = connectionsBusy || total >= MAX_CONNECTIONS_PER_SIDE * 2;
+  saveConnectionsButton.disabled = connectionsBusy || !connectionsAreDirty();
+
+  if (connectionsBusy) {
+    setConnectionsStatus("Saving connections...");
+  } else if (connectionsSavedMessage) {
+    setConnectionsStatus(connectionsSavedMessage);
+  } else if (connectionsAreDirty()) {
+    setConnectionsStatus("Unsaved connection changes.");
+  } else {
+    setConnectionsStatus("");
+  }
+}
+
+function onConnectionsEdited() {
+  connectionsSavedMessage = "";
+  connectionsTouched = true;
+  updateConnectionsControls();
+  // Reflect signposts in the live preview as the owner edits.
+  preview.mount();
+}
+
+function createConnectionRow(connection, index) {
+  const row = document.createElement("div");
+  row.className = "hosted-connection-row";
+
+  const side = document.createElement("select");
+  side.className = "hosted-connection-side";
+  side.setAttribute("aria-label", "Edge");
+  for (const value of CONNECTION_SIDES) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value === "left" ? "Left" : "Right";
+    side.appendChild(option);
+  }
+  side.value = connection.side;
+  side.addEventListener("change", () => {
+    connectionsDraft[index].side = side.value;
+    onConnectionsEdited();
+  });
+
+  const label = document.createElement("input");
+  label.type = "text";
+  label.className = "hosted-connection-label";
+  label.placeholder = "Town name";
+  label.maxLength = CONNECTION_LABEL_MAX;
+  label.value = connection.label;
+  label.setAttribute("aria-label", "Town name");
+  label.addEventListener("input", () => {
+    connectionsDraft[index].label = label.value;
+    onConnectionsEdited();
+  });
+
+  const url = document.createElement("input");
+  url.type = "url";
+  url.className = "hosted-connection-url";
+  url.placeholder = "https://neighbour.example.com";
+  url.maxLength = CONNECTION_URL_MAX;
+  url.value = connection.url;
+  url.setAttribute("aria-label", "Town address");
+  url.addEventListener("input", () => {
+    connectionsDraft[index].url = url.value;
+    onConnectionsEdited();
+  });
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "hosted-connection-remove";
+  remove.textContent = "Remove";
+  remove.setAttribute("aria-label", "Remove this town");
+  remove.addEventListener("click", () => {
+    connectionsDraft.splice(index, 1);
+    renderConnectionRows();
+    onConnectionsEdited();
+  });
+
+  row.append(side, label, url, remove);
+  return row;
+}
+
+function renderConnectionRows() {
+  connectionsList.replaceChildren();
+
+  if (connectionsDraft.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = "No connected towns yet. Add one to grow a signpost at the edge.";
+    connectionsList.appendChild(empty);
+    return;
+  }
+
+  connectionsDraft.forEach((connection, index) => {
+    connectionsList.appendChild(createConnectionRow(connection, index));
+  });
+}
+
+function syncConnectionsFromServer() {
+  // A poll-driven re-render must not clobber edits in progress.
+  if (connectionsTouched && connectionsAreDirty()) {
+    updateConnectionsControls();
+    return;
+  }
+  connectionsDraft = getServerConnections().map((connection) => ({ ...connection }));
+  connectionsTouched = false;
+  renderConnectionRows();
+  updateConnectionsControls();
+  if (preview.mounted) preview.mount();
+}
+
+function addConnection() {
+  if (connectionsDraft.length >= MAX_CONNECTIONS_PER_SIDE * 2) return;
+  connectionsDraft.push({ side: "right", label: "", url: "" });
+  renderConnectionRows();
+  onConnectionsEdited();
+  connectionsList.querySelector(".hosted-connection-row:last-child .hosted-connection-url")?.focus();
+}
+
+async function saveConnections() {
+  if (!currentSite || connectionsBusy || !connectionsAreDirty()) return;
+
+  connectionsBusy = true;
+  connectionsSavedMessage = "";
+  updateConnectionsControls();
+
+  const ok = await session.action("updateConnections", { connections: sanitizeConnections(connectionsDraft) });
+
+  connectionsBusy = false;
+  if (ok) {
+    connectionsTouched = false;
+    connectionsSavedMessage = "Connections saved. Copy the refreshed snippet above.";
+  }
+  // render() runs after a successful action and resyncs the draft from server.
+  updateConnectionsControls();
+}
+
 function render(data) {
   currentSite = data.site;
   const scene = data.scene;
@@ -248,6 +417,7 @@ function render(data) {
   chatDisabledInput.checked = currentSite.chatDisabled;
   disableSiteButton.textContent = currentSite.disabled ? "Enable site" : "Disable site";
   syncCustomizationForm();
+  syncConnectionsFromServer();
 
   visitorList.replaceChildren();
   if (scene.visitors.length === 0) {
@@ -329,6 +499,9 @@ resetCustomizationButton.addEventListener("click", () => {
   preview.mount({ remount: true });
   scheduleAutoSave();
 });
+
+addConnectionButton.addEventListener("click", addConnection);
+saveConnectionsButton.addEventListener("click", () => { void saveConnections(); });
 
 chatDisabledInput.addEventListener("change", () => session.action("setChatDisabled", { disabled: chatDisabledInput.checked }));
 clearMessagesButton.addEventListener("click", () => session.action("clearMessages"));

@@ -81,6 +81,10 @@
  * @property {(event: MouseEvent) => void} onStageClick
  * @property {Map<number, import("./birds.mjs").BirdView>} [birds]
  * @property {HTMLElement} [birdLayer]
+ * @property {{ left: Array<import("../shared/site-config.mjs").Connection>, right: Array<import("../shared/site-config.mjs").Connection> } | null} [connectionsBySide]
+ * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]
+ * @property {{ overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void } | null} [connectionsModal]
+ * @property {"left"|"right"|null} [nearSide] Edge whose signpost the avatar can currently activate.
  */
 
 export {};

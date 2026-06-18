@@ -132,6 +132,7 @@ let DEFAULT_SITE_STYLE = {
   dark: { scene: "#242521", page: "#181917", surface: "#24231f", ink: "#f2eee6", accent: "#df8a43", other: "#ddd7cc", ground: "rgba(242, 238, 230, 0.18)" },
 };
 let sanitizeSceneConfig = (config) => ({ ...DEFAULT_SITE_SCENE_CONFIG, ...(config || {}) });
+let sanitizeConnections = (connections) => (Array.isArray(connections) ? connections : []);
 let sanitizeSiteStyle = (style) => (style && (style.light || style.dark) ? style : { ...DEFAULT_SITE_STYLE, light: { ...DEFAULT_SITE_STYLE.light, ...(style || {}) } });
 let buildSceneProps = () => [];
 let buildBirdPerches = () => [];
@@ -669,6 +670,10 @@ function getStyleConfig(site) {
   return sanitizeSiteStyle(site?.styleConfig || DEFAULT_SITE_STYLE);
 }
 
+function getConnections(site) {
+  return sanitizeConnections(site?.connections || []);
+}
+
 function getSceneProps(site) {
   return site ? buildSceneProps(getSceneConfig(site)) : Array.from(PROPS_BY_ID.values());
 }
@@ -683,6 +688,10 @@ function buildStyleSnippet(site) {
 
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
+  const connections = getConnections(site);
+  const connectionsLine = connections.length > 0
+    ? `\n    connections: ${JSON.stringify(connections)},`
+    : "";
 
   return `<link rel="stylesheet" href="${serverOrigin}/widget.css" />
 <div id="townsquare-root"></div>
@@ -692,7 +701,7 @@ function buildEmbedSnippet(req, site) {
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "${serverOrigin}",
     siteKey: "${site.siteKey}",
-    scene: ${JSON.stringify(getSceneConfig(site))},
+    scene: ${JSON.stringify(getSceneConfig(site))},${connectionsLine}
     theme: "host"
   });
 </script>`;
@@ -784,6 +793,7 @@ function handleRegisterSite(req, res) {
       email: parsedEmail.email,
       sceneConfig: body.sceneConfig,
       styleConfig: body.styleConfig,
+      connections: body.connections,
     });
     sitesByKey.set(site.siteKey, site);
     saveSites();
@@ -868,6 +878,10 @@ const ADMIN_ACTIONS = {
     }
 
     rebuildSceneProps(scene, site);
+  },
+  updateConnections(site, scene, body) {
+    site.connections = sanitizeConnections(body.connections);
+    touchSite(site);
   },
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
@@ -1395,7 +1409,7 @@ function rebuildSceneProps(scene, site) {
   }
 }
 
-function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
+function createSiteRecord({ name, origin, email, sceneConfig, styleConfig, connections }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -1408,6 +1422,7 @@ function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
       email: email || null,
       sceneConfig: sanitizeSceneConfig(sceneConfig),
       styleConfig: sanitizeSiteStyle(styleConfig),
+      connections: sanitizeConnections(connections),
       disabled: false,
       chatDisabled: false,
       verifiedAt: null,
@@ -1439,6 +1454,9 @@ function loadSites() {
       }
       if (!Array.isArray(site.ownerBrowserIds)) {
         site.ownerBrowserIds = [];
+      }
+      if (!Array.isArray(site.connections)) {
+        site.connections = [];
       }
       if (typeof site.messageCount !== "number") {
         site.messageCount = 0;
@@ -1481,6 +1499,7 @@ function publicSite(site) {
     email: site.email || null,
     sceneConfig: getSceneConfig(site),
     styleConfig: getStyleConfig(site),
+    connections: getConnections(site),
     disabled: site.disabled,
     chatDisabled: site.chatDisabled,
     verifiedAt: site.verifiedAt,
@@ -2076,6 +2095,7 @@ async function loadSharedModules() {
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
   DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
   sanitizeSceneConfig = siteConfig.sanitizeSceneConfig;
+  sanitizeConnections = siteConfig.sanitizeConnections;
   sanitizeSiteStyle = siteConfig.sanitizeSiteStyle;
   buildSceneProps = siteConfig.buildSceneProps;
   buildBirdPerches = siteConfig.buildBirdPerches;

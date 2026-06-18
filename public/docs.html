@@ -287,6 +287,7 @@ docker run --rm -p 8787:8787 -e HOST=0.0.0.0 townsquare</code></pre>
                   <tr><td><code>socketPath</code></td><td>WebSocket path on that origin (defaults to <code>/live</code>).</td></tr>
                   <tr><td><code>siteKey</code></td><td>Only needed when one hosted server runs several registered sites.</td></tr>
                   <tr><td><code>theme</code></td><td>Use <code>"host"</code> to follow common host-page dark mode signals. Defaults to <code>"auto"</code>.</td></tr>
+                  <tr><td><code>connections</code></td><td>Neighbouring towns linked at the edges, e.g. <code>[{ side: "left", label: "Maple Lane", url: "https://maplelane.dev" }]</code>. Each grows a signpost visitors can walk over to.</td></tr>
                 </tbody>
               </table>
               <p class="docs-note">

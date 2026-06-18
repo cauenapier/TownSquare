@@ -258,6 +258,206 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* Neighbouring-town fingerposts at the stage edges. */
+.townsquare .townsquare-signpost {
+  position: absolute;
+  bottom: 53px;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--prop-ink);
+  cursor: pointer;
+  z-index: 3;
+}
+
+.townsquare .townsquare-signpost--left {
+  left: 12px;
+}
+
+.townsquare .townsquare-signpost--right {
+  right: 12px;
+}
+
+.townsquare-signpost__sign {
+  display: block;
+  width: 22px;
+  height: 38px;
+  opacity: 0.6;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.townsquare-signpost__sign svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.townsquare-signpost__sign svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.townsquare-signpost:hover .townsquare-signpost__sign,
+.townsquare-signpost:focus-visible .townsquare-signpost__sign,
+.townsquare-signpost--near .townsquare-signpost__sign {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.townsquare-signpost:focus-visible {
+  outline: none;
+}
+
+.townsquare-signpost:focus-visible .townsquare-signpost__sign {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.townsquare-signpost__hint {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--you);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+
+.townsquare-signpost--left .townsquare-signpost__hint {
+  left: 0;
+}
+
+.townsquare-signpost--right .townsquare-signpost__hint {
+  right: 0;
+}
+
+.townsquare-signpost--near .townsquare-signpost__hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* "Walk over" modal listing the towns on one side. */
+.townsquare-connections {
+  position: absolute;
+  inset: 0;
+  z-index: 2147483005;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.townsquare-connections__backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--ink) 38%, transparent);
+}
+
+.townsquare-connections__panel {
+  position: relative;
+  z-index: 1;
+  width: min(280px, 86%);
+  max-height: 86%;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--hair-2);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 18px 40px -24px rgba(42, 41, 38, 0.6);
+}
+
+.townsquare-connections__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.townsquare-connections__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.townsquare-connections__close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.townsquare-connections__close:hover,
+.townsquare-connections__close:focus-visible {
+  color: var(--ink);
+}
+
+.townsquare-connections__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.townsquare-connections__item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name go"
+    "host go";
+  align-items: center;
+  column-gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in oklab, var(--hair-2) 70%, transparent);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.townsquare-connections__item:hover,
+.townsquare-connections__item:focus-visible {
+  border-color: var(--you);
+  background: var(--you-tint);
+  outline: none;
+}
+
+.townsquare-connections__item-name {
+  grid-area: name;
+  font-size: 13px;
+}
+
+.townsquare-connections__item-host {
+  grid-area: host;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.townsquare-connections__item-go {
+  grid-area: go;
+  font-size: 12px;
+  color: var(--you-deep);
+  white-space: nowrap;
+}
+
 .townsquare--quiet {
   min-height: 46px;
   overflow: visible;

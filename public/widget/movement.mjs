@@ -2,6 +2,7 @@
  * Keyboard and stage tap input, local movement animation, and prop settle requests.
  */
 
+import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } from "./connections.mjs";
 import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
 import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
@@ -266,6 +267,8 @@ export function tick(ctx, now) {
     maybeRequestPropSettle(ctx, now);
   }
 
+  updateConnectionProximity(ctx);
+
   layoutBubbleColumns(
     ctx.stage,
     ctx.options.preview === true || ctx.options.solo === true ? [ctx.self] : [ctx.self, ...ctx.peers.values()],
@@ -303,6 +306,13 @@ export function wireKeyboard(ctx) {
     if (isTypingTarget(event.target)) return;
     if (event.key === "ArrowLeft") ctx.self.movingLeft = true;
     if (event.key === "ArrowRight") ctx.self.movingRight = true;
+    if (!event.repeat && event.key === "ArrowUp") {
+      const side = activeSignpostSide(ctx);
+      if (side) {
+        event.preventDefault();
+        openConnectionsModal(ctx, side);
+      }
+    }
     if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "j") {
       triggerJump(ctx);
     }
@@ -356,6 +366,9 @@ export function wireStagePointer(ctx) {
     if (ctx.quiet) return;
 
     const target = event.target instanceof Element ? event.target : null;
+    // Signposts open the connections modal; their own handler stops propagation,
+    // but guard here too so a tap on one never doubles as a walk-to-here.
+    if (target?.closest(".townsquare-signpost")) return;
     const avatarEl = target?.closest(".townsquare-avatar");
     if (avatarEl) {
       // Self taps are handled by the nameplate/composer; peers toggle the tray.
