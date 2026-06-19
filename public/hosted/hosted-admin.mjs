@@ -34,6 +34,11 @@ const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const metaEl = document.getElementById("site-meta");
+const siteDetailsForm = document.getElementById("site-details-form");
+const siteNameInput = document.getElementById("site-name");
+const siteEmailInput = document.getElementById("site-email");
+const saveSiteDetailsButton = document.getElementById("save-site-details");
+const siteDetailsStatusEl = document.getElementById("site-details-status");
 const customizationForm = document.getElementById("customization-form");
 const customizationStatusEl = document.getElementById("customization-status");
 const saveCustomizationButton = document.getElementById("save-customization");
@@ -62,6 +67,9 @@ bindSceneCountProse(customizationForm);
 const AUTO_SAVE_DELAY_MS = 1500;
 
 let currentSite = null;
+let siteDetailsTouched = false;
+let siteDetailsBusy = false;
+let siteDetailsSavedMessage = "";
 let customizationBusy = false;
 let customizationSavedMessage = "";
 let autoSaveTimer = null;
@@ -97,6 +105,7 @@ const previewModeButtons = document.querySelectorAll("[data-preview-mode]");
 preview.bindThemeToggle(previewModeButtons);
 
 const setStatus = createStatusSetter(statusEl);
+const setSiteDetailsStatus = createStatusSetter(siteDetailsStatusEl, { toggleHidden: true });
 const setCustomizationStatus = createStatusSetter(customizationStatusEl, { toggleHidden: true });
 const setConnectionsStatus = createStatusSetter(connectionsStatusEl, { toggleHidden: true });
 
@@ -118,6 +127,9 @@ const session = createAdminSession({
   onClear: () => {
     clearAutoSaveTimer();
     currentSite = null;
+    siteDetailsTouched = false;
+    siteDetailsBusy = false;
+    siteDetailsSavedMessage = "";
     customizationSavedMessage = "";
     customizationTouched = false;
     connectionsDraft = [];
@@ -126,6 +138,54 @@ const session = createAdminSession({
     preview.destroy();
   },
 });
+
+function siteDetailsAreDirty() {
+  return Boolean(currentSite) && (
+    siteNameInput.value.trim() !== currentSite.name
+    || siteEmailInput.value.trim() !== (currentSite.email || "")
+  );
+}
+
+function updateSiteDetailsControls() {
+  saveSiteDetailsButton.disabled = siteDetailsBusy || !siteDetailsAreDirty();
+  if (siteDetailsBusy) {
+    setSiteDetailsStatus("Saving site details...");
+  } else if (siteDetailsSavedMessage) {
+    setSiteDetailsStatus(siteDetailsSavedMessage);
+  } else if (siteDetailsAreDirty()) {
+    setSiteDetailsStatus("Unsaved site detail changes.");
+  } else {
+    setSiteDetailsStatus("");
+  }
+}
+
+function syncSiteDetailsFromServer() {
+  if (!siteDetailsTouched || !siteDetailsAreDirty()) {
+    siteNameInput.value = currentSite.name;
+    siteEmailInput.value = currentSite.email || "";
+    siteDetailsTouched = false;
+  }
+  updateSiteDetailsControls();
+}
+
+async function saveSiteDetails() {
+  if (!currentSite || siteDetailsBusy || !siteDetailsAreDirty()) return;
+  siteDetailsBusy = true;
+  siteDetailsSavedMessage = "";
+  updateSiteDetailsControls();
+
+  const ok = await session.action("updateSiteDetails", {
+    name: siteNameInput.value,
+    email: siteEmailInput.value,
+  });
+
+  siteDetailsBusy = false;
+  if (ok) {
+    siteDetailsTouched = false;
+    siteDetailsSavedMessage = "Site details saved.";
+  }
+  updateSiteDetailsControls();
+}
 
 function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(customizationForm)) {
   const next = sanitizeSceneConfig(sceneConfig);
@@ -535,6 +595,8 @@ function render(data) {
   currentSite = data.site;
   const scene = data.scene;
 
+  syncSiteDetailsFromServer();
+
   metaEl.innerHTML = `
     <dl>
       <div><dt>Site</dt><dd>${escapeHtml(currentSite.name)}</dd></div>
@@ -613,6 +675,17 @@ function render(data) {
 
 bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
 bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnippetEl });
+
+siteDetailsForm.addEventListener("input", () => {
+  siteDetailsTouched = true;
+  siteDetailsSavedMessage = "";
+  updateSiteDetailsControls();
+});
+
+siteDetailsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void saveSiteDetails();
+});
 
 customizationForm.addEventListener("input", (event) => {
   customizationSavedMessage = "";

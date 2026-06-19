@@ -50,6 +50,28 @@
         </div>
         <p class="hosted-status" id="admin-status" role="status"></p>
 
+        <section class="hosted-section" aria-labelledby="site-details-title">
+          <div class="hosted-section-head">
+            <h2 id="site-details-title">Site details</h2>
+          </div>
+          <form class="hosted-form" id="site-details-form">
+            <div class="hosted-grid">
+              <label>
+                <span>Site name</span>
+                <input id="site-name" name="name" type="text" maxlength="80" required />
+              </label>
+              <label>
+                <span>Email <small>optional</small></span>
+                <input id="site-email" name="email" type="email" autocomplete="email" maxlength="254" />
+              </label>
+            </div>
+            <div class="hosted-actions">
+              <button type="submit" id="save-site-details" disabled>Save site details</button>
+            </div>
+            <p class="hosted-status" id="site-details-status" role="status" hidden></p>
+          </form>
+        </section>
+
         <section class="hosted-meta" id="site-meta"></section>
 
         <section class="hosted-section" id="customization-section">

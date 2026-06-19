@@ -978,6 +978,16 @@ function handleAdminLogin(req, res) {
 }
 
 const ADMIN_ACTIONS = {
+  updateSiteDetails(site, scene, body) {
+    const parsedEmail = parseOptionalEmail(body.email);
+    if (!parsedEmail.ok) {
+      return { error: "Enter a valid email address, or leave the field empty." };
+    }
+
+    site.name = sanitizeSiteName(body.name, site.origin);
+    site.email = parsedEmail.email;
+    touchSite(site);
+  },
   updateCustomization(site, scene, body) {
     site.sceneConfig = sanitizeSceneConfig(body.sceneConfig);
     site.styleConfig = sanitizeSiteStyle(body.styleConfig);
@@ -1108,7 +1118,11 @@ function handleAdminAction(req, res) {
     }
 
     const scene = getScene(site.siteKey, site);
-    ADMIN_ACTIONS[action](site, scene, body);
+    const actionResult = ADMIN_ACTIONS[action](site, scene, body);
+    if (actionResult?.error) {
+      sendJson(res, 400, actionResult);
+      return;
+    }
     sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene), owners: getOwners(site, scene) });
   });
 }
