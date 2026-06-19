@@ -94,7 +94,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  #townsquare-root:is(:not([data-townsquare-theme]), [data-townsquare-theme="auto"]) {
+  #townsquare-root[data-townsquare-theme="auto"] {
     --scene: #242521;
     --scene-edge: #31322d;
     --page: #181917;

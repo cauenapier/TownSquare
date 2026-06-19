@@ -175,18 +175,38 @@ export function resolveWidgetTheme(root, options = {}) {
 }
 
 /**
+ * Host pages that set `color-scheme: light|dark` without class/data-theme markers.
+ *
+ * @returns {"light" | "dark" | null}
+ */
+function readHostColorScheme() {
+  for (const el of [document.documentElement, document.body]) {
+    if (!(el instanceof HTMLElement)) continue;
+    const scheme = getComputedStyle(el).colorScheme.trim().toLowerCase();
+    if (scheme === "dark" || scheme === "light") return scheme;
+  }
+  return null;
+}
+
+/**
  * @param {HTMLElement} root
  */
 function syncHostTheme(root) {
   const dark = HOST_THEME_SELECTORS.dark.some((selector) => document.querySelector(selector));
   const light = HOST_THEME_SELECTORS.light.some((selector) => document.querySelector(selector));
 
-  if (!dark && !light) {
-    root.removeAttribute("data-townsquare-theme");
+  if (dark && !light) {
+    root.dataset.townsquareTheme = "dark";
+    return;
+  }
+  if (light) {
+    root.dataset.townsquareTheme = "light";
     return;
   }
 
-  root.dataset.townsquareTheme = dark ? "dark" : "light";
+  // Unmarked light pages stay light even when macOS is in dark mode; only `auto`
+  // follows `prefers-color-scheme`.
+  root.dataset.townsquareTheme = readHostColorScheme() || "light";
 }
 
 /**
@@ -217,7 +237,7 @@ export function applyWidgetTheme(root, theme) {
   }
 
   if (theme === "auto") {
-    root.removeAttribute("data-townsquare-theme");
+    root.dataset.townsquareTheme = "auto";
     return () => {};
   }
   root.dataset.townsquareTheme = theme;

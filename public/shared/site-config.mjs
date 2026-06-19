@@ -1035,7 +1035,7 @@ export function buildSiteCss(style = DEFAULT_SITE_STYLE, selector = "#townsquare
     paletteDeclarations(next.dark),
     "}",
     "@media (prefers-color-scheme: dark) {",
-    `  ${scope}:is(:not([data-townsquare-theme]), [data-townsquare-theme="auto"]) {`,
+    `  ${scope}[data-townsquare-theme="auto"] {`,
     paletteDeclarations(next.dark),
     "  }",
     "}",

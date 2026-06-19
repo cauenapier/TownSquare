@@ -138,8 +138,11 @@ Notes:
 - `socketPath` defaults to `/live`; set it explicitly when your reverse proxy exposes TownSquare on a different websocket path such as `/townsquare/live`.
 - `siteKey` is only needed when using one hosted TownSquare server for multiple registered sites.
 - `theme: "host"` syncs with common host-page dark mode signals such as
-  `html.dark`, `body.dark`, `data-theme`, `data-bs-theme`, and `data-color-mode`.
-  Omit it to use `auto`, which follows `prefers-color-scheme`.
+  `html.dark`, `body.dark`, `data-theme`, `data-bs-theme`, and `data-color-mode`,
+  or an explicit `color-scheme: light|dark` on `html`/`body`. When none of those
+  are present it stays on the light palette so macOS dark mode does not restyle
+  the widget on a light page. Omit `theme` to use `auto`, which follows
+  `prefers-color-scheme`.
 - To restyle the square, set the palette tokens (`--scene`, `--page`, `--surface`,
   `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`, `--ground`) on
   `#townsquare-root` in your own stylesheet. The widget writes no inline palette

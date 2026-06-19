@@ -7,14 +7,14 @@
 @import url("./tokens.css");
 
 #townsquare-root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: var(--font);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
 
-#townsquare-root[data-townsquare-theme="light"] {
-  color-scheme: light;
+#townsquare-root[data-townsquare-theme="auto"] {
+  color-scheme: light dark;
 }
 
 #townsquare-root[data-townsquare-theme="dark"] {
