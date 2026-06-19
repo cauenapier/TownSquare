@@ -150,6 +150,7 @@ export function mountTownSquare(root, options = {}) {
     quietButton,
     expandButton,
     helpButton,
+    helpScrim,
     helpPanel,
     jumpButton,
     highFiveButton,
@@ -252,7 +253,8 @@ export function mountTownSquare(root, options = {}) {
     ctx.app.classList.toggle("townsquare--quiet", quiet);
     ctx.quietButton.classList.toggle("townsquare__control--active", quiet);
     ctx.quietButton.setAttribute("aria-pressed", String(quiet));
-    ctx.quietButton.setAttribute("aria-label", quiet ? "Turn quiet mode off" : "Turn quiet mode on");
+    ctx.quietButton.setAttribute("aria-label", quiet ? "Enable TownSquare" : "Disable TownSquare");
+    ctx.quietButton.title = quiet ? "Enable TownSquare" : "Disable TownSquare";
     ctx.self.movingLeft = false;
     ctx.self.movingRight = false;
     ctx.self.avatar.composer?.reset();
@@ -270,7 +272,7 @@ export function mountTownSquare(root, options = {}) {
   const onHighFiveClick = () => triggerHighFive(ctx);
   jumpButton.addEventListener("click", onJumpClick);
   highFiveButton.addEventListener("click", onHighFiveClick);
-  const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
+  const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton);
 
   const unwatchPage = watchCurrentPage(ctx);
 

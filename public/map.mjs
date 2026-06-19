@@ -129,8 +129,7 @@ function buildMap() {
     return;
   }
 
-  const edgeLabel = mapEdges.length === 1 ? "1 path" : `${mapEdges.length} paths`;
-  statusEl.textContent = `${sites.length} verified TownSquare${sites.length === 1 ? "" : "s"} on the map${mapEdges.length ? `, ${edgeLabel} between them` : ""}.`;
+  statusEl.textContent = `${sites.length} verified TownSquare${sites.length === 1 ? "" : "s"} on the map.`;
 
   for (const edge of mapEdges) {
     const path = renderMapEdge(edge, positionsBySiteKey, selectedSiteKey);
