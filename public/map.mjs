@@ -1,7 +1,7 @@
 import { createSvgElement } from "./lib/ui-common.mjs";
 import { buildMapEdges } from "./map-connections.mjs";
 import { activityLevel, cityTier, layoutMapSites } from "./map-layout.mjs";
-import { createCityMarker, renderMapEdge } from "./map-render.mjs";
+import { createCityMarker, renderMapEdge, supporterStarSize } from "./map-render.mjs";
 import { renderSceneryLayer } from "./map-scenery.mjs";
 import { MAP_WORLD_HEIGHT, MAP_WORLD_WIDTH, validateMapWorld } from "./shared/map-world.mjs";
 
@@ -80,7 +80,8 @@ function originLabel(origin) {
 
 function siteAriaLabel(site) {
   const visitors = Math.max(0, Number(site.activeVisitors) || 0);
-  return `${site.name}, ${cityTier(site.messageCount).name}, ${visitors} active visitor${visitors === 1 ? "" : "s"}, ${originLabel(site.origin)}`;
+  const supporter = site.supporter ? ", supporter" : "";
+  return `${site.name}, ${cityTier(site.messageCount).name}${supporter}, ${visitors} active visitor${visitors === 1 ? "" : "s"}, ${originLabel(site.origin)}`;
 }
 
 function renderActivity(site, tier) {
@@ -156,6 +157,7 @@ function renderSiteNode(site) {
   group.append(
     marker.dot,
     renderActivity(site, marker.tier),
+    ...(marker.star ? [marker.star] : []),
     marker.label,
   );
 
@@ -344,8 +346,9 @@ const RESET_MARGIN = 5;
 function siteFootprint(site) {
   const tier = cityTier(site.messageCount);
   const halfW = Math.max(tier.radius, Math.max(76, site.name.length * 8.2) * 0.52);
+  const starSize = site.supporter ? supporterStarSize(tier) : 0;
   return {
-    above: tier.radius + 8,
+    above: tier.radius + 8 + starSize * 0.85,
     below: tier.radius + 28,
     halfW,
   };

@@ -1673,6 +1673,12 @@ body {
   color: #a8431f;
 }
 
+
+.service-supporter-star {
+  color: #f0c020;
+  font-weight: 700;
+}
+
 .service-table-actions-head,
 .service-table-actions-cell {
   width: 1%;
@@ -1939,6 +1945,19 @@ body {
   font: 600 17px var(--font);
   text-anchor: middle;
   pointer-events: none;
+}
+
+
+.map-node__supporter-star {
+  fill: #f0c020;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  paint-order: stroke;
+  font-family: var(--font);
+  font-weight: 700;
+  text-anchor: middle;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.18));
 }
 
 .map-node:hover .map-node__dot,

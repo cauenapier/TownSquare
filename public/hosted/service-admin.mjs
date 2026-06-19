@@ -63,6 +63,7 @@ const TABLE_COLUMNS = [
   { key: "email", label: "Email" },
   { key: "disabled", label: "Status", render: (site) => (site.disabled ? "Disabled" : "Enabled") },
   { key: "chatDisabled", label: "Chat", render: (site) => (site.chatDisabled ? "Disabled" : "Enabled") },
+  { key: "supporter", label: "Supporter", render: (site) => (site.supporter ? "Yes" : "No") },
   { key: "verifiedAt", label: "Verified", render: (site) => formatTime(site.verifiedAt) },
   { key: "lastSeenAt", label: "Last seen", render: (site) => formatTime(site.lastSeenAt) },
   { key: "messageCount", label: "Messages", render: (site) => String(site.messageCount ?? 0) },
@@ -156,7 +157,7 @@ function renderMapEditor() {
     const position = positions.get(site.siteKey);
     const marker = createCityMarker(site);
     const town = createSvgElement("g", { transform: `translate(${position.x} ${position.y})` });
-    town.append(marker.dot, marker.label);
+    town.append(marker.dot, ...(marker.star ? [marker.star] : []), marker.label);
     towns.appendChild(town);
   }
   svg.appendChild(towns);
@@ -443,6 +444,7 @@ function siteSortValue(site, key) {
       return String(site.email || "").toLowerCase();
     case "disabled":
     case "chatDisabled":
+    case "supporter":
       return Number(Boolean(site[key]));
     case "verifiedAt":
     case "lastSeenAt":
@@ -578,7 +580,15 @@ function createActionMenu(site) {
     void deleteSite(site);
   });
 
-  panel.append(toggleSite, toggleChat, reset, remove);
+  const toggleSupporter = document.createElement("button");
+  toggleSupporter.type = "button";
+  toggleSupporter.textContent = site.supporter ? "Remove supporter" : "Mark as supporter";
+  toggleSupporter.addEventListener("click", () => {
+    menu.open = false;
+    void action("setSiteSupporter", site.siteKey, { supporter: !site.supporter });
+  });
+
+  panel.append(toggleSite, toggleChat, toggleSupporter, reset, remove);
   menu.append(panel);
 
   menu.addEventListener("toggle", () => {
@@ -596,10 +606,20 @@ function renderCell(site, column) {
     const code = document.createElement("code");
     code.textContent = value;
     cell.append(code);
-  } else if (column.key === "disabled" || column.key === "chatDisabled") {
+  } else if (column.key === "name") {
+    if (site.supporter) {
+      const star = document.createElement("span");
+      star.className = "service-supporter-star";
+      star.textContent = "★";
+      star.setAttribute("aria-hidden", "true");
+      cell.append(star, " ", site.name);
+    } else {
+      cell.textContent = site.name;
+    }
+  } else if (column.key === "disabled" || column.key === "chatDisabled" || column.key === "supporter") {
     const badge = document.createElement("span");
-    const disabled = column.key === "disabled" ? site.disabled : site.chatDisabled;
-    badge.className = `service-status-badge${disabled ? " service-status-badge--off" : ""}`;
+    const on = column.key === "supporter" ? site.supporter : !(column.key === "disabled" ? site.disabled : site.chatDisabled);
+    badge.className = `service-status-badge${on ? "" : " service-status-badge--off"}`;
     badge.textContent = value;
     cell.append(badge);
   } else {
@@ -656,6 +676,7 @@ function renderSites(sites) {
     verifiedAt: site.verifiedAt,
     disabled: site.disabled,
     messageCount: site.messageCount,
+    supporter: site.supporter,
   })));
   if (draftMapWorld && !mapGesture && nextMapTownSnapshot !== mapTownSnapshot) renderMapEditor();
   mapTownSnapshot = nextMapTownSnapshot;

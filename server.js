@@ -883,6 +883,7 @@ function publicMapSite(site) {
     messageCount: site.messageCount || 0,
     activeVisitors: scene ? countActiveVisitors(scene) : 0,
     connections: getConnections(site),
+    supporter: Boolean(site.supporter),
   };
 }
 
@@ -1236,6 +1237,11 @@ const SERVICE_ADMIN_ACTIONS = {
   },
   setChatDisabled(req, site, body) {
     site.chatDisabled = Boolean(body.disabled);
+    touchSite(site);
+    return { site: serviceAdminSite(site) };
+  },
+  setSiteSupporter(req, site, body) {
+    site.supporter = Boolean(body.supporter);
     touchSite(site);
     return { site: serviceAdminSite(site) };
   },
@@ -1685,6 +1691,9 @@ function loadSites() {
       if (site.lastMessageAt === undefined) {
         site.lastMessageAt = null;
       }
+      if (typeof site.supporter !== "boolean") {
+        site.supporter = false;
+      }
       return [site.siteKey, site];
     }));
   } catch (error) {
@@ -1735,6 +1744,7 @@ function publicSite(site) {
     lastMessageAt: site.lastMessageAt || null,
     createdAt: site.createdAt,
     blockedCount: site.blockedBrowserIds.length,
+    supporter: Boolean(site.supporter),
   };
 }
 
