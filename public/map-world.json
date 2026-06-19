@@ -5,8 +5,8 @@
   "clusters": [
     { "type": "mountains", "center": [1170, 300], "count": 2, "radius": 120 },
     { "type": "mountains", "center": [480, 260], "count": 1, "radius": 70 },
-    { "type": "trees", "center": [408, 565], "count": 4, "radius": 100 },
-    { "type": "trees", "center": [1328, 619], "count": 2, "radius": 70 },
+    { "type": "trees", "center": [350, 700], "count": 10, "radius": 100 },
+    { "type": "trees", "center": [1328, 619], "count": 60, "radius": 200 },
     { "type": "trees", "center": [840, 907], "count": 2, "radius": 65 }
   ]
 }

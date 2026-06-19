@@ -2199,9 +2199,9 @@ body {
   fill: var(--ink);
   paint-order: stroke;
   stroke: var(--surface);
-  stroke-width: 7;
+  stroke-width: 5;
   stroke-linejoin: round;
-  font: 650 24px var(--font);
+  font: 600 17px var(--font);
   text-anchor: middle;
   pointer-events: none;
 }

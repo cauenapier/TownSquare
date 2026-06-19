@@ -7,6 +7,20 @@ const MAX_ZOOM = 2.8;
 const ZOOM_STEP = 1.22;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+/** Tune how towns are placed on the map. Reload /map after changes. */
+const SITE_LAYOUT = {
+  /** Keep towns this far from the world edge (px). */
+  edgeInset: 150,
+  /** How much older verified towns move toward the center (0–1). */
+  centerPull: 0.10,
+  /** Scale distance from center; raise to spread towns farther apart. */
+  spread: 1.34,
+  /** Extra gap between town labels during overlap separation (px). */
+  collisionPadding: 8,
+  /** Separation passes after the initial hash layout. Raise if towns still touch. */
+  separationPasses: 140,
+};
+
 const root = document.getElementById("townsquare-map");
 const statusEl = document.getElementById("map-status");
 const detail = document.getElementById("map-detail");
@@ -69,6 +83,8 @@ function textElement(text, x, y, className) {
   return el;
 }
 
+let ageRankBySiteKey = new Map();
+
 function hashString(value) {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -78,6 +94,31 @@ function hashString(value) {
   return hash >>> 0;
 }
 
+function siteAgeMs(site) {
+  return Number(site.verifiedAt) || 0;
+}
+
+function buildAgeRanks(siteList) {
+  const ranks = new Map();
+  if (siteList.length === 0) return ranks;
+  if (siteList.length === 1) {
+    ranks.set(siteList[0].siteKey, 1);
+    return ranks;
+  }
+
+  const sorted = [...siteList].sort((left, right) => {
+    const ageDelta = siteAgeMs(left) - siteAgeMs(right);
+    if (ageDelta !== 0) return ageDelta;
+    return left.siteKey.localeCompare(right.siteKey);
+  });
+
+  const maxIndex = sorted.length - 1;
+  for (let index = 0; index < sorted.length; index += 1) {
+    ranks.set(sorted[index].siteKey, index / maxIndex);
+  }
+  return ranks;
+}
+
 function sitePosition(site) {
   const hash = hashString(site.siteKey);
   const angle = (hash % 6283) / 1000;
@@ -85,10 +126,101 @@ function sitePosition(site) {
   const drift = ((hash >>> 20) % 1000) / 1000;
   const x = 240 + ((hash % 1320) + drift * 120) % 1320;
   const y = 190 + Math.abs(Math.sin(angle)) * 620 + band * 160;
+
+  const ageRank = ageRankBySiteKey.get(site.siteKey) ?? 0;
+  const centerPull = SITE_LAYOUT.centerPull * ageRank;
+  const centerX = worldWidth / 2;
+  const centerY = worldHeight / 2;
+  const pulledX = x + (centerX - x) * centerPull;
+  const pulledY = y + (centerY - y) * centerPull;
+  const placedX = centerX + (pulledX - centerX) * SITE_LAYOUT.spread;
+  const placedY = centerY + (pulledY - centerY) * SITE_LAYOUT.spread;
+  const inset = SITE_LAYOUT.edgeInset;
+
   return {
-    x: Math.max(150, Math.min(worldWidth - 150, x)),
-    y: Math.max(140, Math.min(worldHeight - 140, y)),
+    x: Math.max(inset, Math.min(worldWidth - inset, placedX)),
+    y: Math.max(inset, Math.min(worldHeight - inset, placedY)),
   };
+}
+
+function clampSitePosition(position) {
+  const inset = SITE_LAYOUT.edgeInset;
+  return {
+    x: Math.max(inset, Math.min(worldWidth - inset, position.x)),
+    y: Math.max(inset, Math.min(worldHeight - inset, position.y)),
+  };
+}
+
+function siteCollisionRadius(site) {
+  const labelWidth = Math.max(76, site.name.length * 8.2);
+  return {
+    rx: Math.max(32, labelWidth * 0.52),
+    ry: 58,
+  };
+}
+
+function separationPush(siteA, siteB, posA, posB) {
+  const radiusA = siteCollisionRadius(siteA);
+  const radiusB = siteCollisionRadius(siteB);
+  const rx = radiusA.rx + radiusB.rx + SITE_LAYOUT.collisionPadding;
+  const ry = radiusA.ry + radiusB.ry + SITE_LAYOUT.collisionPadding;
+  let dx = posB.x - posA.x;
+  let dy = posB.y - posA.y;
+
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+    const angle = (hashString(`${siteA.siteKey}|${siteB.siteKey}`) % 6283) / 1000;
+    dx = Math.cos(angle);
+    dy = Math.sin(angle);
+  }
+
+  const metric = (dx / rx) ** 2 + (dy / ry) ** 2;
+  if (metric >= 1) return null;
+
+  const scale = 1 / Math.sqrt(metric);
+  return {
+    dx: (scale - 1) * dx / 2,
+    dy: (scale - 1) * dy / 2,
+  };
+}
+
+function separateSitePositions() {
+  if (sites.length < 2) return;
+
+  const anchors = new Map(
+    sites.map((site) => [site.siteKey, { ...positionsBySiteKey.get(site.siteKey) }]),
+  );
+
+  for (let pass = 0; pass < SITE_LAYOUT.separationPasses; pass += 1) {
+    for (let index = 0; index < sites.length; index += 1) {
+      for (let other = index + 1; other < sites.length; other += 1) {
+        const siteA = sites[index];
+        const siteB = sites[other];
+        const posA = positionsBySiteKey.get(siteA.siteKey);
+        const posB = positionsBySiteKey.get(siteB.siteKey);
+        if (!posA || !posB) continue;
+
+        const push = separationPush(siteA, siteB, posA, posB);
+        if (!push) continue;
+
+        posA.x -= push.dx;
+        posA.y -= push.dy;
+        posB.x += push.dx;
+        posB.y += push.dy;
+      }
+    }
+
+    for (const site of sites) {
+      const position = positionsBySiteKey.get(site.siteKey);
+      const anchor = anchors.get(site.siteKey);
+      if (!position || !anchor) continue;
+
+      position.x += (anchor.x - position.x) * 0.05;
+      position.y += (anchor.y - position.y) * 0.05;
+      const clamped = clampSitePosition(position);
+      position.x = clamped.x;
+      position.y = clamped.y;
+    }
+  }
 }
 
 function formatTime(value) {
@@ -143,6 +275,7 @@ function indexSites(nextSites) {
   siteKeyByOrigin = new Map();
   positionsBySiteKey = new Map();
   mapEdges = [];
+  ageRankBySiteKey = buildAgeRanks(nextSites);
 
   for (const site of sites) {
     siteByKey.set(site.siteKey, site);
@@ -150,6 +283,8 @@ function indexSites(nextSites) {
     if (origin && !siteKeyByOrigin.has(origin)) siteKeyByOrigin.set(origin, site.siteKey);
     positionsBySiteKey.set(site.siteKey, sitePosition(site));
   }
+
+  separateSitePositions();
 
   const seen = new Set();
   for (const site of sites) {
@@ -344,7 +479,7 @@ function renderSiteNode(site) {
   group.append(
     createSvgElement("circle", { class: "map-node__halo", r: 26 }),
     createSvgElement("circle", { class: "map-node__dot", r: 10 }),
-    textElement(site.name, 0, 42, "map-node__label"),
+    textElement(site.name, 0, 36, "map-node__label"),
   );
 
   group.addEventListener("click", (event) => {

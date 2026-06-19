@@ -3,6 +3,9 @@ import { mountainPath, treeCrownPath, treeTrunkPath } from "./map-glyphs.mjs";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const GLYPH_TYPES = new Set(["mountains", "trees"]);
 const DEFAULT_WORLD = { width: 1800, height: 1200, clusters: [] };
+/** Minimum center-to-center gap for scattered trees (crown is ~56px wide). */
+const TREE_MIN_SPACING = 30;
+const SCATTER_ATTEMPTS = 40;
 
 function hashString(value) {
   let hash = 2166136261;
@@ -35,13 +38,46 @@ function clampPoint(x, y, width, height, margin = 40) {
   };
 }
 
-function scatterPoint(clusterIndex, glyphIndex, center, radius, width, height) {
-  const hash = hashString(`cluster:${clusterIndex}:${glyphIndex}`);
+function scatterPoint(clusterIndex, glyphIndex, center, radius, width, height, salt = 0) {
+  const hash = hashString(`cluster:${clusterIndex}:${glyphIndex}:${salt}`);
   const angle = (hash % 6283) / 1000;
   const distance = radius * (((hash >>> 10) % 1000) / 1000);
   const x = center[0] + Math.cos(angle) * distance;
   const y = center[1] + Math.sin(angle) * distance;
   return clampPoint(x, y, width, height);
+}
+
+function minDistanceToPlaced(point, placed) {
+  let minDist = Infinity;
+  for (const existing of placed) {
+    const dx = point.x - existing.x;
+    const dy = point.y - existing.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < minDist) minDist = dist;
+  }
+  return minDist;
+}
+
+function scatterPointWithSpacing(clusterIndex, glyphIndex, center, radius, width, height, placed, minSpacing) {
+  if (!minSpacing || placed.length === 0) {
+    return scatterPoint(clusterIndex, glyphIndex, center, radius, width, height);
+  }
+
+  let best = scatterPoint(clusterIndex, glyphIndex, center, radius, width, height, 0);
+  let bestMinDist = minDistanceToPlaced(best, placed);
+  if (bestMinDist >= minSpacing) return best;
+
+  for (let attempt = 1; attempt < SCATTER_ATTEMPTS; attempt += 1) {
+    const point = scatterPoint(clusterIndex, glyphIndex, center, radius, width, height, attempt);
+    const minDist = minDistanceToPlaced(point, placed);
+    if (minDist >= minSpacing) return point;
+    if (minDist > bestMinDist) {
+      best = point;
+      bestMinDist = minDist;
+    }
+  }
+
+  return best;
 }
 
 function expandCluster(cluster, clusterIndex, width, height) {
@@ -63,13 +99,23 @@ function expandCluster(cluster, clusterIndex, width, height) {
 
   const count = Math.max(1, Math.floor(cluster.count));
   const radius = Math.max(1, cluster.radius);
+  const minSpacing = cluster.type === "trees" ? TREE_MIN_SPACING : 0;
   const points = [];
+  const placed = [];
 
   for (let index = 0; index < count; index += 1) {
-    points.push({
-      type: cluster.type,
-      ...scatterPoint(clusterIndex, index, cluster.center, radius, width, height),
-    });
+    const point = scatterPointWithSpacing(
+      clusterIndex,
+      index,
+      cluster.center,
+      radius,
+      width,
+      height,
+      placed,
+      minSpacing,
+    );
+    points.push({ type: cluster.type, ...point });
+    placed.push(point);
   }
 
   return points;
