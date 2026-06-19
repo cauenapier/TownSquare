@@ -35,13 +35,6 @@ const PLAUSIBLE_SCRIPT_SRC = String(process.env.PLAUSIBLE_SCRIPT_SRC || "/js/scr
 const PLAUSIBLE_API_PATH = process.env.PLAUSIBLE_API_PATH === undefined
   ? "/api/event"
   : String(process.env.PLAUSIBLE_API_PATH).trim();
-const PLAUSIBLE_HTML_PAGES = new Set([
-  "/map.html",
-  "/hosted/admin.html",
-  "/hosted/chat.html",
-  "/hosted/register.html",
-  "/hosted/service-admin.html",
-]);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
@@ -504,13 +497,8 @@ function plausibleScriptPath() {
   return PLAUSIBLE_SCRIPT_SRC.split("?")[0];
 }
 
-function getPublicRelativePath(filePath) {
-  return `/${path.relative(PUBLIC_DIR, filePath).split(path.sep).join("/")}`;
-}
-
 function shouldInjectPlausible(filePath) {
-  if (!PLAUSIBLE_DOMAIN) return false;
-  return PLAUSIBLE_HTML_PAGES.has(getPublicRelativePath(filePath));
+  return Boolean(PLAUSIBLE_DOMAIN && path.extname(filePath) === ".html");
 }
 
 function buildPlausibleSnippet() {
