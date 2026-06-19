@@ -767,38 +767,79 @@ body {
 }
 
 .hosted-color-none {
+  position: relative;
   flex: none;
+  width: 28px;
+  height: 28px;
   min-height: 28px;
-  padding: 0 9px;
-  border: 1px solid var(--hair-2);
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--surface) 88%, transparent);
-  color: var(--ink-faint);
-  font: 650 0.67rem/1 var(--font);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  box-shadow: none;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    var(--cream-deep);
+  background-size: 7px 7px, 7px 7px, auto;
+  background-position: 0 0, 3.5px 3.5px, 0 0;
+  color: var(--ink);
+  font: inherit;
+  box-shadow: inset 0 0 0 1px var(--hair-2);
   cursor: pointer;
-  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.hosted-color-none::before,
+.hosted-color-none::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  height: 1.5px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ink-faint) 72%, transparent);
+  pointer-events: none;
+}
+
+.hosted-color-none::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.hosted-color-none::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .hosted-color-none:hover,
 .hosted-color-none:focus-visible {
-  color: var(--ink-soft);
-  border-color: color-mix(in oklab, var(--ink-faint) 36%, var(--hair-2));
-  background: color-mix(in oklab, var(--surface-2) 90%, transparent);
+  background:
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    var(--surface-2);
+  background-size: 7px 7px, 7px 7px, auto;
+  background-position: 0 0, 3.5px 3.5px, 0 0;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink-faint) 28%, var(--hair-2));
 }
 
 .hosted-color-none:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--you) 42%, transparent);
+  outline: 2px solid color-mix(in oklab, var(--ink-faint) 42%, transparent);
   outline-offset: 1px;
 }
 
 .hosted-color-none[aria-pressed="true"] {
-  color: var(--you-deep);
-  border-color: color-mix(in oklab, var(--you) 34%, var(--hair-2));
-  background: var(--you-tint);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--you) 20%, transparent);
+  background:
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    var(--surface);
+  background-size: 7px 7px, 7px 7px, auto;
+  background-position: 0 0, 3.5px 3.5px, 0 0;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--ink-faint) 34%, var(--hair-2)),
+    0 1px 2px rgba(42, 41, 38, 0.08);
+}
+
+.hosted-color-none[aria-pressed="true"]::before,
+.hosted-color-none[aria-pressed="true"]::after {
+  background: color-mix(in oklab, var(--ink-soft) 78%, transparent);
 }
 
 .hosted-color-control--transparent .hosted-color-swatch {
@@ -1056,6 +1097,22 @@ body {
   flex: none;
   background: var(--cream-deep);
   color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--hair-2);
+}
+
+.hosted-form .hosted-color-none {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in oklab, var(--ink-faint) 18%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in oklab, var(--ink-faint) 18%, transparent) 75%),
+    var(--cream-deep);
+  background-size: 7px 7px, 7px 7px, auto;
+  background-position: 0 0, 3.5px 3.5px, 0 0;
+  color: var(--ink);
+  font: inherit;
   box-shadow: inset 0 0 0 1px var(--hair-2);
 }
 

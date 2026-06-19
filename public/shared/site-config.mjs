@@ -749,7 +749,6 @@ function createStyleColorControl(mode, field) {
   clearButton.setAttribute("aria-pressed", "false");
   clearButton.setAttribute("aria-label", `Set ${modeLabel.toLowerCase()} ${field.label.toLowerCase()} to transparent (no color)`);
   clearButton.title = "Set transparent (no color)";
-  clearButton.textContent = "None";
 
   swatchLabel.htmlFor = inputName;
   swatchLabel.append(state, picker);
