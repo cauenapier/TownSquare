@@ -27,17 +27,17 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `public/page.css` — full-page chrome for TownSquare host pages only
 - `public/tokens.css` — shared design tokens (imported by widget.css and page.css)
 - `public/lib/` — generic browser helpers shared across pages (e.g. `ui-common.mjs`)
-- `public/demo.mjs` — local demo bootstrap
-- `public/index.html` — demo host page for local development
 - `public/hosted/` — hosted registration/admin pages and scripts, served at `/register`, `/admin`, `/service-admin`
 - `public/map.html` — public map of verified, enabled TownSquares, served at `/map`
 - `public/dev/` — local dev tooling: `dev.html` (simulation, `/dev`) and `walk-sandbox.html` (`/walk-sandbox`)
 - `scripts/smoke-test.js` — automated websocket smoke test
 - `spec.md` — product truth
 - `roadmap.md` — product-facing sequencing
-- `public/docs.html` — in-app docs page (usage + deployment guide), served at `/docs`
-- `public/changelog.html` — simple in-app changelog page, served at `/changelog`
 - `docs/architecture.md` — current boundaries and future hosted shape
+
+The landing page, user documentation, and changelog live in the private
+`TownSquare_landingpage` repository. Set `LANDING_ORIGIN` to redirect those
+routes when this server is reached directly.
 
 ## Requirements
 
@@ -80,9 +80,9 @@ http://127.0.0.1:8787/healthz
   ```bash
    npm start
   ```
-2. Open the demo page:
+2. Open the development scene:
   ```text
-   http://127.0.0.1:8787
+   http://127.0.0.1:8787/dev
   ```
 3. Open it in two windows or two browsers.
 4. Verify the current slice manually:
@@ -110,7 +110,6 @@ http://127.0.0.1:8787/walk-sandbox
 
 ## Embed the widget into another site
 
-TownSquare is now split into a reusable widget module and a demo bootstrap.
 A site can embed the widget by loading the CSS plus the module from the TownSquare server:
 
 ```html
@@ -144,7 +143,8 @@ Notes:
 
 ## Hosted registration
 
-For a user-facing guide to using and managing a TownSquare, see the in-app docs at `/docs` (source: `public/docs.html`).
+User-facing guidance is maintained with the public site in the private
+`TownSquare_landingpage` repository.
 
 TownSquare can also run as a tiny hosted service.
 Open:
@@ -225,6 +225,7 @@ for hosted embeds, so host CSS always wins.
 Registered sites are stored in `.data/sites.json` by default.
 Set `DATA_DIR` if the registry should live somewhere else.
 Set `PUBLIC_ORIGIN` in production so generated snippets use the public HTTPS origin.
+Set `LANDING_ORIGIN` when this server should redirect `/`, `/docs`, and `/changelog` to a separately hosted public site.
 Set `AUTH_FAILURES_PER_HOUR` to tune per-IP failed admin sign-in throttling; `0` disables it.
 Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering, freehand lakes, and curved rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
 Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to send a Telegram notification whenever a chat message is sent.

@@ -28,6 +28,7 @@ const PORT = Number(process.env.PORT || 8787);
 const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const LANDING_ORIGIN = parseHttpOrigin(process.env.LANDING_ORIGIN);
 const PLAUSIBLE_DOMAIN = String(process.env.PLAUSIBLE_DOMAIN || "").trim();
 const PLAUSIBLE_UPSTREAM = String(process.env.PLAUSIBLE_UPSTREAM || "https://plausible.io").replace(/\/$/, "");
 const PLAUSIBLE_SCRIPT_SRC = String(process.env.PLAUSIBLE_SCRIPT_SRC || "/js/script.js").trim();
@@ -35,9 +36,6 @@ const PLAUSIBLE_API_PATH = process.env.PLAUSIBLE_API_PATH === undefined
   ? "/api/event"
   : String(process.env.PLAUSIBLE_API_PATH).trim();
 const PLAUSIBLE_HTML_PAGES = new Set([
-  "/index.html",
-  "/docs.html",
-  "/changelog.html",
   "/hosted/register.html",
 ]);
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -126,6 +124,16 @@ function loadEnvFile(filePath = path.join(__dirname, ".env")) {
     if (error.code !== "ENOENT") {
       console.warn(`Could not load .env: ${error.message}`);
     }
+  }
+}
+
+function parseHttpOrigin(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(String(value));
+    return ["http:", "https:"].includes(url.protocol) ? url.origin : "";
+  } catch {
+    return "";
   }
 }
 
@@ -586,13 +594,10 @@ async function forwardPlausibleEvent(req, res, body) {
 function resolvePublicFile(requestUrl, hostHeader) {
   const url = new URL(requestUrl, `http://${hostHeader}`);
   const aliases = new Map([
-    ["/", "/index.html"],
     ["/register", "/hosted/register.html"],
     ["/admin", "/hosted/admin.html"],
     ["/admin/chat", "/hosted/chat.html"],
     ["/service-admin", "/hosted/service-admin.html"],
-    ["/docs", "/docs.html"],
-    ["/changelog", "/changelog.html"],
     ["/map", "/map.html"],
     ["/dev", "/dev/dev.html"],
     ["/walk-sandbox", "/dev/walk-sandbox.html"],
@@ -1786,6 +1791,17 @@ const server = http.createServer((req, res) => {
   }
 
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+
+  if (["GET", "HEAD"].includes(req.method) && ["/", "/docs", "/changelog"].includes(url.pathname)) {
+    if (LANDING_ORIGIN) {
+      res.writeHead(302, { location: `${LANDING_ORIGIN}${url.pathname}${url.search}` });
+      res.end();
+    } else {
+      res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      res.end(req.method === "HEAD" ? undefined : "not found");
+    }
+    return;
+  }
 
   if (req.method === "GET" && url.pathname === "/api/map") {
     handleMap(req, res);

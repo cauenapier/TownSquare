@@ -1,15 +1,15 @@
 # `public/`
 
-Everything the browser loads: the embeddable widget, the hosted setup/admin
-pages, dev tooling, and styles. The Node server (`../server.js`) serves this
-directory statically and handles the realtime WebSocket.
+Server-owned browser assets: the embeddable widget, hosted setup/admin pages,
+dev tooling, and styles. The Node server (`../server.js`) serves this directory
+statically and handles the realtime WebSocket.
 
 See `../docs/architecture.md` for the system boundary; this file is just a map.
 
 ## Layout
 
 ```
-townsquare.mjs   widget.css   tokens.css   page.css   demo.mjs   index.html
+townsquare.mjs   widget.css   tokens.css   page.css
 widget/   shared/   hosted/   dev/   lib/
 ```
 
@@ -20,7 +20,6 @@ widget/   shared/   hosted/   dev/   lib/
   plus `constants`/`math`/`utils`). Start in `townsquare.mjs` and follow imports.
 - `shared/` — `shared-constants.mjs`, `scene-props.mjs`, `scene-prop-geometry.mjs`,
   `bird-perches.mjs`, `site-config.mjs`, `map-world.mjs`, and `url.mjs` (shared validation/config).
-- `demo.mjs` + `index.html` — the live demo that mounts the widget.
 - `widget.css` / `tokens.css` / `page.css` — see Styles below.
 
 ## Hosted pages — `hosted/`

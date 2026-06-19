@@ -5,7 +5,7 @@ It is intentionally short. Source code is the source of truth for implementation
 
 ## Current boundary
 
-TownSquare currently has three practical surfaces:
+TownSquare currently has four practical surfaces:
 
 1. **Embed client**
    - browser module mounted into a host page
@@ -19,9 +19,10 @@ TownSquare currently has three practical surfaces:
    - routes either the default self-hosted scene or registered hosted site scenes
    - currently runs as one simple Node process with in-memory scene state
 
-3. **Demo host page**
-   - exists only for development and manual testing
-   - should stay separate from the reusable widget boundary
+3. **Public site**
+   - landing page, live demo shell, user documentation, and changelog
+   - maintained in the private `TownSquare_landingpage` repository
+   - consumes the public widget assets and realtime service from this repository
 
 4. **Hosted registration/admin surface**
    - accountless site registration
@@ -46,7 +47,6 @@ That separation is now reflected directly in the repo:
   the browser widget and the CommonJS server (keep them browser/Node-agnostic).
   `site-config` holds the scene/style defaults and `buildSiteCss` for per-site
   customization.
-- `public/demo.mjs` + `public/index.html` = demo shell
 - `public/hosted/` = hosted setup/admin shells (register/admin/service-admin
   HTML + scripts) sharing `public/hosted/hosted-common.mjs` and `public/lib/`.
 - `public/dev/` = dev tooling (`dev.html` + `dev-scene.mjs`, `walk-sandbox.*`).
