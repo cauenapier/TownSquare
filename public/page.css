@@ -1834,6 +1834,26 @@ body {
   line-height: 1.45;
 }
 
+.map-supporter-note {
+  margin: 0;
+  max-width: 52ch;
+  justify-self: center;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.map-supporter-note a {
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.map-supporter-note a:hover {
+  text-decoration: underline;
+}
+
 .map-home {
   align-self: center;
   color: var(--ink-soft);

@@ -439,6 +439,25 @@ async function assertEmbeddableAssetsAreCrossOriginLoadable() {
   );
 }
 
+async function assertPublicStatsEndpoint({ minRegistered = 0, minVerified = 0, minMessages = 0 } = {}) {
+  const response = await fetch(`${HTTP_ORIGIN}/api/stats`);
+  assert(response.ok, "stats endpoint failed");
+  assert(
+    response.headers.get("access-control-allow-origin") === "*",
+    "stats endpoint is missing cross-origin headers",
+  );
+
+  const body = await response.json();
+  assert(typeof body.registered === "number", "stats.registered is missing");
+  assert(typeof body.verified === "number", "stats.verified is missing");
+  assert(typeof body.messages === "number", "stats.messages is missing");
+  assert(body.registered >= minRegistered, "stats.registered was too low");
+  assert(body.verified >= minVerified, "stats.verified was too low");
+  assert(body.messages >= minMessages, "stats.messages was too low");
+  assert(body.verified <= body.registered, "stats.verified exceeded stats.registered");
+  return body;
+}
+
 async function delay(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -850,6 +869,16 @@ async function main() {
   assert(siteAVisitor.hello.readingLabel === "real page", "hosted site accepted a custom reading label");
   assert(siteAVisitor.hello.readingUrl === `${HTTP_ORIGIN}/docs/real-page`, "hosted site did not keep a same-origin reading URL");
   assert(siteBVisitor.hello.peers.length === 0, "hosted site B saw visitors from another site");
+
+  const statsBeforeChat = await assertPublicStatsEndpoint({ minRegistered: 2, minVerified: 2 });
+  siteAVisitor.ws.send(JSON.stringify({ type: "say", text: "hello from smoke test" }));
+  await delay(100);
+  const statsAfterChat = await assertPublicStatsEndpoint({
+    minRegistered: statsBeforeChat.registered,
+    minVerified: statsBeforeChat.verified,
+    minMessages: statsBeforeChat.messages + 1,
+  });
+  assert(statsAfterChat.messages === statsBeforeChat.messages + 1, "stats.messages did not increment after chat");
 
   siteAVisitor.ws.send(JSON.stringify({
     type: "reading",

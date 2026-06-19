@@ -650,6 +650,15 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function sendPublicJson(res, status, body) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "access-control-allow-origin": "*",
+  });
+  res.end(JSON.stringify(body));
+}
+
 function getAdminSiteByCredentials(siteKey, adminToken) {
   const site = sitesByKey.get(siteKey);
   if (!adminTokenMatches(site, adminToken)) return null;
@@ -893,6 +902,24 @@ function handleMap(req, res) {
     .map(publicMapSite);
 
   sendJson(res, 200, { sites, world: mapWorld });
+}
+
+function getPublicStats() {
+  let registered = 0;
+  let verified = 0;
+  let messages = 0;
+
+  for (const site of sitesByKey.values()) {
+    registered += 1;
+    if (site.verifiedAt) verified += 1;
+    messages += site.messageCount || 0;
+  }
+
+  return { registered, verified, messages };
+}
+
+function handleStats(_req, res) {
+  sendPublicJson(res, 200, getPublicStats());
 }
 
 function loadMapWorld() {
@@ -1833,6 +1860,11 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && url.pathname === "/api/map") {
     handleMap(req, res);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/stats") {
+    handleStats(req, res);
     return;
   }
 
