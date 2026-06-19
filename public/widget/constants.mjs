@@ -34,5 +34,7 @@ export const MOVEMENT_SPEED = 0.22;
 export const SEND_INTERVAL_MS = 45;
 export const RAISED_HAND_MS = 5000;
 export const HIGH_FIVE_MS = 760;
+/** Time for a seated/resting figure to stand before an action animation; matches widget.css pose transition. */
+export const POSE_STAND_MS = 220;
 /** Jump animation length; matches the jump keyframe in widget.css. Doubles as the re-jump cooldown. */
 export const JUMP_MS = 560;

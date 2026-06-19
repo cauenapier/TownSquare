@@ -2073,15 +2073,17 @@ function handleAction(client, message) {
   if (now - client.lastActionAt < ACTION_THROTTLE_MS) return;
 
   let targetId = null;
+  let target = null;
   if (message.action === "high-five") {
     targetId = Number(message.targetId);
-    const target = Number.isInteger(targetId) ? client.scene.identities.get(targetId) : null;
+    target = Number.isInteger(targetId) ? client.scene.identities.get(targetId) : null;
     if (!target || !target.joined || target.id === client.identity.id) return;
     if (Math.abs(target.x - client.identity.x) > HIGH_FIVE_DISTANCE) return;
   }
 
   client.lastActionAt = now;
   clearPose(client.identity);
+  if (target) clearPose(target);
   touchIdentityActivity(client.identity, now);
   const action = {
     type: "action",

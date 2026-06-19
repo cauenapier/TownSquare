@@ -2,7 +2,7 @@
  * DOM construction and avatar/scene rendering for the TownSquare widget.
  */
 
-import { DISPLAY_NAME_MAX, HIGH_FIVE_MS, JUMP_MS, MESSAGE_MAX, RAISED_HAND_MS } from "./constants.mjs";
+import { DISPLAY_NAME_MAX, HIGH_FIVE_MS, JUMP_MS, MESSAGE_MAX, POSE_STAND_MS, RAISED_HAND_MS } from "./constants.mjs";
 import { figureMarkup } from "./figure.mjs";
 import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
 
@@ -792,6 +792,45 @@ export function playHighFive(avatar) {
     avatar.el.classList.remove("townsquare-avatar--high-five");
     avatar.highFiveTimer = null;
   }, HIGH_FIVE_MS);
+}
+
+/**
+ * @param {{ pose: string | null }} presence
+ * @returns {boolean}
+ */
+export function needsStandUp(presence) {
+  return presence.pose === "sitting" || presence.pose === "resting";
+}
+
+/**
+ * @param {{ pose: string | null, propId: string | null, avatar: AvatarView, x: number }} presence
+ * @param {Array<import("../shared/scene-props.mjs").SceneProp>} sceneProps
+ */
+export function clearPresencePose(presence, sceneProps) {
+  presence.pose = null;
+  presence.propId = null;
+  updatePose(presence.avatar, presence.pose);
+  updatePropEffects(presence.avatar, presence.x, presence.propId, sceneProps);
+  setWalking(presence.avatar, false);
+}
+
+/**
+ * @param {{ avatar: AvatarView, x: number }} initiator
+ * @param {{ avatar: AvatarView, x: number }} target
+ * @param {boolean} standUpFirst
+ */
+export function playHighFivePair(initiator, target, standUpFirst) {
+  const play = () => {
+    setFacing(initiator.avatar, target.x < initiator.x);
+    setFacing(target.avatar, initiator.x < target.x);
+    playHighFive(initiator.avatar);
+    playHighFive(target.avatar);
+  };
+  if (standUpFirst) {
+    setTimeout(play, POSE_STAND_MS);
+  } else {
+    play();
+  }
 }
 
 /**

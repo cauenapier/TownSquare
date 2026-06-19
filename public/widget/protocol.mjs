@@ -4,7 +4,7 @@
 
 import { recordMessage, sayMessage } from "./chat.mjs";
 import { applyBirdFlee, applyBirdSpawn, syncBirdsFromHello } from "./birds.mjs";
-import { playHighFive, playJump, playRaisedHand, setFacing, setWalking, updatePose, updatePropEffects } from "./dom.mjs";
+import { clearPresencePose, needsStandUp, playHighFivePair, playJump, playRaisedHand, setWalking } from "./dom.mjs";
 import {
   applyPeerState,
   applyProfileState,
@@ -50,11 +50,7 @@ function clearPeers(ctx) {
 }
 
 function clearPresencePoseForAction(ctx, presence) {
-  presence.pose = null;
-  presence.propId = null;
-  updatePose(presence.avatar, presence.pose);
-  updatePropEffects(presence.avatar, presence.x, presence.propId, ctx.sceneProps);
-  setWalking(presence.avatar, false);
+  clearPresencePose(presence, ctx.sceneProps);
 }
 
 function presenceById(ctx, id) {
@@ -79,12 +75,11 @@ function applyHighFive(ctx, id, targetId) {
   const initiator = presenceById(ctx, id);
   const target = presenceById(ctx, targetId);
   if (!initiator || !target) return;
+  const standUpFirst = needsStandUp(initiator) || needsStandUp(target);
   for (const presence of [initiator, target]) {
     clearPresencePoseForAction(ctx, presence);
-    playHighFive(presence.avatar);
   }
-  setFacing(initiator.avatar, target.x < initiator.x);
-  setFacing(target.avatar, initiator.x < target.x);
+  playHighFivePair(initiator, target, standUpFirst);
 }
 
 /**

@@ -8,7 +8,9 @@ import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_
 import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
 import { clamp } from "./math.mjs";
 import {
-  playHighFive,
+  clearPresencePose,
+  needsStandUp,
+  playHighFivePair,
   playJump,
   playRaisedHand,
   renderAvatar,
@@ -194,20 +196,19 @@ export function triggerHighFive(ctx) {
   if (now - ctx.self.lastHighFiveAt < HIGH_FIVE_COOLDOWN_MS) return;
   ctx.self.lastHighFiveAt = now;
 
-  clearSelfPoseForAction(ctx);
-
   const peer = nearestRaisedHandPeer(ctx);
   if (peer) {
-    setFacing(ctx.self.avatar, peer.x < ctx.self.x);
-    setFacing(peer.avatar, ctx.self.x < peer.x);
-    playHighFive(ctx.self.avatar);
-    playHighFive(peer.avatar);
+    const standUpFirst = needsStandUp(ctx.self) || needsStandUp(peer);
+    clearSelfPoseForAction(ctx);
+    clearPresencePose(peer, ctx.sceneProps);
+    playHighFivePair(ctx.self, peer, standUpFirst);
     if (ctx.socket.readyState === WebSocket.OPEN) {
       ctx.socket.send(JSON.stringify({ type: "action", action: "high-five", targetId: peer.id }));
     }
     return;
   }
 
+  clearSelfPoseForAction(ctx);
   playRaisedHand(ctx.self.avatar);
   if (ctx.socket.readyState === WebSocket.OPEN) {
     ctx.socket.send(JSON.stringify({ type: "action", action: "raise-hand" }));
