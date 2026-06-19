@@ -97,6 +97,8 @@ let DEFAULT_OWNER_BADGE_COLOR;
 let CHARACTER_COLORS = new Set();
 /** @type {Set<string>} */
 let OWNER_BADGE_COLORS = new Set();
+/** @type {() => number} */
+let randomSpawnX;
 
 function loadEnvFile(filePath = path.join(__dirname, ".env")) {
   try {
@@ -261,10 +263,6 @@ function createIdentity(id, browserId, x) {
     awaySince: null,
     messages: [],
   };
-}
-
-function randomSpawnX() {
-  return MIN_X + Math.random() * (MAX_X - MIN_X);
 }
 
 function clampPosition(x) {
@@ -2296,6 +2294,7 @@ async function startServer() {
   DEFAULT_OWNER_BADGE_COLOR = shared.DEFAULT_OWNER_BADGE_COLOR;
   CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);
   OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
+  randomSpawnX = shared.randomSpawnX;
 
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
