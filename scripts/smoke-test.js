@@ -106,6 +106,33 @@ async function assertCustomizationPersists() {
   assert(updated.body.site.sceneConfig?.benches === 4, "admin customization did not update scene config");
   assert(updated.body.site.styleConfig?.light?.accent === "#336699", "admin customization did not update light accent");
   assert(updated.body.site.styleConfig?.dark?.accent === "#aabbcc", "admin customization did not update dark accent");
+
+  const details = await postJson("/api/admin/action", {
+    siteKey: body.site.siteKey,
+    adminToken: body.adminToken,
+    action: "updateSiteDetails",
+    name: "Renamed Site",
+    email: "new-owner@example.com",
+  });
+  assert(details.response.ok, details.body.error || "admin site details update failed");
+  assert(details.body.site.name === "Renamed Site", "admin did not update the site name");
+  assert(details.body.site.email === "new-owner@example.com", "admin did not update the site email");
+
+  const invalidDetails = await postJson("/api/admin/action", {
+    siteKey: body.site.siteKey,
+    adminToken: body.adminToken,
+    action: "updateSiteDetails",
+    name: "Should Not Save",
+    email: "not-an-email",
+  });
+  assert(invalidDetails.response.status === 400, "admin accepted an invalid site email");
+
+  const persisted = await postJson("/api/admin/site", {
+    siteKey: body.site.siteKey,
+    adminToken: body.adminToken,
+  });
+  assert(persisted.body.site.name === "Renamed Site", "invalid details update changed the site name");
+  assert(persisted.body.site.email === "new-owner@example.com", "admin site details did not persist");
 }
 
 async function assertOwnerProfilePersists() {
