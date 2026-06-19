@@ -1,4 +1,4 @@
-import { bindCopy } from "../lib/ui-common.mjs";
+import { bindCopy, createSvgElement } from "../lib/ui-common.mjs";
 import { layoutMapSites } from "../map-layout.mjs";
 import { renderSceneryLayer } from "../map-scenery.mjs";
 import {
@@ -52,6 +52,7 @@ const mapDensityValueEl = document.getElementById("map-density-value");
 
 const STORAGE_KEY = "townsquare-service-admin-password";
 const REFRESH_INTERVAL_MS = 5000;
+const MAX_MAP_HISTORY_ITEMS = 20_000;
 
 const TABLE_COLUMNS = [
   { key: "name", label: "Name" },
@@ -82,6 +83,9 @@ let tableHeadReady = false;
 let savedMapWorld = null;
 let draftMapWorld = null;
 let mapEditorSvg = null;
+let mapEditorDirty = false;
+let mapEditorRenderFrame = null;
+let mapTownSnapshot = "";
 let mapTool = "tree";
 let mapUndoStack = [];
 let mapRedoStack = [];
@@ -99,31 +103,23 @@ const autoRefresh = createAutoRefresh(() => loadSites({ silent: true }), REFRESH
 // Every service-admin request carries the operator password.
 const api = (path, payload = {}) => postJson(path, { password, ...payload });
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-function createSvgElement(tag, attrs = {}) {
-  const element = document.createElementNS(SVG_NS, tag);
-  for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, String(value));
-  return element;
-}
-
 function mapIsDirty() {
-  return Boolean(savedMapWorld && draftMapWorld
-    && JSON.stringify(savedMapWorld) !== JSON.stringify(draftMapWorld));
+  return Boolean(savedMapWorld && draftMapWorld && mapEditorDirty);
 }
 
 function updateMapEditorControls() {
   const dirty = mapIsDirty();
-  mapUndoButton.disabled = mapEditorSaving || mapUndoStack.length === 0;
-  mapRedoButton.disabled = mapEditorSaving || mapRedoStack.length === 0;
-  mapDiscardButton.disabled = mapEditorSaving || !dirty;
-  mapSaveButton.disabled = mapEditorSaving || !dirty;
+  const editing = mapEditorSaving || Boolean(mapGesture);
+  mapUndoButton.disabled = editing || mapUndoStack.length === 0;
+  mapRedoButton.disabled = editing || mapRedoStack.length === 0;
+  mapDiscardButton.disabled = editing || !dirty;
+  mapSaveButton.disabled = editing || !dirty;
   for (const button of mapToolButtons) {
-    button.disabled = mapEditorSaving || !draftMapWorld;
+    button.disabled = editing || !draftMapWorld;
     button.setAttribute("aria-pressed", String(button.dataset.mapTool === mapTool));
   }
-  mapBrushSizeEl.disabled = mapEditorSaving || !draftMapWorld || mapTool === "mountain";
-  mapDensityEl.disabled = mapEditorSaving || !draftMapWorld || mapTool !== "tree";
+  mapBrushSizeEl.disabled = editing || !draftMapWorld || mapTool === "mountain";
+  mapDensityEl.disabled = editing || !draftMapWorld || mapTool !== "tree";
   mapDensityControlEl.hidden = mapTool !== "tree";
   if (mapEditorMessage) {
     mapEditorStatusEl.textContent = mapEditorMessage;
@@ -134,6 +130,7 @@ function updateMapEditorControls() {
 }
 
 function renderMapEditor() {
+  mapEditorRenderFrame = null;
   if (!draftMapWorld) return;
   const svg = createSvgElement("svg", {
     class: "map-editor__svg",
@@ -141,7 +138,7 @@ function renderMapEditor() {
     role: "img",
     "aria-label": "Editable map scenery with read-only TownSquare locations",
   });
-  svg.appendChild(renderSceneryLayer(draftMapWorld, createSvgElement));
+  svg.appendChild(renderSceneryLayer(draftMapWorld));
 
   const visibleSites = allSites.filter((site) => site.verifiedAt && !site.disabled);
   const positions = layoutMapSites(visibleSites, draftMapWorld.width, draftMapWorld.height);
@@ -163,6 +160,17 @@ function renderMapEditor() {
   mapEditorCanvasEl.replaceChildren(svg);
   mapEditorCanvasEl.hidden = false;
   updateMapEditorControls();
+}
+
+function queueMapEditorRender() {
+  if (mapEditorRenderFrame !== null) return;
+  mapEditorRenderFrame = requestAnimationFrame(renderMapEditor);
+}
+
+function flushMapEditorRender() {
+  if (mapEditorRenderFrame === null) return;
+  cancelAnimationFrame(mapEditorRenderFrame);
+  renderMapEditor();
 }
 
 function mapPoint(event) {
@@ -208,6 +216,40 @@ function eraseMapAt(point) {
   return propCount !== draftMapWorld.props.length || waterCount !== draftMapWorld.water.length;
 }
 
+const TREE_SPACING = 24;
+
+function treeGridKey(x, y) {
+  return `${Math.floor(x / TREE_SPACING)},${Math.floor(y / TREE_SPACING)}`;
+}
+
+function getTreeGrid() {
+  if (mapGesture.treeGrid) return mapGesture.treeGrid;
+  const grid = new Map();
+  for (const prop of draftMapWorld.props) {
+    if (prop.type !== "tree") continue;
+    const key = treeGridKey(prop.x, prop.y);
+    const cell = grid.get(key) || [];
+    cell.push(prop);
+    grid.set(key, cell);
+  }
+  mapGesture.treeGrid = grid;
+  return grid;
+}
+
+function treeLocationIsCrowded(grid, candidate) {
+  const cellX = Math.floor(candidate.x / TREE_SPACING);
+  const cellY = Math.floor(candidate.y / TREE_SPACING);
+  for (let x = cellX - 1; x <= cellX + 1; x += 1) {
+    for (let y = cellY - 1; y <= cellY + 1; y += 1) {
+      const trees = grid.get(`${x},${y}`) || [];
+      if (trees.some((tree) => Math.hypot(tree.x - candidate.x, tree.y - candidate.y) < TREE_SPACING)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function paintTreeDab(point) {
   const radius = mapBrushSize / 2;
   if (mapGesture.lastPoint
@@ -215,6 +257,7 @@ function paintTreeDab(point) {
     return false;
   }
   mapGesture.lastPoint = point;
+  const grid = getTreeGrid();
   let changed = false;
   for (let index = 0; index < mapTreeDensity && draftMapWorld.props.length < MAX_MAP_PROPS; index += 1) {
     for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -225,11 +268,12 @@ function paintTreeDab(point) {
         x: Math.round(Math.max(0, Math.min(draftMapWorld.width, point.x + Math.cos(angle) * distance)) * 100) / 100,
         y: Math.round(Math.max(0, Math.min(draftMapWorld.height, point.y + Math.sin(angle) * distance)) * 100) / 100,
       };
-      const crowded = draftMapWorld.props.some(
-        (prop) => prop.type === "tree" && Math.hypot(prop.x - candidate.x, prop.y - candidate.y) < 24,
-      );
-      if (!crowded) {
+      if (!treeLocationIsCrowded(grid, candidate)) {
         draftMapWorld.props.push(candidate);
+        const key = treeGridKey(candidate.x, candidate.y);
+        const cell = grid.get(key) || [];
+        cell.push(candidate);
+        grid.set(key, cell);
         changed = true;
         break;
       }
@@ -251,12 +295,12 @@ function paintMountain(point) {
   return true;
 }
 
-function waterPointCount() {
+function countWaterPoints() {
   return draftMapWorld.water.reduce((count, stroke) => count + stroke.points.length, 0);
 }
 
 function paintWater(point) {
-  if (waterPointCount() >= MAX_WATER_POINTS) {
+  if (mapGesture.waterPointCount >= MAX_WATER_POINTS) {
     mapEditorMessage = `The map is limited to ${MAX_WATER_POINTS} water points.`;
     updateMapEditorControls();
     return false;
@@ -274,6 +318,7 @@ function paintWater(point) {
   const spacing = mapTool === "river" ? 14 : Math.max(10, mapBrushSize * 0.16);
   if (lastPoint && Math.hypot(lastPoint.x - point.x, lastPoint.y - point.y) < spacing) return false;
   mapGesture.stroke.points.push({ x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 });
+  mapGesture.waterPointCount += 1;
   return true;
 }
 
@@ -289,41 +334,57 @@ function paintMapAt(point) {
 function applyMapGesture(event) {
   const point = mapPoint(event);
   if (point && paintMapAt(point)) {
+    mapGesture.changed = true;
+    mapEditorDirty = true;
     mapEditorMessage = "";
-    renderMapEditor();
+    queueMapEditorRender();
   }
 }
 
 function finishMapGesture(event) {
   if (!mapGesture || mapGesture.pointerId !== event.pointerId) return;
-  const changed = JSON.stringify(mapGesture.before) !== JSON.stringify(draftMapWorld);
-  if (changed) {
-    mapUndoStack.push(mapGesture.before);
-    if (mapUndoStack.length > 100) mapUndoStack.shift();
+  if (mapGesture.changed) {
+    mapUndoStack.push({ world: mapGesture.before, dirty: mapGesture.beforeDirty });
+    trimMapHistory(mapUndoStack);
     mapRedoStack = [];
   }
   mapGesture = null;
-  updateMapEditorControls();
+  if (mapEditorRenderFrame !== null) flushMapEditorRender();
+  else updateMapEditorControls();
 }
 
-function restoreMapWorld(world) {
-  draftMapWorld = cloneMapWorld(world);
+function mapWorldItemCount(world) {
+  return world.props.length + world.water.reduce((count, stroke) => count + stroke.points.length, 0);
+}
+
+function trimMapHistory(history) {
+  let itemCount = history.reduce((count, entry) => count + mapWorldItemCount(entry.world), 0);
+  while (history.length > 1 && itemCount > MAX_MAP_HISTORY_ITEMS) {
+    itemCount -= mapWorldItemCount(history.shift().world);
+  }
+}
+
+function restoreMapWorld(entry) {
+  draftMapWorld = cloneMapWorld(entry.world);
+  mapEditorDirty = entry.dirty;
   mapEditorMessage = "";
   renderMapEditor();
 }
 
 function undoMapEdit() {
-  const world = mapUndoStack.pop();
-  if (!world) return;
-  mapRedoStack.push(cloneMapWorld(draftMapWorld));
-  restoreMapWorld(world);
+  const entry = mapUndoStack.pop();
+  if (!entry) return;
+  mapRedoStack.push({ world: cloneMapWorld(draftMapWorld), dirty: mapEditorDirty });
+  trimMapHistory(mapRedoStack);
+  restoreMapWorld(entry);
 }
 
 function redoMapEdit() {
-  const world = mapRedoStack.pop();
-  if (!world) return;
-  mapUndoStack.push(cloneMapWorld(draftMapWorld));
-  restoreMapWorld(world);
+  const entry = mapRedoStack.pop();
+  if (!entry) return;
+  mapUndoStack.push({ world: cloneMapWorld(draftMapWorld), dirty: mapEditorDirty });
+  trimMapHistory(mapUndoStack);
+  restoreMapWorld(entry);
 }
 
 async function loadMapEditor() {
@@ -341,6 +402,7 @@ async function loadMapEditor() {
   }
   savedMapWorld = cloneMapWorld(validated.world);
   draftMapWorld = cloneMapWorld(validated.world);
+  mapEditorDirty = false;
   mapEditorMessage = "";
   renderMapEditor();
 }
@@ -360,6 +422,7 @@ async function saveMapEditor() {
   }
   savedMapWorld = cloneMapWorld(validated.world);
   draftMapWorld = cloneMapWorld(validated.world);
+  mapEditorDirty = false;
   mapUndoStack = [];
   mapRedoStack = [];
   mapEditorMessage = "Map saved.";
@@ -583,7 +646,15 @@ function renderSitesTable() {
 function renderSites(sites) {
   allSites = sites;
   renderSitesTable();
-  if (draftMapWorld && !mapGesture) renderMapEditor();
+  const nextMapTownSnapshot = JSON.stringify(sites.map((site) => ({
+    siteKey: site.siteKey,
+    name: site.name,
+    verifiedAt: site.verifiedAt,
+    disabled: site.disabled,
+    messageCount: site.messageCount,
+  })));
+  if (draftMapWorld && !mapGesture && nextMapTownSnapshot !== mapTownSnapshot) renderMapEditor();
+  mapTownSnapshot = nextMapTownSnapshot;
 }
 
 function showLogin(message = "", isError = false) {
@@ -700,9 +771,14 @@ mapEditorCanvasEl.addEventListener("pointerdown", (event) => {
   mapGesture = {
     pointerId: event.pointerId,
     before: cloneMapWorld(draftMapWorld),
+    beforeDirty: mapEditorDirty,
+    changed: false,
     lastPoint: null,
     stroke: null,
+    treeGrid: null,
+    waterPointCount: countWaterPoints(),
   };
+  updateMapEditorControls();
   applyMapGesture(event);
 });
 
@@ -717,6 +793,7 @@ mapRedoButton.addEventListener("click", redoMapEdit);
 mapDiscardButton.addEventListener("click", () => {
   if (!savedMapWorld || !window.confirm("Discard all unsaved map changes?")) return;
   draftMapWorld = cloneMapWorld(savedMapWorld);
+  mapEditorDirty = false;
   mapUndoStack = [];
   mapRedoStack = [];
   mapEditorMessage = "Changes discarded.";
@@ -766,6 +843,9 @@ signOutButton.addEventListener("click", () => {
   credentialStore.clear();
   savedMapWorld = null;
   draftMapWorld = null;
+  mapEditorDirty = false;
+  if (mapEditorRenderFrame !== null) cancelAnimationFrame(mapEditorRenderFrame);
+  mapEditorRenderFrame = null;
   mapEditorCanvasEl.hidden = true;
   showLogin("Signed out. The service admin password was forgotten on this device.");
 });

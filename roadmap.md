@@ -10,7 +10,7 @@
 Post-v1, roughly ordered.
 
 - [ ] **Movement between places (websites)**: travel feels like walking, not a normal link
-- [x] **Map / world view**: verified public TownSquares on a simple world map; links between places are still future work
+- [x] **Map / world view**: verified public TownSquares with paths derived from each site's neighbour links
 - [ ] **Connected neighbourhoods**: sites read as one wider world
 - [ ] **Custom props and interactions**
 

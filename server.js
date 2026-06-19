@@ -45,7 +45,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
-const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
+let ALLOWED_ORIGINS = new Set();
 const DEFAULT_DEV_ORIGINS = new Set([
   `http://${HOST}:${PORT}`,
   `http://127.0.0.1:${PORT}`,
@@ -146,6 +146,7 @@ let buildSiteCss = () => "";
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 let mapWorld;
+let normalizeOrigin;
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -166,20 +167,6 @@ function parseAllowedOrigins(value) {
       .map((origin) => normalizeOrigin(origin))
       .filter(Boolean),
   );
-}
-
-function normalizeOrigin(origin) {
-  if (typeof origin !== "string" || !origin.trim()) return null;
-
-  try {
-    const url = new URL(origin);
-    url.hash = "";
-    url.search = "";
-    url.pathname = "";
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return null;
-  }
 }
 
 function isAllowedOrigin(origin, hostHeader) {
@@ -887,7 +874,7 @@ function publicMapSite(site) {
     verifiedAt: site.verifiedAt,
     lastSeenAt: site.lastSeenAt,
     messageCount: site.messageCount || 0,
-    activeVisitors: scene ? getSceneStats(scene).activeVisitors : 0,
+    activeVisitors: scene ? countActiveVisitors(scene) : 0,
     connections: getConnections(site),
   };
 }
@@ -1150,12 +1137,11 @@ function isServiceAdminAuthorized(req, body, res) {
 
 function serviceAdminSite(site) {
   const scene = scenes.get(site.siteKey);
-  const sceneStats = scene ? getSceneStats(scene) : { activeVisitors: 0 };
 
   return {
     ...publicSite(site),
     updatedAt: site.updatedAt,
-    activeVisitors: sceneStats.activeVisitors,
+    activeVisitors: scene ? countActiveVisitors(scene) : 0,
   };
 }
 
@@ -1732,6 +1718,14 @@ function getSceneStats(scene) {
     }));
 
   return { activeVisitors: visitors.length, visitors };
+}
+
+function countActiveVisitors(scene) {
+  let count = 0;
+  for (const identity of scene.identities.values()) {
+    if (identity.joined) count += 1;
+  }
+  return count;
 }
 
 function validateSiteAccess(reqUrl) {
@@ -2320,12 +2314,13 @@ async function startServer() {
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule] = await Promise.all([
+  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule] = await Promise.all([
     import("./public/shared/site-config.mjs"),
     import("./public/shared/scene-props.mjs"),
     import("./public/shared/bird-perches.mjs"),
     import("./public/shared/scene-prop-geometry.mjs"),
     import("./public/shared/map-world.mjs"),
+    import("./public/shared/url.mjs"),
   ]);
 
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
@@ -2338,6 +2333,8 @@ async function loadSharedModules() {
   buildSiteCss = siteConfig.buildSiteCss;
   isWithinPropSettleZone = geometry.isWithinPropSettleZone;
   validateMapWorld = mapWorldModule.validateMapWorld;
+  normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
+  ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
   mapWorld = loadMapWorld();
 
   PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));

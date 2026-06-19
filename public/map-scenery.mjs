@@ -1,12 +1,5 @@
+import { createSvgElement } from "./lib/ui-common.mjs";
 import { mountainPath, treeCrownPath, treeTrunkPath } from "./map-glyphs.mjs";
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-function createSvgElement(tag, attrs = {}) {
-  const element = document.createElementNS(SVG_NS, tag);
-  for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, String(value));
-  return element;
-}
 
 function smoothPath(points) {
   if (points.length === 1) return `M${points[0].x} ${points[0].y} l0.01 0`;
@@ -25,17 +18,17 @@ function smoothPath(points) {
   return path;
 }
 
-function renderWater(world, createElement) {
-  const group = createElement("g", { class: "map-water", "aria-hidden": "true" });
+function renderWater(world) {
+  const group = createSvgElement("g", { class: "map-water", "aria-hidden": "true" });
   for (const stroke of world.water) {
     const path = smoothPath(stroke.points);
     if (stroke.type === "river") {
       group.append(
-        createElement("path", { class: "map-river__bank", d: path, "stroke-width": stroke.width + 6 }),
-        createElement("path", { class: "map-river", d: path, "stroke-width": stroke.width }),
+        createSvgElement("path", { class: "map-river__bank", d: path, "stroke-width": stroke.width + 6 }),
+        createSvgElement("path", { class: "map-river", d: path, "stroke-width": stroke.width }),
       );
     } else {
-      group.appendChild(createElement("path", {
+      group.appendChild(createSvgElement("path", {
         class: "map-lake",
         d: path,
         "stroke-width": stroke.width,
@@ -45,21 +38,21 @@ function renderWater(world, createElement) {
   return group;
 }
 
-function renderProp(prop, createElement) {
+function renderProp(prop) {
   if (prop.type === "mountain") {
-    return createElement("path", { class: "map-mountain", d: mountainPath(prop.x, prop.y) });
+    return createSvgElement("path", { class: "map-mountain", d: mountainPath(prop.x, prop.y) });
   }
-  const tree = createElement("g", { class: "map-tree" });
+  const tree = createSvgElement("g", { class: "map-tree" });
   tree.append(
-    createElement("path", { class: "map-tree__crown", d: treeCrownPath(prop.x, prop.y) }),
-    createElement("path", { class: "map-tree__trunk", d: treeTrunkPath(prop.x, prop.y) }),
+    createSvgElement("path", { class: "map-tree__crown", d: treeCrownPath(prop.x, prop.y) }),
+    createSvgElement("path", { class: "map-tree__trunk", d: treeTrunkPath(prop.x, prop.y) }),
   );
   return tree;
 }
 
-export function renderSceneryLayer(world, createElement = createSvgElement) {
-  const group = createElement("g", { class: "map-scenery", "aria-hidden": "true" });
-  group.appendChild(renderWater(world, createElement));
-  for (const prop of world.props) group.appendChild(renderProp(prop, createElement));
+export function renderSceneryLayer(world) {
+  const group = createSvgElement("g", { class: "map-scenery", "aria-hidden": "true" });
+  group.appendChild(renderWater(world));
+  for (const prop of world.props) group.appendChild(renderProp(prop));
   return group;
 }

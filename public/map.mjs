@@ -1,6 +1,8 @@
+import { createSvgElement } from "./lib/ui-common.mjs";
 import { activityLevel, cityTier, layoutMapSites } from "./map-layout.mjs";
 import { renderSceneryLayer } from "./map-scenery.mjs";
 import { MAP_WORLD_HEIGHT, MAP_WORLD_WIDTH, validateMapWorld } from "./shared/map-world.mjs";
+import { normalizeAbsoluteOrigin } from "./shared/url.mjs";
 
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 2.8;
@@ -8,7 +10,6 @@ const ZOOM_STEP = 1.22;
 const WHEEL_ZOOM_SCALE = 0.0014;
 const MAX_WHEEL_ZOOM_STEP = 0.07;
 const ACTIVITY_REFRESH_MS = 10_000;
-const SVG_NS = "http://www.w3.org/2000/svg";
 const ACTIVITY_DOT_POSITIONS = [
   [0, 0],
   [-0.32, -0.2],
@@ -49,6 +50,7 @@ let positionsBySiteKey = new Map();
 let mapEdges = [];
 let selectedSiteKey = "";
 let svg = null;
+let structureSnapshot = "";
 const PAN_THRESHOLD_PX = 4;
 
 let isDragging = false;
@@ -61,32 +63,17 @@ let view = {
   zoom: 1,
 };
 
-function createSvgElement(tag, attrs = {}) {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [name, value] of Object.entries(attrs)) {
-    el.setAttribute(name, String(value));
-  }
-  return el;
-}
-
 function textElement(text, x, y, className) {
   const el = createSvgElement("text", { x, y, class: className });
   el.textContent = text;
   return el;
 }
 
-function normalizeOrigin(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-
-  try {
-    const url = new URL(value);
-    url.hash = "";
-    url.search = "";
-    url.pathname = "";
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return null;
-  }
+function structuralSnapshot(nextSites, nextWorld) {
+  return JSON.stringify({
+    sites: nextSites.map(({ activeVisitors: _activeVisitors, ...site }) => site),
+    world: nextWorld,
+  });
 }
 
 function originLabel(origin) {
@@ -126,11 +113,11 @@ function siteLinksTo(fromKey, toKey) {
   const toSite = siteByKey.get(toKey);
   if (!fromSite || !toSite) return false;
 
-  const targetOrigin = normalizeOrigin(toSite.origin);
+  const targetOrigin = normalizeAbsoluteOrigin(toSite.origin);
   if (!targetOrigin) return false;
 
   return (fromSite.connections || []).some(
-    (connection) => normalizeOrigin(connection.url) === targetOrigin,
+    (connection) => normalizeAbsoluteOrigin(connection.url) === targetOrigin,
   );
 }
 
@@ -143,7 +130,7 @@ function indexSites(nextSites) {
 
   for (const site of sites) {
     siteByKey.set(site.siteKey, site);
-    const origin = normalizeOrigin(site.origin);
+    const origin = normalizeAbsoluteOrigin(site.origin);
     if (origin && !siteKeyByOrigin.has(origin)) siteKeyByOrigin.set(origin, site.siteKey);
   }
 
@@ -151,7 +138,7 @@ function indexSites(nextSites) {
   for (const site of sites) {
     const fromKey = site.siteKey;
     for (const connection of site.connections || []) {
-      const targetOrigin = normalizeOrigin(connection.url);
+      const targetOrigin = normalizeAbsoluteOrigin(connection.url);
       if (!targetOrigin) continue;
 
       const toKey = siteKeyByOrigin.get(targetOrigin);
@@ -213,11 +200,11 @@ function renderMapEdge(edge) {
 function buildMap() {
   svg = createSvgElement("svg", {
     class: "map-svg",
-    role: "img",
+    role: "group",
     "aria-label": "TownSquare network map",
   });
   const viewport = createSvgElement("g");
-  viewport.appendChild(renderSceneryLayer(mapWorld, createSvgElement));
+  viewport.appendChild(renderSceneryLayer(mapWorld));
 
   const edgeLayer = createSvgElement("g", { class: "map-edges", "aria-hidden": "true" });
   const nodeLayer = createSvgElement("g", { class: "map-nodes" });
@@ -282,6 +269,27 @@ async function refreshActivity() {
     const body = await response.json();
     if (!response.ok || !Array.isArray(body.sites)) return;
 
+    const nextWorld = normalizedMapWorld(body.world);
+    const nextStructureSnapshot = structuralSnapshot(body.sites, nextWorld);
+    if (nextStructureSnapshot !== structureSnapshot) {
+      mapWorld = nextWorld;
+      worldWidth = mapWorld.width;
+      worldHeight = mapWorld.height;
+      indexSites(body.sites);
+
+      if (selectedSiteKey && !siteByKey.has(selectedSiteKey)) {
+        closeDetail();
+      } else if (selectedSiteKey) {
+        updateDetail(selectedSite());
+      }
+
+      structureSnapshot = nextStructureSnapshot;
+      buildMap();
+      clampView();
+      applyView();
+      return;
+    }
+
     for (const nextSite of body.sites) {
       const site = siteByKey.get(nextSite.siteKey);
       const node = root.querySelector(`[data-site-key="${CSS.escape(nextSite.siteKey)}"]`);
@@ -313,17 +321,27 @@ function selectedSite() {
   return siteByKey.get(selectedSiteKey) || null;
 }
 
+function updateDetail(site) {
+  if (!site) return;
+  detailTitle.textContent = site.name;
+  detailOrigin.textContent = site.origin;
+  detailOrigin.href = site.origin;
+  detailVisit.href = site.origin;
+}
+
 function selectSite(siteKey) {
   selectedSiteKey = siteKey;
   const site = selectedSite();
   if (!site) return;
 
   renderSelectedState();
-  detailTitle.textContent = site.name;
-  detailOrigin.textContent = site.origin;
-  detailOrigin.href = site.origin;
-  detailVisit.href = site.origin;
+  updateDetail(site);
   if (!detail.open) detail.showModal();
+}
+
+function clearSelection() {
+  selectedSiteKey = "";
+  renderSelectedState();
 }
 
 function closeDetail() {
@@ -331,8 +349,7 @@ function closeDetail() {
     detail.close();
     return;
   }
-  selectedSiteKey = "";
-  renderSelectedState();
+  clearSelection();
 }
 
 function containerAspect() {
@@ -551,13 +568,18 @@ function wireControls() {
   document.querySelector("[data-map-zoom='out']")?.addEventListener("click", () => zoomAt(1 / ZOOM_STEP));
   document.querySelector("[data-map-reset]")?.addEventListener("click", resetView);
   detailClose?.addEventListener("click", closeDetail);
+  detail.addEventListener("close", clearSelection);
+}
+
+function normalizedMapWorld(raw) {
+  const result = validateMapWorld(raw);
+  return result.ok
+    ? result.world
+    : { width: MAP_WORLD_WIDTH, height: MAP_WORLD_HEIGHT, props: [], water: [] };
 }
 
 function applyMapWorld(raw) {
-  const result = validateMapWorld(raw);
-  mapWorld = result.ok
-    ? result.world
-    : { width: MAP_WORLD_WIDTH, height: MAP_WORLD_HEIGHT, props: [], water: [] };
+  mapWorld = normalizedMapWorld(raw);
   worldWidth = mapWorld.width;
   worldHeight = mapWorld.height;
 }
@@ -569,10 +591,12 @@ async function loadMap() {
     if (!response.ok || !Array.isArray(body.sites)) throw new Error(body.error || "Map request failed");
     applyMapWorld(body.world);
     indexSites(body.sites);
+    structureSnapshot = structuralSnapshot(sites, mapWorld);
   } catch {
     applyMapWorld(null);
     sites = [];
     indexSites(sites);
+    structureSnapshot = structuralSnapshot(sites, mapWorld);
     statusEl.textContent = "Could not load the TownSquare map.";
   }
 

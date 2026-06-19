@@ -6,7 +6,7 @@ export const MAX_WATER_POINTS = 5000;
 
 export const MAP_PROP_TYPES = Object.freeze({
   mountain: Object.freeze({ brushSpacing: 68 }),
-  tree: Object.freeze({ brushSpacing: 30 }),
+  tree: Object.freeze({}),
 });
 export const MAP_WATER_TYPES = Object.freeze({ lake: true, river: true });
 
