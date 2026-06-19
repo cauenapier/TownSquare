@@ -28,6 +28,8 @@
  * @property {string} readingUrl
  * @property {boolean} readingActive
  * @property {boolean} typing
+ * @property {boolean} isOwner
+ * @property {string} badgeColor
  * @property {number} propZoneEnteredAt
  * @property {string | null} settlePropId
  * @property {boolean} settleRequested
@@ -46,6 +48,8 @@
  * @property {string} readingLabel
  * @property {string} readingUrl
  * @property {boolean} readingActive
+ * @property {boolean} isOwner
+ * @property {string} badgeColor
  * @property {AvatarView} avatar
  * @property {ReturnType<typeof setTimeout> | null} walkTimer
  */

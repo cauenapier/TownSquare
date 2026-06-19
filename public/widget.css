@@ -1451,6 +1451,13 @@
   overflow: hidden;
 }
 
+.townsquare-avatar__peer-name-row {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .townsquare-avatar__peer-name {
   display: inline-block;
   max-width: 100%;
@@ -1464,17 +1471,58 @@
 .townsquare-avatar__peer-name[hidden] { display: none; }
 
 /* Owner badge: a server-verified crown that ordinary visitors cannot fake. */
-.townsquare-avatar--owner .townsquare-avatar__plate-name::before,
-.townsquare-avatar--owner .townsquare-avatar__peer-name::before {
-  content: "👑";
+.townsquare-avatar__owner-crown {
+  flex-shrink: 0;
   margin-right: 4px;
   font-size: 0.95em;
   /* Render the emoji in its own colors even when the name is tinted. */
   -webkit-text-fill-color: initial;
+  cursor: default;
 }
 
-.townsquare-avatar--owner .townsquare-avatar__peer-label {
-  background: color-mix(in oklab, var(--surface) 70%, gold 14%);
+.townsquare-avatar__owner-crown[hidden] { display: none; }
+
+.townsquare-avatar__owner-crown:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.townsquare-avatar__owner-role {
+  display: none;
+  align-self: stretch;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  font-weight: 620;
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.townsquare-avatar__owner-role[hidden] { display: none; }
+
+.townsquare-avatar--owner:has(.townsquare-avatar__owner-crown:hover) .townsquare-avatar__owner-role,
+.townsquare-avatar--owner:has(.townsquare-avatar__owner-crown:focus-visible) .townsquare-avatar__owner-role {
+  display: block;
+}
+
+.townsquare-avatar--owner:has(.townsquare-avatar__owner-crown:hover) .townsquare-avatar__reading,
+.townsquare-avatar--owner:has(.townsquare-avatar__owner-crown:focus-visible) .townsquare-avatar__reading {
+  display: none !important;
+}
+
+.townsquare-avatar--owner.townsquare-avatar--self:has(.townsquare-avatar__owner-crown:hover) .townsquare-avatar__plate-hint,
+.townsquare-avatar--owner.townsquare-avatar--self:has(.townsquare-avatar__owner-crown:focus-visible) .townsquare-avatar__plate-hint {
+  display: none;
+}
+
+.townsquare-avatar--owner .townsquare-avatar__peer-label,
+.townsquare-avatar--owner .townsquare-avatar__plate {
+  background: var(--owner-badge-bg, color-mix(in oklab, var(--surface) 70%, gold 14%));
   box-shadow: 0 6px 14px -9px rgba(150, 110, 20, 0.5);
 }
 

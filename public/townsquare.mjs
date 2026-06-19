@@ -200,6 +200,7 @@ export function mountTownSquare(root, options = {}) {
       readingActive,
       typing: false,
       isOwner: false,
+      badgeColor: "",
       propZoneEnteredAt: 0,
       settlePropId: null,
       settleRequested: false,

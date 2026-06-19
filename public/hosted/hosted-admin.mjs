@@ -22,6 +22,7 @@ import {
   sanitizeSiteStyle,
 } from "../shared/site-config.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
+import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../shared/shared-constants.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -52,6 +53,7 @@ const chatDisabledInput = document.getElementById("chat-disabled");
 const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
 const visitorList = document.getElementById("visitor-list");
+const ownerList = document.getElementById("owner-list");
 
 renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(customizationForm);
@@ -68,6 +70,13 @@ let customizationTouched = false;
 /** Working copy of the connections editor; `touched` guards it from polls. */
 let connectionsDraft = [];
 let connectionsTouched = false;
+
+/**
+ * In-progress owner name/colour edit, kept across the 5s poll re-render so a
+ * background refresh never clobbers what the admin is typing. Keyed by the
+ * owner's opaque handle; `focusName` restores the caret after a rebuild.
+ */
+let ownerDraft = null;
 let connectionsBusy = false;
 let connectionsSavedMessage = "";
 
@@ -391,6 +400,137 @@ async function saveConnections() {
   updateConnectionsControls();
 }
 
+// One card in the dedicated "Site owner" section: a persistent name + colour
+// editor saved to the owner's claim, so it survives resets whether or not the
+// owner is currently connected.
+function buildOwnerRow(owner, index) {
+  const draft = ownerDraft && ownerDraft.handle === owner.handle ? ownerDraft : null;
+  const row = document.createElement("article");
+  row.className = "owner-row";
+
+  const savedName = String(owner.displayName || "").trim();
+  const head = document.createElement("div");
+  head.className = "owner-row__head";
+  head.innerHTML = `
+    <strong>${escapeHtml(savedName || `Owner ${index + 1}`)} 👑</strong>
+    <span>${owner.online ? "online now" : "offline"}</span>
+  `;
+
+  const editor = document.createElement("form");
+  editor.className = "owner-editor";
+
+  const nameField = document.createElement("input");
+  nameField.type = "text";
+  nameField.className = "owner-editor__name";
+  nameField.maxLength = DISPLAY_NAME_MAX;
+  nameField.placeholder = `Owner ${index + 1}`;
+  nameField.value = draft ? draft.displayName : savedName;
+  nameField.setAttribute("aria-label", "Owner display name");
+
+  const swatches = document.createElement("div");
+  swatches.className = "owner-editor__swatches";
+  let selectedColor = draft ? draft.color : (owner.color || CHARACTER_COLORS[0]);
+  const swatchButtons = [];
+
+  const badgeLabel = document.createElement("span");
+  badgeLabel.className = "owner-editor__swatch-label";
+  badgeLabel.textContent = "Badge";
+
+  const badgeSwatches = document.createElement("div");
+  badgeSwatches.className = "owner-editor__swatches";
+  let selectedBadgeColor = draft ? draft.badgeColor : (owner.badgeColor || DEFAULT_OWNER_BADGE_COLOR);
+  const badgeSwatchButtons = [];
+
+  const noteDraft = (focusName) => {
+    ownerDraft = {
+      handle: owner.handle,
+      displayName: nameField.value,
+      color: selectedColor,
+      badgeColor: selectedBadgeColor,
+      focusName,
+    };
+  };
+
+  for (const color of CHARACTER_COLORS) {
+    const swatch = document.createElement("button");
+    swatch.type = "button";
+    swatch.className = "owner-editor__swatch";
+    swatch.style.background = color;
+    swatch.title = color;
+    swatch.setAttribute("aria-label", `Use colour ${color}`);
+    swatch.setAttribute("aria-pressed", String(color === selectedColor));
+    swatch.addEventListener("click", () => {
+      selectedColor = color;
+      for (const button of swatchButtons) {
+        button.setAttribute("aria-pressed", String(button === swatch));
+      }
+      noteDraft(false);
+    });
+    swatchButtons.push(swatch);
+    swatches.appendChild(swatch);
+  }
+
+  for (const color of OWNER_BADGE_COLORS) {
+    const swatch = document.createElement("button");
+    swatch.type = "button";
+    swatch.className = "owner-editor__swatch owner-editor__swatch--badge";
+    swatch.style.background = color;
+    swatch.title = color;
+    swatch.setAttribute("aria-label", `Use badge colour ${color}`);
+    swatch.setAttribute("aria-pressed", String(color === selectedBadgeColor));
+    swatch.addEventListener("click", () => {
+      selectedBadgeColor = color;
+      for (const button of badgeSwatchButtons) {
+        button.setAttribute("aria-pressed", String(button === swatch));
+      }
+      noteDraft(false);
+    });
+    badgeSwatchButtons.push(swatch);
+    badgeSwatches.appendChild(swatch);
+  }
+
+  nameField.addEventListener("input", () => noteDraft(true));
+
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.className = "owner-editor__save";
+  save.textContent = "Save";
+
+  editor.addEventListener("submit", (event) => {
+    event.preventDefault();
+    ownerDraft = null;
+    session.action("updateOwnerProfile", {
+      handle: owner.handle,
+      displayName: nameField.value,
+      color: selectedColor,
+      badgeColor: selectedBadgeColor,
+    });
+  });
+
+  editor.append(nameField, swatches, badgeLabel, badgeSwatches, save);
+  row.append(head, editor);
+  if (draft && draft.focusName) {
+    // Restore the caret after a poll-driven rebuild swapped the input out.
+    requestAnimationFrame(() => {
+      nameField.focus();
+      nameField.setSelectionRange(nameField.value.length, nameField.value.length);
+    });
+  }
+  return row;
+}
+
+function renderOwners(owners) {
+  ownerList.replaceChildren();
+  if (owners.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = "No owners yet. Crown a visitor under Moderation to add one.";
+    ownerList.appendChild(empty);
+    return;
+  }
+  owners.forEach((owner, index) => ownerList.appendChild(buildOwnerRow(owner, index)));
+}
+
 function render(data) {
   currentSite = data.site;
   const scene = data.scene;
@@ -459,6 +599,8 @@ function render(data) {
     row.append(owner, kick, block);
     visitorList.appendChild(row);
   }
+
+  renderOwners(data.owners || []);
 
   if (currentSite.disabled) {
     setStatus("Site is disabled. Visitors cannot connect.", true);

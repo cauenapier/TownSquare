@@ -74,6 +74,7 @@ export function getOrCreatePeer(ctx, peer) {
     propId: null,
     displayName: peer.displayName || "",
     color: peer.color || "",
+    badgeColor: peer.badgeColor || "",
     readingLabel: peer.readingLabel || "",
     readingUrl: peer.readingUrl || "",
     readingActive: peer.readingActive !== false,
@@ -115,6 +116,7 @@ export function applySelfState(ctx, state) {
   ctx.self.propId = state.propId || null;
   if (typeof state.displayName === "string") ctx.self.displayName = state.displayName;
   if (typeof state.color === "string") ctx.self.color = state.color;
+  if (typeof state.badgeColor === "string") ctx.self.badgeColor = state.badgeColor;
   if (typeof state.readingLabel === "string") ctx.self.readingLabel = state.readingLabel;
   if (typeof state.readingUrl === "string") ctx.self.readingUrl = state.readingUrl;
   if (typeof state.readingActive === "boolean") ctx.self.readingActive = state.readingActive;
@@ -149,6 +151,7 @@ export function applyPeerState(ctx, peerState) {
   peer.propId = peerState.propId || null;
   if (typeof peerState.displayName === "string") peer.displayName = peerState.displayName;
   if (typeof peerState.color === "string") peer.color = peerState.color;
+  if (typeof peerState.badgeColor === "string") peer.badgeColor = peerState.badgeColor;
   if (typeof peerState.readingLabel === "string") peer.readingLabel = peerState.readingLabel;
   if (typeof peerState.readingUrl === "string") peer.readingUrl = peerState.readingUrl;
   if (typeof peerState.readingActive === "boolean") peer.readingActive = peerState.readingActive;
@@ -186,7 +189,7 @@ function applyPresenceFields(ctx, state, fields) {
  * @param {{ id: string, displayName?: string, color?: string, isOwner?: boolean }} profile
  */
 export function applyProfileState(ctx, profile) {
-  applyPresenceFields(ctx, profile, ["displayName", "color", "isOwner"]);
+  applyPresenceFields(ctx, profile, ["displayName", "color", "badgeColor", "isOwner"]);
 }
 
 /**

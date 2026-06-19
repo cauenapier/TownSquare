@@ -1128,6 +1128,7 @@ body {
 .hosted-button,
 .hosted-copy-row button,
 .visitor-row button,
+.owner-editor__save,
 .service-row-menu-panel button {
   min-height: 40px;
   border: 0;
@@ -1149,6 +1150,7 @@ body {
 .hosted-actions button:nth-child(n + 2),
 .hosted-copy-row button,
 .visitor-row button,
+.owner-editor__save,
 .service-row-menu-panel button {
   display: inline-flex;
   align-items: center;
@@ -1375,6 +1377,96 @@ body {
 .visitor-row span {
   color: var(--ink-soft);
   font-size: 0.86rem;
+}
+
+/* Dedicated "Site owner" section: one card per owner with a persistent
+   name + colour editor. */
+.owner-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.owner-row {
+  padding: 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+}
+
+.owner-row__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.owner-row__head strong {
+  font-weight: 700;
+}
+
+.owner-row__head span {
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.owner-editor {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hair-2);
+}
+
+.owner-editor__name {
+  flex: 1 1 140px;
+  min-height: 40px;
+  min-width: 0;
+  border-radius: 10px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--hair-2);
+  padding: 0 12px;
+  font: 600 0.92rem var(--font);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.owner-editor__swatch-label {
+  flex: 0 0 100%;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.owner-editor__swatch--badge {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 12%, transparent);
+}
+
+.owner-editor__swatches {
+  display: flex;
+  gap: 6px;
+  /* Stay one indivisible row: the growing name field can't squeeze these into
+     a vertical column, and a tight editor wraps the whole block to a new line. */
+  flex: 0 0 auto;
+}
+
+.owner-editor__swatch {
+  min-height: 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+
+.owner-editor__swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink);
 }
 
 .hosted-subhead {

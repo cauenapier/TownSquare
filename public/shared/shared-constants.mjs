@@ -24,6 +24,18 @@ export const CHARACTER_COLORS = [
 
 export const DEFAULT_CHARACTER_COLOR = CHARACTER_COLORS[0];
 
+/** Soft fills for the verified owner nameplate; first entry matches the stock gold tint. */
+export const OWNER_BADGE_COLORS = [
+  "#f2e8c8",
+  "#fdf8f4",
+  "#e8eef5",
+  "#e5f0e8",
+  "#f5e8ec",
+  "#ebe5f2",
+];
+
+export const DEFAULT_OWNER_BADGE_COLOR = OWNER_BADGE_COLORS[0];
+
 /**
  * @param {() => number} [random] Generator in [0, 1); pass a seeded one for reproducible scenes.
  * @returns {number}

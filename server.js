@@ -90,8 +90,11 @@ let MAX_READING_LABEL_LEN;
 let MAX_RECENT_MESSAGES;
 let HIGH_FIVE_DISTANCE;
 let DEFAULT_CHARACTER_COLOR;
+let DEFAULT_OWNER_BADGE_COLOR;
 /** @type {Set<string>} */
 let CHARACTER_COLORS = new Set();
+/** @type {Set<string>} */
+let OWNER_BADGE_COLORS = new Set();
 
 function loadEnvFile(filePath = path.join(__dirname, ".env")) {
   try {
@@ -359,6 +362,68 @@ function sanitizeReadingState(client, message, fallback = {}) {
 
 function sanitizeCharacterColor(color) {
   return CHARACTER_COLORS.has(color) ? color : DEFAULT_CHARACTER_COLOR;
+}
+
+function sanitizeOwnerBadgeColor(color) {
+  return OWNER_BADGE_COLORS.has(color) ? color : DEFAULT_OWNER_BADGE_COLOR;
+}
+
+/**
+ * A site owner's name/color is "claimed" alongside their ownership so it
+ * survives client-side profile resets and server restarts. Profiles are keyed
+ * by browserId and live on the site record next to `ownerBrowserIds`.
+ */
+function getOwnerProfile(site, browserId) {
+  if (!site || !isPlainObject(site.ownerProfiles)) return null;
+  const profile = site.ownerProfiles[browserId];
+  return isPlainObject(profile) ? profile : null;
+}
+
+/** Persist the current name/color for an owner so it re-applies on rejoin. */
+function rememberOwnerProfile(site, identity) {
+  if (!site || !identity || !identity.isOwner) return;
+  if (!isPlainObject(site.ownerProfiles)) site.ownerProfiles = {};
+  const current = getOwnerProfile(site, identity.browserId) || {};
+  site.ownerProfiles[identity.browserId] = {
+    displayName: identity.displayName,
+    color: identity.color,
+    badgeColor: sanitizeOwnerBadgeColor(current.badgeColor || identity.badgeColor),
+  };
+  touchSite(site);
+}
+
+/** Re-apply a stored owner profile onto an identity, if one exists. */
+function applyOwnerProfile(site, identity) {
+  const profile = getOwnerProfile(site, identity.browserId);
+  if (!profile) return;
+  identity.displayName = sanitizeDisplayName(profile.displayName);
+  identity.color = sanitizeCharacterColor(profile.color);
+  identity.badgeColor = sanitizeOwnerBadgeColor(profile.badgeColor);
+}
+
+/**
+ * Opaque, stable reference for an owner used by the admin "Site owner" editor.
+ * Lets the admin manage owners without the raw browserId ever leaving the
+ * server (kept consistent with the visitor payload, which omits browserId too).
+ */
+function ownerHandle(siteKey, browserId) {
+  return crypto.createHash("sha256").update(`${siteKey}:${browserId}`).digest("hex").slice(0, 16);
+}
+
+/** The site's owners with their persisted look, for the dedicated admin section. */
+function getOwners(site, scene) {
+  if (!site || !Array.isArray(site.ownerBrowserIds)) return [];
+  return site.ownerBrowserIds.map((browserId) => {
+    const profile = getOwnerProfile(site, browserId) || {};
+    const identity = scene ? scene.identityByBrowser.get(browserId) : null;
+    return {
+      handle: ownerHandle(site.siteKey, browserId),
+      displayName: typeof profile.displayName === "string" ? profile.displayName : "",
+      color: sanitizeCharacterColor(profile.color),
+      badgeColor: sanitizeOwnerBadgeColor(profile.badgeColor),
+      online: Boolean(identity && identity.clients && identity.clients.size > 0),
+    };
+  });
 }
 
 function sanitizeSiteName(name, origin) {
@@ -814,12 +879,14 @@ function sendAdminSite(req, res, site, adminToken) {
     return;
   }
 
+  const scene = getScene(site.siteKey, site);
   sendJson(res, 200, {
     site: publicSite(site),
     adminUrl: buildAdminUrl(req, adminToken),
     embedSnippet: buildEmbedSnippet(req, site),
     styleSnippet: buildStyleSnippet(site),
-    scene: getSceneStats(getScene(site.siteKey, site)),
+    scene: getSceneStats(scene),
+    owners: getOwners(site, scene),
   });
 }
 
@@ -909,14 +976,54 @@ const ADMIN_ACTIONS = {
     if (owner && index === -1) site.ownerBrowserIds.push(identity.browserId);
     if (!owner && index !== -1) site.ownerBrowserIds.splice(index, 1);
     identity.isOwner = owner;
+    if (owner) {
+      // Apply any admin-customised look first so a broadcast/crown never
+      // clobbers a saved ownerProfiles entry with a stale in-memory name.
+      applyOwnerProfile(site, identity);
+      identity.badgeColor = sanitizeOwnerBadgeColor(identity.badgeColor);
+      // Seed the saved profile from whatever name/color they have now so the
+      // claim "keeps" their current look until it is customised.
+      rememberOwnerProfile(site, identity);
+    } else if (isPlainObject(site.ownerProfiles)) {
+      delete site.ownerProfiles[identity.browserId];
+    }
     touchSite(site);
     broadcast(scene, {
       type: "profile",
       id: identity.id,
       displayName: identity.displayName,
       color: identity.color,
+      badgeColor: identity.badgeColor,
       isOwner: owner,
     });
+  },
+  updateOwnerProfile(site, scene, body) {
+    // Keyed by the opaque owner handle so the dedicated admin section can edit
+    // an owner's saved look whether or not they are currently connected.
+    const handle = String(body.handle || "");
+    const browserId = site.ownerBrowserIds.find((id) => ownerHandle(site.siteKey, id) === handle);
+    if (!browserId) return;
+    if (!isPlainObject(site.ownerProfiles)) site.ownerProfiles = {};
+    const current = isPlainObject(site.ownerProfiles[browserId]) ? site.ownerProfiles[browserId] : {};
+    const next = { ...current };
+    if (Object.hasOwn(body, "displayName")) next.displayName = sanitizeDisplayName(body.displayName);
+    if (Object.hasOwn(body, "color")) next.color = sanitizeCharacterColor(body.color);
+    if (Object.hasOwn(body, "badgeColor")) next.badgeColor = sanitizeOwnerBadgeColor(body.badgeColor);
+    site.ownerProfiles[browserId] = next;
+    touchSite(site);
+    // Apply live and broadcast if that owner is connected right now.
+    const identity = scene.identityByBrowser.get(browserId);
+    if (identity) {
+      applyOwnerProfile(site, identity);
+      broadcast(scene, {
+        type: "profile",
+        id: identity.id,
+        displayName: identity.displayName,
+        color: identity.color,
+        badgeColor: identity.badgeColor,
+        isOwner: true,
+      });
+    }
   },
   clearMessages(site, scene) {
     for (const identity of scene.identities.values()) {
@@ -958,7 +1065,7 @@ function handleAdminAction(req, res) {
 
     const scene = getScene(site.siteKey, site);
     ADMIN_ACTIONS[action](site, scene, body);
-    sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene) });
+    sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene), owners: getOwners(site, scene) });
   });
 }
 
@@ -1085,7 +1192,7 @@ function send(ws, message) {
 }
 
 function snapshotIdentity(identity) {
-  return {
+  const snapshot = {
     id: identity.id,
     x: identity.x,
     pose: identity.pose,
@@ -1098,6 +1205,10 @@ function snapshotIdentity(identity) {
     isOwner: identity.isOwner,
     messages: identity.messages,
   };
+  if (identity.isOwner) {
+    snapshot.badgeColor = identity.badgeColor;
+  }
+  return snapshot;
 }
 
 function getIdentityReadingActive(identity) {
@@ -1433,6 +1544,7 @@ function createSiteRecord({ name, origin, email, sceneConfig, styleConfig, conne
       updatedAt: now,
       blockedBrowserIds: [],
       ownerBrowserIds: [],
+      ownerProfiles: {},
     },
   };
 }
@@ -1454,6 +1566,9 @@ function loadSites() {
       }
       if (!Array.isArray(site.ownerBrowserIds)) {
         site.ownerBrowserIds = [];
+      }
+      if (!isPlainObject(site.ownerProfiles)) {
+        site.ownerProfiles = {};
       }
       if (!Array.isArray(site.connections)) {
         site.connections = [];
@@ -1700,6 +1815,13 @@ function handleInit(client, message) {
 
   identity.isOwner = Boolean(site) && site.ownerBrowserIds.includes(identity.browserId);
 
+  // An owner's saved name/color is sticky: re-apply it on every (re)join so it
+  // survives client-side profile resets and server restarts.
+  if (identity.isOwner) {
+    applyOwnerProfile(site, identity);
+    identity.badgeColor = sanitizeOwnerBadgeColor(identity.badgeColor);
+  }
+
   client.identity = identity;
   client.joined = true;
   identity.clients.add(client);
@@ -1722,6 +1844,7 @@ function handleInit(client, message) {
     readingUrl: identity.readingUrl,
     readingActive: identity.readingActive,
     isOwner: identity.isOwner,
+    ...(identity.isOwner ? { badgeColor: identity.badgeColor } : {}),
     messages: identity.messages,
     peers,
     birds: snapshotBirds(scene),
@@ -1739,6 +1862,18 @@ function handleInit(client, message) {
         readingLabel: identity.readingLabel,
         readingUrl: identity.readingUrl,
         readingActive: identity.readingActive,
+      }, { exceptConnectionId: client.connectionId });
+    }
+    // Reconnect during the grace window: the owner gets applyOwnerProfile above
+    // but we skip the join broadcast, so refresh peers with the claimed look.
+    if (identity.isOwner && site) {
+      broadcast(scene, {
+        type: "profile",
+        id: identity.id,
+        displayName: identity.displayName,
+        color: identity.color,
+        badgeColor: identity.badgeColor,
+        isOwner: true,
       }, { exceptConnectionId: client.connectionId });
     }
     syncIdentityAwayState(identity);
@@ -1816,6 +1951,8 @@ function handleProfile(client, message) {
   client.identity.displayName = sanitizeDisplayName(message.displayName);
   client.identity.color = sanitizeCharacterColor(message.color);
   touchIdentityActivity(client.identity);
+  // Owners keep their look across resets: persist their own edits too.
+  rememberOwnerProfile(client.site, client.identity);
 
   broadcast(client.scene, {
     type: "profile",
@@ -2083,7 +2220,9 @@ async function startServer() {
   MAX_RECENT_MESSAGES = shared.MAX_RECENT_MESSAGES;
   HIGH_FIVE_DISTANCE = shared.HIGH_FIVE_DISTANCE;
   DEFAULT_CHARACTER_COLOR = shared.DEFAULT_CHARACTER_COLOR;
+  DEFAULT_OWNER_BADGE_COLOR = shared.DEFAULT_OWNER_BADGE_COLOR;
   CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);
+  OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
 
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);

@@ -29,6 +29,8 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {number} [trayShift] Applied history tray edge-clamping nudge in px.
  * @property {HTMLElement} [below] Container for the nameplate / composer.
  * @property {HTMLElement} [nameEl] Visible name label.
+ * @property {HTMLElement} [crownEl] Verified site-owner badge.
+ * @property {HTMLElement} [ownerRoleEl] "Site Owner" label shown below the name on crown hover.
  * @property {HTMLAnchorElement} [readingEl] Visible current page link.
  * @property {HTMLElement} [readingLabelEl] Page label text inside the link.
  * @property {HTMLButtonElement} [plate] The "you · say something" way-in.
@@ -45,6 +47,27 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {ReturnType<typeof setTimeout> | null} [raisedHandTimer]
  * @property {ReturnType<typeof setTimeout> | null} [highFiveTimer]
  */
+
+/** @returns {HTMLSpanElement} */
+function createOwnerCrown() {
+  const crownEl = document.createElement("span");
+  crownEl.className = "townsquare-avatar__owner-crown";
+  crownEl.setAttribute("role", "img");
+  crownEl.setAttribute("aria-label", "Site Owner");
+  crownEl.tabIndex = 0;
+  crownEl.textContent = "👑";
+  crownEl.hidden = true;
+  return crownEl;
+}
+
+/** @returns {HTMLSpanElement} */
+function createOwnerRoleEl() {
+  const ownerRoleEl = document.createElement("span");
+  ownerRoleEl.className = "townsquare-avatar__owner-role";
+  ownerRoleEl.textContent = "Site Owner";
+  ownerRoleEl.hidden = true;
+  return ownerRoleEl;
+}
 
 const ENTER_ICON = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -289,6 +312,11 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     const label = document.createElement("div");
     label.className = "townsquare-avatar__peer-label";
 
+    const nameRow = document.createElement("div");
+    nameRow.className = "townsquare-avatar__peer-name-row";
+
+    const crownEl = createOwnerCrown();
+
     const nameEl = document.createElement("span");
     nameEl.className = "townsquare-avatar__peer-name";
 
@@ -306,11 +334,13 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     readingLabelEl.className = "townsquare-avatar__reading-label";
 
     readingEl.append(readingPrefix, readingLabelEl);
-    label.append(nameEl, readingEl);
+    nameRow.append(crownEl, nameEl);
+    const ownerRoleEl = createOwnerRoleEl();
+    label.append(nameRow, readingEl, ownerRoleEl);
     below.appendChild(label);
     el.appendChild(below);
 
-    const peerAvatar = { ...avatar, below, nameEl, readingEl, readingLabelEl };
+    const peerAvatar = { ...avatar, below, crownEl, ownerRoleEl, nameEl, readingEl, readingLabelEl };
     setAvatarProfile(peerAvatar, profile);
     return peerAvatar;
   }
@@ -333,13 +363,15 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   const dot = document.createElement("span");
   dot.className = "townsquare-avatar__plate-dot";
 
+  const crownEl = createOwnerCrown();
+
   const nameEl = document.createElement("span");
   nameEl.className = "townsquare-avatar__plate-name";
 
   const hint = document.createElement("span");
   hint.className = "townsquare-avatar__plate-hint";
   hint.textContent = "· say something";
-  plate.append(dot, nameEl, hint);
+  plate.append(dot, crownEl, nameEl, hint);
 
   const profileButton = document.createElement("button");
   profileButton.className = "townsquare-avatar__profile-button";
@@ -350,6 +382,9 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   profileButton.title = "Edit character";
 
   plateRow.append(plate, profileButton);
+
+  const ownerRoleEl = createOwnerRoleEl();
+  ownerRoleEl.classList.add("townsquare-avatar__owner-role--self");
 
   const profileForm = document.createElement("form");
   profileForm.className = "townsquare-avatar__profile";
@@ -406,10 +441,10 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   composer.append(input, send);
   if (composerHost) {
     composer.classList.add("townsquare-avatar__composer--docked");
-    below.append(plateRow, profileForm);
+    below.append(plateRow, ownerRoleEl, profileForm);
     composerHost.appendChild(composer);
   } else {
-    below.append(plateRow, profileForm, composer);
+    below.append(plateRow, ownerRoleEl, profileForm, composer);
   }
   el.appendChild(below);
 
@@ -417,6 +452,8 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   const selfAvatar = {
     ...avatar,
     below,
+    crownEl,
+    ownerRoleEl,
     nameEl,
     dot,
     plate,
@@ -557,7 +594,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
 
 /**
  * @param {AvatarView} avatar
- * @param {{ displayName?: string, color?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} profile
+ * @param {{ displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} profile
  */
 export function setAvatarProfile(avatar, profile = {}) {
   const displayName = normalizeDisplayName(profile.displayName);
@@ -575,6 +612,17 @@ export function setAvatarProfile(avatar, profile = {}) {
   avatar.el.classList.toggle("townsquare-avatar--reading-away", Boolean(readingLabel) && !readingActive);
   if (avatar.dot) {
     avatar.dot.style.background = color || "";
+  }
+  if (avatar.crownEl) {
+    avatar.crownEl.hidden = !isOwner;
+  }
+  if (avatar.ownerRoleEl) {
+    avatar.ownerRoleEl.hidden = !isOwner;
+  }
+  if (isOwner && typeof profile.badgeColor === "string" && profile.badgeColor) {
+    avatar.el.style.setProperty("--owner-badge-bg", profile.badgeColor);
+  } else {
+    avatar.el.style.removeProperty("--owner-badge-bg");
   }
   if (avatar.nameEl) {
     avatar.nameEl.textContent = displayName || (isPeer ? (isOwner ? "owner" : "") : "you");
