@@ -1,5 +1,7 @@
-const WORLD_WIDTH = 1800;
-const WORLD_HEIGHT = 1200;
+import { parseMapWorld, renderSceneryLayer } from "./map-scenery.mjs";
+
+const DEFAULT_WORLD_WIDTH = 1800;
+const DEFAULT_WORLD_HEIGHT = 1200;
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 2.8;
 const ZOOM_STEP = 1.22;
@@ -35,6 +37,9 @@ if (
   throw new Error("Map detail elements not found");
 }
 
+let worldWidth = DEFAULT_WORLD_WIDTH;
+let worldHeight = DEFAULT_WORLD_HEIGHT;
+let mapWorld = parseMapWorld(null);
 let sites = [];
 let siteByKey = new Map();
 let siteKeyByOrigin = new Map();
@@ -45,8 +50,8 @@ let svg = null;
 let isDragging = false;
 let lastPointer = null;
 let view = {
-  x: WORLD_WIDTH * 0.15,
-  y: WORLD_HEIGHT * 0.2,
+  x: 0,
+  y: 0,
   zoom: 1,
 };
 
@@ -81,8 +86,8 @@ function sitePosition(site) {
   const x = 240 + ((hash % 1320) + drift * 120) % 1320;
   const y = 190 + Math.abs(Math.sin(angle)) * 620 + band * 160;
   return {
-    x: Math.max(150, Math.min(WORLD_WIDTH - 150, x)),
-    y: Math.max(140, Math.min(WORLD_HEIGHT - 140, y)),
+    x: Math.max(150, Math.min(worldWidth - 150, x)),
+    y: Math.max(140, Math.min(worldHeight - 140, y)),
   };
 }
 
@@ -273,70 +278,14 @@ function renderDetailConnections(siteKey) {
   }
 }
 
-function terrainLayer() {
-  const group = createSvgElement("g", { class: "map-terrain" });
-
-  group.append(
-    createSvgElement("path", {
-      class: "map-land map-land--west",
-      d: "M164 350 C244 184 450 124 650 178 C765 209 842 298 826 430 C811 554 682 619 581 698 C461 791 310 832 194 753 C84 679 94 496 164 350 Z",
-    }),
-    createSvgElement("path", {
-      class: "map-land map-land--east",
-      d: "M918 258 C1056 116 1313 119 1466 239 C1617 357 1647 582 1533 732 C1415 886 1158 923 1010 815 C867 710 791 389 918 258 Z",
-    }),
-    createSvgElement("path", {
-      class: "map-land map-land--south",
-      d: "M577 821 C700 730 943 735 1045 853 C1137 960 1031 1113 849 1121 C675 1129 457 910 577 821 Z",
-    }),
-    createSvgElement("path", {
-      class: "map-river",
-      d: "M218 286 C332 372 404 388 539 371 C681 353 722 444 654 527 C590 604 624 701 758 728 C905 758 985 678 1098 711 C1207 742 1266 844 1407 831",
-    }),
-    createSvgElement("path", {
-      class: "map-path",
-      d: "M299 685 C464 581 646 567 824 619 C973 663 1041 571 1174 502 C1290 442 1394 462 1515 526",
-    }),
-    createSvgElement("path", {
-      class: "map-path",
-      d: "M506 249 C604 352 742 412 914 422 C1064 430 1177 368 1306 279",
-    }),
-  );
-
-  const mountains = [
-    [1035, 316], [1102, 262], [1171, 333], [1248, 289], [1322, 348],
-    [404, 269], [480, 230], [556, 289],
-  ];
-  for (const [x, y] of mountains) {
-    group.appendChild(createSvgElement("path", {
-      class: "map-mountain",
-      d: `M${x - 44} ${y + 46} L${x} ${y - 42} L${x + 48} ${y + 46} M${x - 10} ${y - 20} L${x + 7} ${y + 3} L${x + 21} ${y - 16}`,
-    }));
-  }
-
-  const trees = [
-    [260, 520], [315, 566], [368, 520], [417, 602], [500, 548], [586, 632],
-    [1204, 595], [1261, 638], [1327, 594], [1396, 664], [1452, 604],
-    [738, 915], [804, 874], [879, 944], [940, 893],
-  ];
-  for (const [x, y] of trees) {
-    group.appendChild(createSvgElement("path", {
-      class: "map-tree",
-      d: `M${x} ${y - 31} C${x - 24} ${y - 12} ${x - 18} ${y + 10} ${x} ${y + 8} C${x + 24} ${y + 10} ${x + 28} ${y - 14} ${x} ${y - 31} Z M${x} ${y + 8} L${x} ${y + 31}`,
-    }));
-  }
-
-  return group;
-}
-
 function buildMap() {
   svg = createSvgElement("svg", {
     class: "map-svg",
     role: "img",
-    "aria-label": "Hand-drawn TownSquare world map",
+    "aria-label": "TownSquare network map",
   });
   const viewport = createSvgElement("g");
-  viewport.appendChild(terrainLayer());
+  viewport.appendChild(renderSceneryLayer(mapWorld, createSvgElement));
 
   const edgeLayer = createSvgElement("g", { class: "map-edges", "aria-hidden": "true" });
   const nodeLayer = createSvgElement("g", { class: "map-nodes" });
@@ -435,25 +384,25 @@ function closeDetail() {
 
 function applyView() {
   if (!svg) return;
-  svg.setAttribute("viewBox", `${view.x} ${view.y} ${WORLD_WIDTH / view.zoom} ${WORLD_HEIGHT / view.zoom}`);
+  svg.setAttribute("viewBox", `${view.x} ${view.y} ${worldWidth / view.zoom} ${worldHeight / view.zoom}`);
 }
 
 function clampView() {
-  const visibleWidth = WORLD_WIDTH / view.zoom;
-  const visibleHeight = WORLD_HEIGHT / view.zoom;
-  view.x = Math.max(0, Math.min(WORLD_WIDTH - visibleWidth, view.x));
-  view.y = Math.max(0, Math.min(WORLD_HEIGHT - visibleHeight, view.y));
+  const visibleWidth = worldWidth / view.zoom;
+  const visibleHeight = worldHeight / view.zoom;
+  view.x = Math.max(0, Math.min(worldWidth - visibleWidth, view.x));
+  view.y = Math.max(0, Math.min(worldHeight - visibleHeight, view.y));
 }
 
 function zoomAt(multiplier, clientX = root.clientWidth / 2, clientY = root.clientHeight / 2) {
   const bounds = root.getBoundingClientRect();
-  const beforeWidth = WORLD_WIDTH / view.zoom;
-  const beforeHeight = WORLD_HEIGHT / view.zoom;
+  const beforeWidth = worldWidth / view.zoom;
+  const beforeHeight = worldHeight / view.zoom;
   const beforeX = view.x + ((clientX - bounds.left) / bounds.width) * beforeWidth;
   const beforeY = view.y + ((clientY - bounds.top) / bounds.height) * beforeHeight;
   const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, view.zoom * multiplier));
-  const afterWidth = WORLD_WIDTH / nextZoom;
-  const afterHeight = WORLD_HEIGHT / nextZoom;
+  const afterWidth = worldWidth / nextZoom;
+  const afterHeight = worldHeight / nextZoom;
 
   view.x = beforeX - ((clientX - bounds.left) / bounds.width) * afterWidth;
   view.y = beforeY - ((clientY - bounds.top) / bounds.height) * afterHeight;
@@ -462,11 +411,59 @@ function zoomAt(multiplier, clientX = root.clientWidth / 2, clientY = root.clien
   applyView();
 }
 
+const CONTENT_PADDING = 120;
+const VIEW_MARGIN = 1.65;
+
+function siteContentBounds() {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const { x, y } of positionsBySiteKey.values()) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+
+  if (!Number.isFinite(minX)) {
+    return {
+      minX: CONTENT_PADDING,
+      minY: CONTENT_PADDING,
+      maxX: worldWidth - CONTENT_PADDING,
+      maxY: worldHeight - CONTENT_PADDING,
+    };
+  }
+
+  return {
+    minX: Math.max(0, minX - CONTENT_PADDING),
+    minY: Math.max(0, minY - CONTENT_PADDING),
+    maxX: Math.min(worldWidth, maxX + CONTENT_PADDING),
+    maxY: Math.min(worldHeight, maxY + CONTENT_PADDING),
+  };
+}
+
 function resetView() {
+  const bounds = siteContentBounds();
+  const contentWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const contentHeight = Math.max(1, bounds.maxY - bounds.minY);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  const zoom = Math.max(
+    MIN_ZOOM,
+    Math.min(
+      MAX_ZOOM,
+      Math.min(worldWidth / (contentWidth * VIEW_MARGIN), worldHeight / (contentHeight * VIEW_MARGIN)),
+    ),
+  );
+  const visibleWidth = worldWidth / zoom;
+  const visibleHeight = worldHeight / zoom;
+
   view = {
-    x: WORLD_WIDTH * 0.15,
-    y: WORLD_HEIGHT * 0.2,
-    zoom: 1,
+    x: centerX - visibleWidth / 2,
+    y: centerY - visibleHeight / 2,
+    zoom,
   };
   clampView();
   applyView();
@@ -483,8 +480,8 @@ function wireControls() {
   root.addEventListener("pointermove", (event) => {
     if (!isDragging || !lastPointer) return;
     const bounds = root.getBoundingClientRect();
-    view.x -= ((event.clientX - lastPointer.x) / bounds.width) * (WORLD_WIDTH / view.zoom);
-    view.y -= ((event.clientY - lastPointer.y) / bounds.height) * (WORLD_HEIGHT / view.zoom);
+    view.x -= ((event.clientX - lastPointer.x) / bounds.width) * (worldWidth / view.zoom);
+    view.y -= ((event.clientY - lastPointer.y) / bounds.height) * (worldHeight / view.zoom);
     lastPointer = { x: event.clientX, y: event.clientY };
     clampView();
     applyView();
@@ -516,22 +513,44 @@ function wireControls() {
   detailClose?.addEventListener("click", closeDetail);
 }
 
+function applyMapWorld(raw) {
+  mapWorld = parseMapWorld(raw);
+  worldWidth = mapWorld.width;
+  worldHeight = mapWorld.height;
+}
+
 async function loadMap() {
-  try {
-    const response = await fetch("/api/map");
-    const body = await response.json();
-    if (!response.ok || !Array.isArray(body.sites)) {
-      throw new Error(body.error || "Map request failed");
-    }
-    sites = body.sites;
-    indexSites(sites);
-    buildMap();
-    resetView();
-  } catch {
-    statusEl.textContent = "Could not load the TownSquare map.";
-    buildMap();
-    resetView();
+  const [worldResult, mapResult] = await Promise.allSettled([
+    fetch("/map-world.json").then((response) => {
+      if (!response.ok) throw new Error("Map world request failed");
+      return response.json();
+    }),
+    fetch("/api/map").then(async (response) => {
+      const body = await response.json();
+      if (!response.ok || !Array.isArray(body.sites)) {
+        throw new Error(body.error || "Map request failed");
+      }
+      return body.sites;
+    }),
+  ]);
+
+  if (worldResult.status === "fulfilled") {
+    applyMapWorld(worldResult.value);
+  } else {
+    applyMapWorld(null);
   }
+
+  if (mapResult.status === "fulfilled") {
+    sites = mapResult.value;
+    indexSites(sites);
+  } else {
+    sites = [];
+    indexSites(sites);
+    statusEl.textContent = "Could not load the TownSquare map.";
+  }
+
+  buildMap();
+  resetView();
 }
 
 wireControls();

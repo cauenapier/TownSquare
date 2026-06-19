@@ -2122,45 +2122,30 @@ body {
   height: 100%;
 }
 
-.map-land {
-  fill: color-mix(in oklab, var(--surface-2) 78%, #b7c7a6 22%);
-  stroke: color-mix(in oklab, var(--ink) 34%, transparent);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.map-land--east {
-  fill: color-mix(in oklab, var(--surface-2) 72%, #b6c9ad 28%);
-}
-
-.map-land--south {
-  fill: color-mix(in oklab, var(--surface-2) 76%, #d2c79c 24%);
-}
-
-.map-river,
-.map-path,
-.map-mountain,
-.map-tree {
+.map-mountain {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  stroke: color-mix(in oklab, var(--ink) 58%, transparent);
+  stroke-width: 4;
+  opacity: 0.72;
 }
 
-.map-river {
-  stroke: color-mix(in oklab, #6f9caf 78%, var(--ink) 22%);
-  stroke-width: 12;
-  stroke-dasharray: 34 13 19 10;
-  opacity: 0.68;
+.map-tree__crown {
+  fill: color-mix(in oklab, #5f7d55 84%, var(--surface) 16%);
+  stroke: color-mix(in oklab, #5f7d55 76%, var(--ink) 24%);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  opacity: 0.88;
 }
 
-.map-path {
-  stroke: color-mix(in oklab, var(--you) 38%, var(--ink-soft) 62%);
-  stroke-width: 5;
-  stroke-dasharray: 2 16;
-  opacity: 0.5;
+.map-tree__trunk {
+  fill: none;
+  stroke: color-mix(in oklab, #4a6342 80%, var(--ink) 20%);
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0.78;
 }
-
 .map-link {
   fill: none;
   stroke: color-mix(in oklab, var(--you) 62%, var(--ink-soft) 38%);
@@ -2174,18 +2159,6 @@ body {
   stroke: var(--you-deep);
   stroke-width: 5;
   opacity: 1;
-}
-
-.map-mountain {
-  stroke: color-mix(in oklab, var(--ink) 58%, transparent);
-  stroke-width: 4;
-  opacity: 0.72;
-}
-
-.map-tree {
-  stroke: color-mix(in oklab, #5f7d55 76%, var(--ink) 24%);
-  stroke-width: 4;
-  opacity: 0.78;
 }
 
 .map-node {
