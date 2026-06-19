@@ -881,6 +881,7 @@ function publicMapSite(site) {
     origin: site.origin,
     verifiedAt: site.verifiedAt,
     lastSeenAt: site.lastSeenAt,
+    connections: getConnections(site),
   };
 }
 

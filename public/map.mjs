@@ -19,6 +19,8 @@ const detailVisit = detail.querySelector(".map-detail__visit");
 const detailVerified = detail.querySelector("[data-map-verified]");
 const detailSeen = detail.querySelector("[data-map-seen]");
 const detailClose = detail.querySelector(".map-detail__close");
+const detailConnections = detail.querySelector("[data-map-connections]");
+const detailConnectionList = detail.querySelector(".map-detail__connection-list");
 
 if (
   !(detailTitle instanceof HTMLElement)
@@ -27,11 +29,17 @@ if (
   || !(detailVerified instanceof HTMLElement)
   || !(detailSeen instanceof HTMLElement)
   || !(detailClose instanceof HTMLButtonElement)
+  || !(detailConnections instanceof HTMLElement)
+  || !(detailConnectionList instanceof HTMLUListElement)
 ) {
   throw new Error("Map detail elements not found");
 }
 
 let sites = [];
+let siteByKey = new Map();
+let siteKeyByOrigin = new Map();
+let positionsBySiteKey = new Map();
+let mapEdges = [];
 let selectedSiteKey = "";
 let svg = null;
 let isDragging = false;
@@ -89,11 +97,179 @@ function formatTime(value) {
   }).format(date);
 }
 
+function normalizeOrigin(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.search = "";
+    url.pathname = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 function originLabel(origin) {
   try {
     return new URL(origin).hostname;
   } catch {
     return origin;
+  }
+}
+
+function indexSites(nextSites) {
+  sites = nextSites;
+  siteByKey = new Map();
+  siteKeyByOrigin = new Map();
+  positionsBySiteKey = new Map();
+  mapEdges = [];
+
+  for (const site of sites) {
+    siteByKey.set(site.siteKey, site);
+    const origin = normalizeOrigin(site.origin);
+    if (origin && !siteKeyByOrigin.has(origin)) siteKeyByOrigin.set(origin, site.siteKey);
+    positionsBySiteKey.set(site.siteKey, sitePosition(site));
+  }
+
+  const seen = new Set();
+  for (const site of sites) {
+    const fromKey = site.siteKey;
+    for (const connection of site.connections || []) {
+      const targetOrigin = normalizeOrigin(connection.url);
+      if (!targetOrigin) continue;
+
+      const toKey = siteKeyByOrigin.get(targetOrigin);
+      if (!toKey || toKey === fromKey) continue;
+
+      const edgeKey = [fromKey, toKey].sort().join("|");
+      if (seen.has(edgeKey)) continue;
+      seen.add(edgeKey);
+      mapEdges.push({ fromKey, toKey, label: connection.label });
+    }
+  }
+}
+
+function edgeEndpoints(from, to, inset = 28) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  return {
+    from: { x: from.x + ux * inset, y: from.y + uy * inset },
+    to: { x: to.x - ux * inset, y: to.y - uy * inset },
+  };
+}
+
+function edgePath(from, to) {
+  const endpoints = edgeEndpoints(from, to);
+  const dx = endpoints.to.x - endpoints.from.x;
+  const dy = endpoints.to.y - endpoints.from.y;
+  const mx = (endpoints.from.x + endpoints.to.x) / 2;
+  const my = (endpoints.from.y + endpoints.to.y) / 2;
+  const len = Math.hypot(dx, dy) || 1;
+  const bend = Math.min(140, len * 0.22);
+  const cx = mx - (dy / len) * bend;
+  const cy = my + (dx / len) * bend;
+  return `M ${endpoints.from.x} ${endpoints.from.y} Q ${cx} ${cy} ${endpoints.to.x} ${endpoints.to.y}`;
+}
+
+function renderMapEdge(edge) {
+  const from = positionsBySiteKey.get(edge.fromKey);
+  const to = positionsBySiteKey.get(edge.toKey);
+  if (!from || !to) return null;
+
+  const active = selectedSiteKey && (edge.fromKey === selectedSiteKey || edge.toKey === selectedSiteKey);
+  return createSvgElement("path", {
+    class: `map-link${active ? " is-active" : ""}`,
+    d: edgePath(from, to),
+    "data-from-key": edge.fromKey,
+    "data-to-key": edge.toKey,
+  });
+}
+
+function siteConnections(siteKey) {
+  const site = siteByKey.get(siteKey);
+  if (!site) return [];
+
+  const items = [];
+  const seen = new Set();
+
+  for (const connection of site.connections || []) {
+    const targetOrigin = normalizeOrigin(connection.url);
+    const targetKey = targetOrigin ? siteKeyByOrigin.get(targetOrigin) : null;
+    const key = targetKey || connection.url;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const targetSite = targetKey ? siteByKey.get(targetKey) : null;
+    items.push({
+      label: connection.label || (targetSite?.name ?? originLabel(connection.url)),
+      url: connection.url,
+      siteKey: targetKey,
+      onMap: Boolean(targetSite),
+      side: connection.side,
+    });
+  }
+
+  for (const other of sites) {
+    if (other.siteKey === siteKey) continue;
+    for (const connection of other.connections || []) {
+      const targetOrigin = normalizeOrigin(connection.url);
+      if (targetOrigin !== normalizeOrigin(site.origin)) continue;
+
+      const key = `in:${other.siteKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      items.push({
+        label: other.name,
+        url: other.origin,
+        siteKey: other.siteKey,
+        onMap: true,
+        inbound: true,
+      });
+    }
+  }
+
+  return items;
+}
+
+function renderDetailConnections(siteKey) {
+  const connections = siteConnections(siteKey);
+  detailConnectionList.replaceChildren();
+
+  if (connections.length === 0) {
+    detailConnections.hidden = true;
+    return;
+  }
+
+  detailConnections.hidden = false;
+  for (const connection of connections) {
+    const item = document.createElement("li");
+
+    if (connection.onMap && connection.siteKey) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "map-detail__connection";
+      button.textContent = connection.inbound
+        ? `${connection.label} (links here)`
+        : connection.label;
+      button.addEventListener("click", () => selectSite(connection.siteKey));
+      item.appendChild(button);
+    } else {
+      const link = document.createElement("a");
+      link.className = "map-detail__connection map-detail__connection--external";
+      link.href = connection.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = connection.label;
+      item.appendChild(link);
+    }
+
+    detailConnectionList.appendChild(item);
   }
 }
 
@@ -173,14 +349,21 @@ function buildMap() {
     return;
   }
 
-  statusEl.textContent = `${sites.length} verified TownSquare${sites.length === 1 ? "" : "s"} on the map.`;
+  const edgeLabel = mapEdges.length === 1 ? "1 path" : `${mapEdges.length} paths`;
+  statusEl.textContent = `${sites.length} verified TownSquare${sites.length === 1 ? "" : "s"} on the map${mapEdges.length ? `, ${edgeLabel} between them` : ""}.`;
+
+  for (const edge of mapEdges) {
+    const path = renderMapEdge(edge);
+    if (path) edgeLayer.appendChild(path);
+  }
+
   for (const site of sites) {
     nodeLayer.appendChild(renderSiteNode(site));
   }
 }
 
 function renderSiteNode(site) {
-  const { x, y } = sitePosition(site);
+  const { x, y } = positionsBySiteKey.get(site.siteKey) || sitePosition(site);
   const group = createSvgElement("g", {
     class: `map-node${site.siteKey === selectedSiteKey ? " is-selected" : ""}`,
     transform: `translate(${x} ${y})`,
@@ -213,10 +396,17 @@ function renderSelectedState() {
   root.querySelectorAll(".map-node").forEach((node) => {
     node.classList.toggle("is-selected", node.getAttribute("data-site-key") === selectedSiteKey);
   });
+
+  root.querySelectorAll(".map-link").forEach((edge) => {
+    const fromKey = edge.getAttribute("data-from-key");
+    const toKey = edge.getAttribute("data-to-key");
+    const active = selectedSiteKey && (fromKey === selectedSiteKey || toKey === selectedSiteKey);
+    edge.classList.toggle("is-active", Boolean(active));
+  });
 }
 
 function selectedSite() {
-  return sites.find((site) => site.siteKey === selectedSiteKey) || null;
+  return siteByKey.get(selectedSiteKey) || null;
 }
 
 function selectSite(siteKey) {
@@ -232,12 +422,15 @@ function selectSite(siteKey) {
   detailVisit.href = site.origin;
   detailVerified.textContent = formatTime(site.verifiedAt);
   detailSeen.textContent = formatTime(site.lastSeenAt);
+  renderDetailConnections(siteKey);
 }
 
 function closeDetail() {
   selectedSiteKey = "";
   renderSelectedState();
   detail.hidden = true;
+  detailConnections.hidden = true;
+  detailConnectionList.replaceChildren();
 }
 
 function applyView() {
@@ -331,6 +524,7 @@ async function loadMap() {
       throw new Error(body.error || "Map request failed");
     }
     sites = body.sites;
+    indexSites(sites);
     buildMap();
     resetView();
   } catch {

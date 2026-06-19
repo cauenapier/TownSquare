@@ -2161,6 +2161,21 @@ body {
   opacity: 0.5;
 }
 
+.map-link {
+  fill: none;
+  stroke: color-mix(in oklab, var(--you) 62%, var(--ink-soft) 38%);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 10 14;
+  opacity: 0.72;
+}
+
+.map-link.is-active {
+  stroke: var(--you-deep);
+  stroke-width: 5;
+  opacity: 1;
+}
+
 .map-mountain {
   stroke: color-mix(in oklab, var(--ink) 58%, transparent);
   stroke-width: 4;
@@ -2335,6 +2350,48 @@ body {
   color: var(--surface);
   font-weight: 700;
   text-decoration: none;
+}
+
+.map-detail__connections {
+  margin-bottom: 14px;
+}
+
+.map-detail__connections .eyebrow {
+  margin: 0 0 8px;
+}
+
+.map-detail__connection-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map-detail__connection {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.map-detail__connection:hover,
+.map-detail__connection:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+
+.map-detail__connection--external {
+  color: var(--you-deep);
 }
 
 @media (max-width: 640px) {

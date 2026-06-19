@@ -19,8 +19,8 @@
           <h1 id="map-title">A small world of public squares</h1>
         </div>
         <p>
-          Verified TownSquares appear as places on the map. Connections are not drawn yet;
-          each site owner will define those later.
+          Verified TownSquares appear as places on the map. Paths between them follow the
+          neighbour links each site owner defines at their square's edges.
         </p>
       </header>
 
@@ -43,6 +43,10 @@
             <div><dt>Verified</dt><dd data-map-verified></dd></div>
             <div><dt>Last seen</dt><dd data-map-seen></dd></div>
           </dl>
+          <div class="map-detail__connections" data-map-connections hidden>
+            <p class="eyebrow">Connected towns</p>
+            <ul class="map-detail__connection-list"></ul>
+          </div>
           <a class="map-detail__visit" target="_blank" rel="noopener noreferrer">Visit TownSquare</a>
         </aside>
       </section>
