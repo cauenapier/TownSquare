@@ -2148,17 +2148,33 @@ body {
 }
 .map-link {
   fill: none;
-  stroke: color-mix(in oklab, var(--you) 62%, var(--ink-soft) 38%);
-  stroke-width: 4;
   stroke-linecap: round;
-  stroke-dasharray: 10 14;
-  opacity: 0.72;
+  stroke-linejoin: round;
 }
 
-.map-link.is-active {
-  stroke: var(--you-deep);
-  stroke-width: 5;
+.map-link--asphalt {
+  stroke: color-mix(in oklab, #3a3835 78%, var(--ink) 22%);
+  stroke-width: 5.5;
+  opacity: 0.82;
+}
+
+.map-link--dirt {
+  stroke: color-mix(in oklab, #9a7f5c 72%, var(--ink-soft) 28%);
+  stroke-width: 3.5;
+  stroke-dasharray: 7 11;
+  opacity: 0.62;
+}
+
+.map-link--asphalt.is-active {
+  stroke: color-mix(in oklab, var(--you-deep) 68%, #3a3835 32%);
+  stroke-width: 6.5;
   opacity: 1;
+}
+
+.map-link--dirt.is-active {
+  stroke: color-mix(in oklab, var(--you-deep) 52%, #9a7f5c 48%);
+  stroke-width: 4.5;
+  opacity: 0.92;
 }
 
 .map-node {

@@ -124,6 +124,19 @@ function originLabel(origin) {
   }
 }
 
+function siteLinksTo(fromKey, toKey) {
+  const fromSite = siteByKey.get(fromKey);
+  const toSite = siteByKey.get(toKey);
+  if (!fromSite || !toSite) return false;
+
+  const targetOrigin = normalizeOrigin(toSite.origin);
+  if (!targetOrigin) return false;
+
+  return (fromSite.connections || []).some(
+    (connection) => normalizeOrigin(connection.url) === targetOrigin,
+  );
+}
+
 function indexSites(nextSites) {
   sites = nextSites;
   siteByKey = new Map();
@@ -151,7 +164,12 @@ function indexSites(nextSites) {
       const edgeKey = [fromKey, toKey].sort().join("|");
       if (seen.has(edgeKey)) continue;
       seen.add(edgeKey);
-      mapEdges.push({ fromKey, toKey, label: connection.label });
+      mapEdges.push({
+        fromKey,
+        toKey,
+        label: connection.label,
+        bidirectional: siteLinksTo(fromKey, toKey) && siteLinksTo(toKey, fromKey),
+      });
     }
   }
 }
@@ -187,8 +205,9 @@ function renderMapEdge(edge) {
   if (!from || !to) return null;
 
   const active = selectedSiteKey && (edge.fromKey === selectedSiteKey || edge.toKey === selectedSiteKey);
+  const roadKind = edge.bidirectional ? "asphalt" : "dirt";
   return createSvgElement("path", {
-    class: `map-link${active ? " is-active" : ""}`,
+    class: `map-link map-link--${roadKind}${active ? " is-active" : ""}`,
     d: edgePath(from, to),
     "data-from-key": edge.fromKey,
     "data-to-key": edge.toKey,
