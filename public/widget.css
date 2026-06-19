@@ -492,8 +492,12 @@
   padding: 0 18px 18px;
   border-top: 0;
   border-radius: 0;
-  /* opaque: expanded mode sits in front of the host page, not blended into it */
-  background: var(--page);
+  /* Expanded mode must cover the host even when its embedded palette uses
+     transparent scene/page layers. Earlier layers preserve opaque host colors. */
+  background:
+    linear-gradient(var(--page), var(--page)),
+    linear-gradient(var(--scene), var(--scene)),
+    Canvas;
   display: flex;
   flex-direction: column;
 }
