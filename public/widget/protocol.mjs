@@ -224,11 +224,19 @@ export function wireSocket(ctx) {
 
         const peer = peers.get(message.id);
         if (!peer) return;
+        peer.avatar.el.classList.remove("townsquare-avatar--typing");
         if (ctx.quiet) {
           recordMessage(peer.avatar, { text: message.text, at: message.at });
           return;
         }
         sayMessage(peer.avatar, { text: message.text, at: message.at });
+        return;
+      }
+
+      if (message.type === "typing") {
+        if (message.id === self.id || isSolo(ctx)) return;
+        const peer = peers.get(message.id);
+        peer?.avatar.el.classList.toggle("townsquare-avatar--typing", message.typing === true);
         return;
       }
 
@@ -251,6 +259,9 @@ export function wireSocket(ctx) {
 
       const wasJoined = Boolean(self.id);
       self.id = null;
+      clearTimeout(ctx.typingTimer);
+      ctx.typingTimer = null;
+      self.typing = false;
       clearPeers(ctx);
 
       const permanentMessage = PERMANENT_CLOSE_MESSAGES.get(event.reason || "");

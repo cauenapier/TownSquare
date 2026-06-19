@@ -70,6 +70,24 @@ const SHIFT_EPSILON = 0.5;
 const PROMINENCE_EPSILON = 0.01;
 
 /**
+ * Keep the wider history tray inside the same stage bounds as speech bubbles.
+ *
+ * @param {AvatarView} avatar
+ * @param {number} anchor
+ * @param {number} minLeft
+ * @param {number} maxRight
+ */
+function placeTray(avatar, anchor, minLeft, maxRight) {
+  const width = avatar.tray.offsetWidth;
+  if (!width) return;
+  const halfWidth = Math.min(width / 2, (maxRight - minLeft) / 2);
+  const shift = clamp(anchor, minLeft + halfWidth, maxRight - halfWidth) - anchor;
+  if (Math.abs((avatar.trayShift ?? 0) - shift) <= SHIFT_EPSILON) return;
+  avatar.trayShift = shift;
+  avatar.tray.style.setProperty("--tray-shift", `${shift.toFixed(1)}px`);
+}
+
+/**
  * @typedef {Object} Column
  * @property {AvatarView} avatar
  * @property {number} anchor Figure centre in stage px — where the column wants to sit.
@@ -254,10 +272,14 @@ export function layoutBubbleColumns(stage, presences, selfX, config) {
   const stageWidth = stage.clientWidth;
   if (!stageWidth) return;
 
+  const minLeft = cfg.edgeMargin;
+  const maxRight = stageWidth - cfg.edgeMargin;
+
   /** @type {Array<Column>} */
   const columns = [];
   for (const presence of presences) {
     const { avatar } = presence;
+    placeTray(avatar, presence.x * stageWidth, minLeft, maxRight);
     // Expiring bubbles are out of `messages` but still fading in the DOM, so
     // visibility is judged by children: keep their column pinned until they
     // finish, and re-centre the empty column for the next fresh line.
@@ -276,9 +298,6 @@ export function layoutBubbleColumns(stage, presences, selfX, config) {
   if (columns.length === 0) return;
 
   columns.sort((a, b) => a.anchor - b.anchor);
-
-  const minLeft = cfg.edgeMargin;
-  const maxRight = stageWidth - cfg.edgeMargin;
 
   // Classic 1D label placement: seed one cluster per column, and while a new
   // cluster would overlap the one before it, merge them. Each merge re-centres

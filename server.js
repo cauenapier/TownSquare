@@ -90,8 +90,11 @@ let MAX_READING_LABEL_LEN;
 let MAX_RECENT_MESSAGES;
 let HIGH_FIVE_DISTANCE;
 let DEFAULT_CHARACTER_COLOR;
+let DEFAULT_OWNER_BADGE_COLOR;
 /** @type {Set<string>} */
 let CHARACTER_COLORS = new Set();
+/** @type {Set<string>} */
+let OWNER_BADGE_COLORS = new Set();
 
 function loadEnvFile(filePath = path.join(__dirname, ".env")) {
   try {
@@ -132,6 +135,7 @@ let DEFAULT_SITE_STYLE = {
   dark: { scene: "#242521", page: "#181917", surface: "#24231f", ink: "#f2eee6", accent: "#df8a43", other: "#ddd7cc", ground: "rgba(242, 238, 230, 0.18)" },
 };
 let sanitizeSceneConfig = (config) => ({ ...DEFAULT_SITE_SCENE_CONFIG, ...(config || {}) });
+let sanitizeConnections = (connections) => (Array.isArray(connections) ? connections : []);
 let sanitizeSiteStyle = (style) => (style && (style.light || style.dark) ? style : { ...DEFAULT_SITE_STYLE, light: { ...DEFAULT_SITE_STYLE.light, ...(style || {}) } });
 let buildSceneProps = () => [];
 let buildBirdPerches = () => [];
@@ -210,9 +214,10 @@ const MESSAGE_HANDLERS = {
   sceneConfig: handleSceneConfig,
   settle: handleSettle,
   say: handleSay,
+  typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws, scene, site, origin = "") {
   return {
     connectionId,
@@ -227,6 +232,7 @@ function createClient(connectionId, ws, scene, site, origin = "") {
     lastMoveAt: 0,
     lastActionAt: 0,
     lastChatAt: 0,
+    typing: false,
   };
 }
 
@@ -356,6 +362,68 @@ function sanitizeReadingState(client, message, fallback = {}) {
 
 function sanitizeCharacterColor(color) {
   return CHARACTER_COLORS.has(color) ? color : DEFAULT_CHARACTER_COLOR;
+}
+
+function sanitizeOwnerBadgeColor(color) {
+  return OWNER_BADGE_COLORS.has(color) ? color : DEFAULT_OWNER_BADGE_COLOR;
+}
+
+/**
+ * A site owner's name/color is "claimed" alongside their ownership so it
+ * survives client-side profile resets and server restarts. Profiles are keyed
+ * by browserId and live on the site record next to `ownerBrowserIds`.
+ */
+function getOwnerProfile(site, browserId) {
+  if (!site || !isPlainObject(site.ownerProfiles)) return null;
+  const profile = site.ownerProfiles[browserId];
+  return isPlainObject(profile) ? profile : null;
+}
+
+/** Persist the current name/color for an owner so it re-applies on rejoin. */
+function rememberOwnerProfile(site, identity) {
+  if (!site || !identity || !identity.isOwner) return;
+  if (!isPlainObject(site.ownerProfiles)) site.ownerProfiles = {};
+  const current = getOwnerProfile(site, identity.browserId) || {};
+  site.ownerProfiles[identity.browserId] = {
+    displayName: identity.displayName,
+    color: identity.color,
+    badgeColor: sanitizeOwnerBadgeColor(current.badgeColor || identity.badgeColor),
+  };
+  touchSite(site);
+}
+
+/** Re-apply a stored owner profile onto an identity, if one exists. */
+function applyOwnerProfile(site, identity) {
+  const profile = getOwnerProfile(site, identity.browserId);
+  if (!profile) return;
+  identity.displayName = sanitizeDisplayName(profile.displayName);
+  identity.color = sanitizeCharacterColor(profile.color);
+  identity.badgeColor = sanitizeOwnerBadgeColor(profile.badgeColor);
+}
+
+/**
+ * Opaque, stable reference for an owner used by the admin "Site owner" editor.
+ * Lets the admin manage owners without the raw browserId ever leaving the
+ * server (kept consistent with the visitor payload, which omits browserId too).
+ */
+function ownerHandle(siteKey, browserId) {
+  return crypto.createHash("sha256").update(`${siteKey}:${browserId}`).digest("hex").slice(0, 16);
+}
+
+/** The site's owners with their persisted look, for the dedicated admin section. */
+function getOwners(site, scene) {
+  if (!site || !Array.isArray(site.ownerBrowserIds)) return [];
+  return site.ownerBrowserIds.map((browserId) => {
+    const profile = getOwnerProfile(site, browserId) || {};
+    const identity = scene ? scene.identityByBrowser.get(browserId) : null;
+    return {
+      handle: ownerHandle(site.siteKey, browserId),
+      displayName: typeof profile.displayName === "string" ? profile.displayName : "",
+      color: sanitizeCharacterColor(profile.color),
+      badgeColor: sanitizeOwnerBadgeColor(profile.badgeColor),
+      online: Boolean(identity && identity.clients && identity.clients.size > 0),
+    };
+  });
 }
 
 function sanitizeSiteName(name, origin) {
@@ -668,6 +736,10 @@ function getStyleConfig(site) {
   return sanitizeSiteStyle(site?.styleConfig || DEFAULT_SITE_STYLE);
 }
 
+function getConnections(site) {
+  return sanitizeConnections(site?.connections || []);
+}
+
 function getSceneProps(site) {
   return site ? buildSceneProps(getSceneConfig(site)) : Array.from(PROPS_BY_ID.values());
 }
@@ -682,6 +754,10 @@ function buildStyleSnippet(site) {
 
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
+  const connections = getConnections(site);
+  const connectionsLine = connections.length > 0
+    ? `\n    connections: ${JSON.stringify(connections)},`
+    : "";
 
   return `<link rel="stylesheet" href="${serverOrigin}/widget.css" />
 <div id="townsquare-root"></div>
@@ -691,7 +767,7 @@ function buildEmbedSnippet(req, site) {
   mountTownSquare(document.getElementById("townsquare-root"), {
     serverOrigin: "${serverOrigin}",
     siteKey: "${site.siteKey}",
-    scene: ${JSON.stringify(getSceneConfig(site))},
+    scene: ${JSON.stringify(getSceneConfig(site))},${connectionsLine}
     theme: "host"
   });
 </script>`;
@@ -783,6 +859,7 @@ function handleRegisterSite(req, res) {
       email: parsedEmail.email,
       sceneConfig: body.sceneConfig,
       styleConfig: body.styleConfig,
+      connections: body.connections,
     });
     sitesByKey.set(site.siteKey, site);
     saveSites();
@@ -821,12 +898,14 @@ function sendAdminSite(req, res, site, adminToken) {
     return;
   }
 
+  const scene = getScene(site.siteKey, site);
   sendJson(res, 200, {
     site: publicSite(site),
     adminUrl: buildAdminUrl(req, adminToken),
     embedSnippet: buildEmbedSnippet(req, site),
     styleSnippet: buildStyleSnippet(site),
-    scene: getSceneStats(getScene(site.siteKey, site)),
+    scene: getSceneStats(scene),
+    owners: getOwners(site, scene),
   });
 }
 
@@ -886,6 +965,10 @@ const ADMIN_ACTIONS = {
 
     rebuildSceneProps(scene, site);
   },
+  updateConnections(site, scene, body) {
+    site.connections = sanitizeConnections(body.connections);
+    touchSite(site);
+  },
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
     touchSite(site);
@@ -912,14 +995,54 @@ const ADMIN_ACTIONS = {
     if (owner && index === -1) site.ownerBrowserIds.push(identity.browserId);
     if (!owner && index !== -1) site.ownerBrowserIds.splice(index, 1);
     identity.isOwner = owner;
+    if (owner) {
+      // Apply any admin-customised look first so a broadcast/crown never
+      // clobbers a saved ownerProfiles entry with a stale in-memory name.
+      applyOwnerProfile(site, identity);
+      identity.badgeColor = sanitizeOwnerBadgeColor(identity.badgeColor);
+      // Seed the saved profile from whatever name/color they have now so the
+      // claim "keeps" their current look until it is customised.
+      rememberOwnerProfile(site, identity);
+    } else if (isPlainObject(site.ownerProfiles)) {
+      delete site.ownerProfiles[identity.browserId];
+    }
     touchSite(site);
     broadcast(scene, {
       type: "profile",
       id: identity.id,
       displayName: identity.displayName,
       color: identity.color,
+      badgeColor: identity.badgeColor,
       isOwner: owner,
     });
+  },
+  updateOwnerProfile(site, scene, body) {
+    // Keyed by the opaque owner handle so the dedicated admin section can edit
+    // an owner's saved look whether or not they are currently connected.
+    const handle = String(body.handle || "");
+    const browserId = site.ownerBrowserIds.find((id) => ownerHandle(site.siteKey, id) === handle);
+    if (!browserId) return;
+    if (!isPlainObject(site.ownerProfiles)) site.ownerProfiles = {};
+    const current = isPlainObject(site.ownerProfiles[browserId]) ? site.ownerProfiles[browserId] : {};
+    const next = { ...current };
+    if (Object.hasOwn(body, "displayName")) next.displayName = sanitizeDisplayName(body.displayName);
+    if (Object.hasOwn(body, "color")) next.color = sanitizeCharacterColor(body.color);
+    if (Object.hasOwn(body, "badgeColor")) next.badgeColor = sanitizeOwnerBadgeColor(body.badgeColor);
+    site.ownerProfiles[browserId] = next;
+    touchSite(site);
+    // Apply live and broadcast if that owner is connected right now.
+    const identity = scene.identityByBrowser.get(browserId);
+    if (identity) {
+      applyOwnerProfile(site, identity);
+      broadcast(scene, {
+        type: "profile",
+        id: identity.id,
+        displayName: identity.displayName,
+        color: identity.color,
+        badgeColor: identity.badgeColor,
+        isOwner: true,
+      });
+    }
   },
   clearMessages(site, scene) {
     for (const identity of scene.identities.values()) {
@@ -961,7 +1084,7 @@ function handleAdminAction(req, res) {
 
     const scene = getScene(site.siteKey, site);
     ADMIN_ACTIONS[action](site, scene, body);
-    sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene) });
+    sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene), owners: getOwners(site, scene) });
   });
 }
 
@@ -1088,7 +1211,7 @@ function send(ws, message) {
 }
 
 function snapshotIdentity(identity) {
-  return {
+  const snapshot = {
     id: identity.id,
     x: identity.x,
     pose: identity.pose,
@@ -1101,6 +1224,10 @@ function snapshotIdentity(identity) {
     isOwner: identity.isOwner,
     messages: identity.messages,
   };
+  if (identity.isOwner) {
+    snapshot.badgeColor = identity.badgeColor;
+  }
+  return snapshot;
 }
 
 function getIdentityReadingActive(identity) {
@@ -1412,7 +1539,7 @@ function rebuildSceneProps(scene, site) {
   }
 }
 
-function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
+function createSiteRecord({ name, origin, email, sceneConfig, styleConfig, connections }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -1425,6 +1552,7 @@ function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
       email: email || null,
       sceneConfig: sanitizeSceneConfig(sceneConfig),
       styleConfig: sanitizeSiteStyle(styleConfig),
+      connections: sanitizeConnections(connections),
       disabled: false,
       chatDisabled: false,
       verifiedAt: null,
@@ -1435,6 +1563,7 @@ function createSiteRecord({ name, origin, email, sceneConfig, styleConfig }) {
       updatedAt: now,
       blockedBrowserIds: [],
       ownerBrowserIds: [],
+      ownerProfiles: {},
     },
   };
 }
@@ -1457,6 +1586,12 @@ function loadSites() {
       if (!Array.isArray(site.ownerBrowserIds)) {
         site.ownerBrowserIds = [];
       }
+      if (!isPlainObject(site.ownerProfiles)) {
+        site.ownerProfiles = {};
+      }
+      if (!Array.isArray(site.connections)) {
+        site.connections = [];
+      }
       if (typeof site.messageCount !== "number") {
         site.messageCount = 0;
       }
@@ -1476,7 +1611,13 @@ function loadSites() {
 function saveSites() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const sites = Array.from(sitesByKey.values());
-  fs.writeFileSync(SITES_FILE, `${JSON.stringify({ sites }, null, 2)}\n`);
+  // Atomic write: serialize to a temp file in the same directory, then rename
+  // over SITES_FILE. rename(2) is atomic on the same filesystem, so a crash or
+  // disk-full mid-write leaves the previous valid sites.json intact (it holds
+  // every site's adminTokenHash, and there is no admin-link recovery).
+  const tmpFile = `${SITES_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify({ sites }, null, 2)}\n`);
+  fs.renameSync(tmpFile, SITES_FILE);
 }
 
 function touchSite(site) {
@@ -1498,6 +1639,7 @@ function publicSite(site) {
     email: site.email || null,
     sceneConfig: getSceneConfig(site),
     styleConfig: getStyleConfig(site),
+    connections: getConnections(site),
     disabled: site.disabled,
     chatDisabled: site.chatDisabled,
     verifiedAt: site.verifiedAt,
@@ -1697,6 +1839,13 @@ function handleInit(client, message) {
 
   identity.isOwner = Boolean(site) && site.ownerBrowserIds.includes(identity.browserId);
 
+  // An owner's saved name/color is sticky: re-apply it on every (re)join so it
+  // survives client-side profile resets and server restarts.
+  if (identity.isOwner) {
+    applyOwnerProfile(site, identity);
+    identity.badgeColor = sanitizeOwnerBadgeColor(identity.badgeColor);
+  }
+
   client.identity = identity;
   client.joined = true;
   identity.clients.add(client);
@@ -1719,6 +1868,7 @@ function handleInit(client, message) {
     readingUrl: identity.readingUrl,
     readingActive: identity.readingActive,
     isOwner: identity.isOwner,
+    ...(identity.isOwner ? { badgeColor: identity.badgeColor } : {}),
     messages: identity.messages,
     peers,
     birds: snapshotBirds(scene),
@@ -1736,6 +1886,18 @@ function handleInit(client, message) {
         readingLabel: identity.readingLabel,
         readingUrl: identity.readingUrl,
         readingActive: identity.readingActive,
+      }, { exceptConnectionId: client.connectionId });
+    }
+    // Reconnect during the grace window: the owner gets applyOwnerProfile above
+    // but we skip the join broadcast, so refresh peers with the claimed look.
+    if (identity.isOwner && site) {
+      broadcast(scene, {
+        type: "profile",
+        id: identity.id,
+        displayName: identity.displayName,
+        color: identity.color,
+        badgeColor: identity.badgeColor,
+        isOwner: true,
       }, { exceptConnectionId: client.connectionId });
     }
     syncIdentityAwayState(identity);
@@ -1813,6 +1975,8 @@ function handleProfile(client, message) {
   client.identity.displayName = sanitizeDisplayName(message.displayName);
   client.identity.color = sanitizeCharacterColor(message.color);
   touchIdentityActivity(client.identity);
+  // Owners keep their look across resets: persist their own edits too.
+  rememberOwnerProfile(client.site, client.identity);
 
   broadcast(client.scene, {
     type: "profile",
@@ -1923,6 +2087,17 @@ function handleSay(client, message) {
   );
 }
 
+function handleTyping(client, message) {
+  if (!client.identity || typeof message.typing !== "boolean") return;
+
+  const wasTyping = Array.from(client.identity.clients).some((candidate) => candidate.typing);
+  client.typing = message.typing;
+  const typing = Array.from(client.identity.clients).some((candidate) => candidate.typing);
+  if (typing === wasTyping) return;
+
+  broadcast(client.scene, { type: "typing", id: client.identity.id, typing });
+}
+
 function handleClientMessage(client, raw) {
   let message;
   try {
@@ -1944,10 +2119,14 @@ function handleClientClose(client) {
   if (!client.joined || !client.identity) return;
 
   const identity = client.identity;
+  const wasTyping = Array.from(identity.clients).some((candidate) => candidate.typing);
   identity.clients.delete(client);
   client.joined = false;
   client.identity = null;
   client.readingActive = false;
+  if (wasTyping && !Array.from(identity.clients).some((candidate) => candidate.typing)) {
+    broadcast(identity.scene, { type: "typing", id: identity.id, typing: false });
+  }
 
   if (identity.clients.size > 0) {
     if (refreshIdentityReadingActive(identity)) {
@@ -2065,7 +2244,9 @@ async function startServer() {
   MAX_RECENT_MESSAGES = shared.MAX_RECENT_MESSAGES;
   HIGH_FIVE_DISTANCE = shared.HIGH_FIVE_DISTANCE;
   DEFAULT_CHARACTER_COLOR = shared.DEFAULT_CHARACTER_COLOR;
+  DEFAULT_OWNER_BADGE_COLOR = shared.DEFAULT_OWNER_BADGE_COLOR;
   CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);
+  OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
 
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
@@ -2083,6 +2264,7 @@ async function loadSharedModules() {
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
   DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
   sanitizeSceneConfig = siteConfig.sanitizeSceneConfig;
+  sanitizeConnections = siteConfig.sanitizeConnections;
   sanitizeSiteStyle = siteConfig.sanitizeSiteStyle;
   buildSceneProps = siteConfig.buildSceneProps;
   buildBirdPerches = siteConfig.buildBirdPerches;

@@ -108,6 +108,89 @@ async function assertCustomizationPersists() {
   assert(updated.body.site.styleConfig?.dark?.accent === "#aabbcc", "admin customization did not update dark accent");
 }
 
+async function assertOwnerProfilePersists() {
+  const hosted = await createSite("Owner Profile");
+  const { siteKey } = hosted.site;
+  const { adminToken } = hosted;
+
+  const ownerVisitor = await connect({
+    x: 0.3,
+    browserId: "owner-profile-browser",
+    siteKey,
+    origin: HTTP_ORIGIN,
+    displayName: "Visitor",
+    color: "#5f6b73",
+  });
+  const peer = await connect({ x: 0.7, browserId: "owner-profile-peer", siteKey, origin: HTTP_ORIGIN });
+  await delay(80);
+
+  const promoted = await postJson("/api/admin/action", {
+    siteKey, adminToken, action: "setOwnerVisitor", visitorId: ownerVisitor.id, owner: true,
+  });
+  assert(promoted.response.ok, promoted.body.error || "owner promotion failed");
+  assert(
+    promoted.body.scene.visitors.find((v) => v.id === ownerVisitor.id)?.isOwner,
+    "visitor was not promoted to owner",
+  );
+  // The dedicated "Site owner" section drives off the owners payload, keyed by
+  // an opaque handle (no raw browserId), and lists the owner whether online or not.
+  assert(Array.isArray(promoted.body.owners) && promoted.body.owners.length === 1, "owners payload missing after promotion");
+  const ownerHandle = promoted.body.owners[0].handle;
+  assert(typeof ownerHandle === "string" && ownerHandle.length > 0, "owner payload did not include a handle");
+  assert(promoted.body.owners[0].online === true, "promoted owner should be reported online");
+
+  const customized = await postJson("/api/admin/action", {
+    siteKey, adminToken, action: "updateOwnerProfile", handle: ownerHandle, displayName: "kev", color: "#c8641f",
+  });
+  assert(customized.response.ok, customized.body.error || "owner profile customization failed");
+  assert(
+    customized.body.owners[0].displayName === "kev" && customized.body.owners[0].color === "#c8641f",
+    "owners payload did not reflect the customized name/color",
+  );
+  await delay(80);
+
+  assert(
+    peer.seen.some((m) => m.type === "profile" && m.id === ownerVisitor.id && m.displayName === "kev" && m.color === "#c8641f"),
+    "peers did not see the owner's customized name/color",
+  );
+
+  // Reset: evict the identity (grace window) then reconnect with no stored
+  // profile, as a server restart or cleared widget storage would. Ownership
+  // persists via ownerBrowserIds and the look via ownerProfiles.
+  ownerVisitor.ws.close();
+  await delay(1700);
+  const rejoined = await connect({ x: 0.3, browserId: "owner-profile-browser", siteKey, origin: HTTP_ORIGIN, displayName: "", color: "" });
+  assert(rejoined.hello.isOwner, "owner lost ownership across a reset");
+  assert(rejoined.hello.displayName === "kev", "owner name did not persist across a reset");
+  assert(rejoined.hello.color === "#c8641f", "owner color did not persist across a reset");
+
+  // The dedicated section can customize an owner who is fully offline.
+  rejoined.ws.close();
+  await delay(1700);
+  const offlineView = await postJson("/api/admin/site", { siteKey, adminToken });
+  assert(offlineView.body.owners[0].online === false, "offline owner should be reported offline");
+  const offlineEdit = await postJson("/api/admin/action", {
+    siteKey, adminToken, action: "updateOwnerProfile", handle: ownerHandle, displayName: "Kevin", color: "#3f7f63",
+  });
+  assert(offlineEdit.response.ok, offlineEdit.body.error || "offline owner edit failed");
+
+  const reconnected = await connect({ x: 0.3, browserId: "owner-profile-browser", siteKey, origin: HTTP_ORIGIN, displayName: "", color: "" });
+  assert(
+    reconnected.hello.displayName === "Kevin" && reconnected.hello.color === "#3f7f63",
+    "offline owner customization did not apply on reconnect",
+  );
+
+  // Un-owning drops the saved profile so a future visitor on that browser is plain.
+  const demoted = await postJson("/api/admin/action", {
+    siteKey, adminToken, action: "setOwnerVisitor", visitorId: reconnected.id, owner: false,
+  });
+  assert(demoted.response.ok, demoted.body.error || "owner demotion failed");
+  assert(Array.isArray(demoted.body.owners) && demoted.body.owners.length === 0, "demotion did not clear the owners list");
+
+  peer.ws.close();
+  reconnected.ws.close();
+}
+
 async function loginWithAdminToken(adminToken) {
   const response = await fetch(`${HTTP_ORIGIN}/api/admin/login`, {
     method: "POST",
@@ -527,6 +610,12 @@ async function main() {
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "move", x: 0.58 }));
   await delay(100);
+  secondSameBrowser.ws.send(JSON.stringify({ type: "typing", typing: true }));
+  await delay(100);
+  assert(third.seen.some((message) => message.type === "typing" && message.id === first.id && message.typing === true), "different browser did not observe typing start");
+  secondSameBrowser.ws.send(JSON.stringify({ type: "typing", typing: false }));
+  await delay(100);
+  assert(third.seen.some((message) => message.type === "typing" && message.id === first.id && message.typing === false), "different browser did not observe typing stop");
   secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: "hello from shared browser" }));
   await delay(100);
   secondSameBrowser.ws.send(JSON.stringify({ type: "say", text: "this should be rate-limited away" }));
@@ -637,6 +726,7 @@ async function main() {
   assert(first.seen.some((message) => message.type === "leave" && message.id === third.id), "first client did not observe different-browser leave");
 
   await assertCustomizationPersists();
+  await assertOwnerProfilePersists();
 
   const hostedA = await createSite("Smoke A");
   const hostedB = await createSite("Smoke B");

@@ -1,9 +1,11 @@
 /**
  * Shared settle-zone geometry for scene props.
  *
- * Prop `width` is a normalized fraction of stage width (0–1). The settle band
- * matches the painted prop: half-width on each side of `x`.
+ * Prop `width` is in px (fixed art size). Settle bands are expressed in the
+ * same normalized x space as character positions.
  */
+
+import { REFERENCE_STAGE_WIDTH } from "./site-config.mjs";
 
 /**
  * @typedef {import("./site-config.mjs").SceneProp} SceneProp
@@ -14,7 +16,8 @@
  * @returns {number}
  */
 export function propSettleHalfWidth(prop) {
-  return prop.pose && prop.width > 0 ? prop.width / 2 : 0;
+  if (!prop.pose || prop.width <= 0) return 0;
+  return (prop.width / 2) / REFERENCE_STAGE_WIDTH;
 }
 
 /**

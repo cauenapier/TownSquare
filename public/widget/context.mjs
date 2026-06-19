@@ -27,6 +27,9 @@
  * @property {string} readingLabel
  * @property {string} readingUrl
  * @property {boolean} readingActive
+ * @property {boolean} typing
+ * @property {boolean} isOwner
+ * @property {string} badgeColor
  * @property {number} propZoneEnteredAt
  * @property {string | null} settlePropId
  * @property {boolean} settleRequested
@@ -45,6 +48,8 @@
  * @property {string} readingLabel
  * @property {string} readingUrl
  * @property {boolean} readingActive
+ * @property {boolean} isOwner
+ * @property {string} badgeColor
  * @property {AvatarView} avatar
  * @property {ReturnType<typeof setTimeout> | null} walkTimer
  */
@@ -61,6 +66,7 @@
  * @property {Map<string, import("../shared/scene-props.mjs").SceneProp>} propsById
  * @property {Map<string, import("../shared/bird-perches.mjs").BirdPerch>} birdPerchesById
  * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
+ * @property {ReturnType<typeof setTimeout> | null} typingTimer
  * @property {HTMLElement} app
  * @property {HTMLElement} stage
  * @property {HTMLElement} statusRowEl
@@ -79,6 +85,10 @@
  * @property {(event: MouseEvent) => void} onStageClick
  * @property {Map<number, import("./birds.mjs").BirdView>} [birds]
  * @property {HTMLElement} [birdLayer]
+ * @property {{ left: Array<import("../shared/site-config.mjs").Connection>, right: Array<import("../shared/site-config.mjs").Connection> } | null} [connectionsBySide]
+ * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]
+ * @property {{ overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void, trigger: HTMLButtonElement | null } | null} [connectionsModal]
+ * @property {"left"|"right"|null} [nearSide] Edge whose signpost the avatar can currently activate.
  */
 
 export {};

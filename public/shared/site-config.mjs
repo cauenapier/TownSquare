@@ -68,6 +68,15 @@ export const SCENE_BIRDS_FIELD = Object.freeze({
 
 export const STYLE_MODES = Object.freeze(["light", "dark"]);
 
+/** Sides a neighbouring-town signpost can stand on, in stage-space terms. */
+export const CONNECTION_SIDES = Object.freeze(["left", "right"]);
+/** Longest a town label may be before it is trimmed. */
+export const CONNECTION_LABEL_MAX = 24;
+/** Longest a connection URL may be before it is rejected. */
+export const CONNECTION_URL_MAX = 200;
+/** Most towns one signpost (one side) can point at — keeps the modal uncluttered. */
+export const MAX_CONNECTIONS_PER_SIDE = 4;
+
 /** Muted prop/bird/tree tone; kept in sync with `--prop-ink` in public/tokens.css. */
 export const PROP_INK_MIX = "color-mix(in oklab, var(--text) 58%, var(--muted) 42%)";
 
@@ -162,19 +171,11 @@ const PROP_PX = Object.freeze({
 });
 
 /**
- * @param {number} pxWidth
- * @returns {number}
- */
-function propWidthFraction(pxWidth) {
-  return Number((pxWidth / REFERENCE_STAGE_WIDTH).toFixed(4));
-}
-
-/**
  * @typedef {Object} SceneProp
  * @property {string} id
  * @property {number} x
- * @property {number} width Normalized stage width (0–1); settle zone is width / 2.
- * @property {number} height Render height in px (art aspect ratio).
+ * @property {number} width Render width in px.
+ * @property {number} height Render height in px.
  * @property {string} [pose]
  * @property {Array<number>} [seats]
  * @property {boolean} [faceAway]
@@ -249,7 +250,7 @@ function createBench(index, x) {
     id: uniqueId("bench", index),
     kind: "bench",
     x,
-    width: propWidthFraction(width),
+    width,
     height,
     pose: "sitting",
     seats: [-0.01, 0.01],
@@ -263,7 +264,7 @@ function createLamp(index, x) {
     id: uniqueId("lamp", index),
     kind: "lamp",
     x,
-    width: propWidthFraction(width),
+    width,
     height,
     lightRadius: 0.045,
     svg: LAMP_SVG,
@@ -276,7 +277,7 @@ function createTree(index, x) {
     id: uniqueId("tree", index),
     kind: "tree",
     x,
-    width: propWidthFraction(width),
+    width,
     height,
     pose: "resting",
     seats: [-0.008, 0.008],
@@ -315,6 +316,96 @@ export function sanitizeSceneConfig(input = {}) {
   );
 
   return next;
+}
+
+/**
+ * Coerce a user-entered destination into a safe absolute http(s) URL, or "".
+ * Bare hosts (`example.com`) are upgraded to `https://`; anything that is not
+ * http/https after parsing (e.g. `javascript:`) is rejected.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function sanitizeConnectionUrl(value) {
+  if (typeof value !== "string") return "";
+  let trimmed = value.trim().slice(0, CONNECTION_URL_MAX);
+  if (!trimmed) return "";
+  if (!/^https?:\/\//i.test(trimmed)) trimmed = `https://${trimmed}`;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The bare hostname of a URL (with a leading `www.` stripped), or the original
+ * string if it does not parse. Used for default labels and the modal subtitle.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+export function hostnameLabel(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * @typedef {Object} Connection
+ * @property {"left"|"right"} side Stage edge the signpost stands on.
+ * @property {string} label Display name of the linked town.
+ * @property {string} url Destination the visitor walks to.
+ */
+
+/**
+ * Sanitize a list of neighbouring-town connections. Drops entries without a
+ * valid side or destination, defaults a missing label to the destination host,
+ * and caps each side at {@link MAX_CONNECTIONS_PER_SIDE}.
+ *
+ * @param {unknown} input
+ * @returns {Array<Connection>}
+ */
+export function sanitizeConnections(input = []) {
+  const list = Array.isArray(input) ? input : [];
+  const perSide = { left: 0, right: 0 };
+  const next = [];
+
+  for (const raw of list) {
+    if (!isPlainObject(raw)) continue;
+
+    const side = CONNECTION_SIDES.includes(raw.side) ? raw.side : null;
+    if (!side || perSide[side] >= MAX_CONNECTIONS_PER_SIDE) continue;
+
+    const url = sanitizeConnectionUrl(raw.url);
+    if (!url) continue;
+
+    const rawLabel = typeof raw.label === "string" ? raw.label.trim() : "";
+    const label = (rawLabel || hostnameLabel(url)).slice(0, CONNECTION_LABEL_MAX);
+
+    perSide[side] += 1;
+    next.push({ side, label, url });
+  }
+
+  return next;
+}
+
+/**
+ * Group sanitized connections by the side their signpost stands on.
+ *
+ * @param {unknown} input
+ * @returns {{ left: Array<Connection>, right: Array<Connection> }}
+ */
+export function connectionsBySide(input = []) {
+  const grouped = { left: [], right: [] };
+  for (const connection of sanitizeConnections(input)) {
+    grouped[connection.side].push(connection);
+  }
+  return grouped;
 }
 
 export function isTransparentStyleValue(value) {

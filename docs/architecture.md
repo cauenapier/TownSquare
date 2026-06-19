@@ -48,7 +48,11 @@ That separation is now reflected directly in the repo:
 - `public/demo.mjs` + `public/index.html` = demo shell
 - `public/hosted/` = hosted setup/admin shells (register/admin/service-admin
   HTML + scripts) sharing `public/hosted/hosted-common.mjs` and `public/lib/`.
-- `public/dev/` = dev tooling (`dev.html` + `dev-scene.mjs`, `walk-sandbox.*`)
+- `public/dev/` = dev tooling (`dev.html` + `dev-scene.mjs`, `walk-sandbox.*`).
+  `dev-scene` mounts the real widget via `mountTownSquare`'s `simulate` mode
+  (no socket, peers/birds visible) and only adds the wandering simulated crowd
+  and reading-tuning panel — so the dev scene behaves exactly like production
+  with no duplicated runtime logic.
 - `public/lib/` = generic browser helpers shared across pages (`ui-common.mjs`)
 - `server.js` = static + realtime service. Public embed URLs (`/townsquare.mjs`,
   `/widget.css`) are a stable contract; clean routes (`/admin`, `/dev`, …) are

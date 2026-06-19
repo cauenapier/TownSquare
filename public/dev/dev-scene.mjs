@@ -1,21 +1,21 @@
-import { DEFAULT_LAYOUT_CONFIG, layoutBubbleColumns, layoutConfigFor } from "../widget/bubble-layout.mjs";
+/**
+ * Dev scene: the real TownSquare widget driven by simulated peers.
+ *
+ * The page mounts `mountTownSquare` in `simulate` mode, so the "you" figure and
+ * the whole runtime — movement, tap-to-walk, jump/high-five, quiet, chat, prop
+ * settle, birds, layout — are exactly the production code. The only thing this
+ * file owns is the crowd: simulated visitors that wander and chatter, fed
+ * through the same peer API the socket uses, plus the reading-tuning panel.
+ */
+
+import { mountTownSquare } from "../townsquare.mjs";
+import { DEFAULT_LAYOUT_CONFIG } from "../widget/bubble-layout.mjs";
 import { sayMessage } from "../widget/chat.mjs";
-import { createExpandController } from "../widget/expand.mjs";
+import { CHARACTER_COLORS, MAX_X, MIN_X, randomSpawnX } from "../widget/constants.mjs";
+import { setWalking } from "../widget/dom.mjs";
 import { clamp } from "../widget/math.mjs";
-import {
-  createAvatar,
-  renderAvatar,
-  renderProps,
-  renderShell,
-  wireHelpPanel,
-  setFacing,
-  setWalking,
-  updatePose,
-  updatePropEffects,
-} from "../widget/dom.mjs";
-import { MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, randomSpawnX } from "../widget/constants.mjs";
-import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
-import { PROPS } from "../shared/scene-props.mjs";
+import { applyPeerState, removePeer } from "../widget/presence.mjs";
+import { syncBirdsFromHello } from "../widget/birds.mjs";
 import { bindCopy } from "../lib/ui-common.mjs";
 
 const DEFAULT_CHARACTER_COUNT = 12;
@@ -37,12 +37,13 @@ const LINES = [
 ];
 
 /**
- * Live tuning state, read every frame by the running scene. Sliders mutate this
- * in place so changes land without rebuilding (and resetting) the scene.
+ * Live tuning state, read every frame by the running scene. `layout` is a stable
+ * object the production loop reads through `ctx.options.layout`, so sliders that
+ * mutate it in place land without rebuilding (and resetting) the scene.
  */
 const tuning = {
   layout: { ...DEFAULT_LAYOUT_CONFIG },
-  /** Multiplier on how often actors speak; 1 = baseline, higher = chattier. */
+  /** Multiplier on how often simulated visitors speak; 1 = baseline. */
   talkRate: 1,
 };
 
@@ -62,8 +63,6 @@ if (
 ) {
   throw new Error("Dev scene controls not found");
 }
-
-let handle = null;
 
 function readCount() {
   const params = new URLSearchParams(window.location.search);
@@ -86,213 +85,127 @@ function seededRandom(seed) {
   };
 }
 
-function createActor(index, stage, random) {
-  const avatar = createAvatar({ isSelf: false });
-  const x = randomSpawnX(random);
-  const direction = random() < 0.5 ? -1 : 1;
-  const speed = MOVEMENT_SPEED_MIN + random() * (MOVEMENT_SPEED_MAX - MOVEMENT_SPEED_MIN);
-
-  stage.appendChild(avatar.el);
-  renderAvatar(avatar, x);
-  setFacing(avatar, direction < 0);
-  setWalking(avatar, true);
-
-  return {
-    id: index + 1,
-    avatar,
-    x,
-    direction,
-    speed,
-    nextTurnAt: performance.now() + 1000 + random() * 3500,
-    nextSayAt: performance.now() + 500 + random() * 5000,
-  };
-}
-
-function stepActor(actor, now, dt, random, walking) {
-  if (walking) {
-    setWalking(actor.avatar, true);
-
-    if (now >= actor.nextTurnAt) {
-      actor.direction = random() < 0.5 ? -1 : 1;
-      actor.nextTurnAt = now + 1200 + random() * 4400;
-      setFacing(actor.avatar, actor.direction < 0);
-    }
-
-    actor.x += actor.direction * actor.speed * dt;
-    if (actor.x <= MIN_X || actor.x >= MAX_X) {
-      actor.x = clamp(actor.x, MIN_X, MAX_X);
-      actor.direction *= -1;
-      actor.nextTurnAt = now + 900 + random() * 2500;
-      setFacing(actor.avatar, actor.direction < 0);
-    }
-
-    renderAvatar(actor.avatar, actor.x);
-  } else {
-    setWalking(actor.avatar, false);
-  }
-
-  if (now >= actor.nextSayAt) {
-    const line = LINES[Math.floor(random() * LINES.length)];
-    sayMessage(actor.avatar, { text: line, at: Date.now() });
-    actor.nextSayAt = now + (2500 + random() * 8500) / tuning.talkRate;
-  }
-}
-
-function createSelf(stage) {
-  const self = {
-    x: 0.5,
-    movingLeft: false,
-    movingRight: false,
-    pose: null,
-    propId: null,
-    propZoneEnteredAt: 0,
-    settlePropId: null,
-    avatar: null,
-  };
-
-  self.avatar = createAvatar({
-    isSelf: true,
-    onSubmitChat: () => {
-      const input = self.avatar?.input;
-      const text = input?.value.trim();
-      if (!text || !self.avatar) return;
-      sayMessage(self.avatar, { text, at: Date.now() });
-      input.value = "";
-    },
-  });
-
-  stage.appendChild(self.avatar.el);
-  renderAvatar(self.avatar, self.x);
-  updatePose(self.avatar, self.pose);
-  return self;
-}
-
-function resetSelfSettle(self) {
-  self.propZoneEnteredAt = 0;
-  self.settlePropId = null;
-}
-
-function stepSelf(self, now, dt) {
-  const direction = Number(self.movingRight) - Number(self.movingLeft);
-
-  if (direction !== 0) {
-    self.pose = null;
-    self.propId = null;
-    resetSelfSettle(self);
-    updatePose(self.avatar, self.pose);
-    self.x = clamp(self.x + direction * MOVEMENT_SPEED * dt, MIN_X, MAX_X);
-    renderAvatar(self.avatar, self.x);
-    setFacing(self.avatar, direction < 0);
-    updatePropEffects(self.avatar, self.x, self.propId, PROPS);
-    setWalking(self.avatar, true);
-    return;
-  }
-
-  setWalking(self.avatar, false);
-  updatePropEffects(self.avatar, self.x, self.propId, PROPS);
-  if (self.pose) return;
-
-  const prop = findSettleProp(PROPS, self.x);
-  if (!prop) {
-    resetSelfSettle(self);
-    return;
-  }
-
-  if (self.settlePropId !== prop.id) {
-    self.settlePropId = prop.id;
-    self.propZoneEnteredAt = now;
-    return;
-  }
-
-  if (now - self.propZoneEnteredAt < PROP_SETTLE_MS) return;
-
-  self.x = prop.x + (prop.seats?.[0] || 0);
-  self.pose = prop.pose;
-  self.propId = prop.id;
-  renderAvatar(self.avatar, self.x);
-  updatePose(self.avatar, self.pose);
-  updatePropEffects(self.avatar, self.x, self.propId, PROPS);
-}
-
-function mountDevScene(count, walking) {
-  root.replaceChildren();
-
-  const { app, stage, status, helpButton, helpPanel, expandButton } = renderShell(root);
-  const unwireHelpPanel = wireHelpPanel(helpButton, helpPanel);
-
-  /** @type {import("../widget/dom.mjs").AvatarView[]} */
-  let sceneAvatars = [];
-
-  const expandController = createExpandController({
-    app,
-    expandButton,
-    getAvatars: () => sceneAvatars,
-  });
-  const onExpandClick = () => expandController.setExpanded(!expandController.isExpanded());
-
-  renderProps(stage, PROPS);
-  status.textContent = `You plus ${count} simulated ${count === 1 ? "character" : "characters"}`;
-
-  const random = seededRandom(count * 9973);
-  const actors = Array.from({ length: count }, (_, index) => createActor(index, stage, random));
-  const self = createSelf(stage);
-  sceneAvatars = [self.avatar, ...actors.map((actor) => actor.avatar)];
-
-  expandButton.addEventListener("click", onExpandClick);
-  let actorsWalking = walking;
+/**
+ * Mount the production widget once and drive a wandering crowd of simulated
+ * peers through its real peer API. Returns controls the page wires to the form.
+ *
+ * @param {import("../widget/context.mjs").WidgetContext} ctx
+ */
+function createSimulation(ctx) {
+  /** @type {Array<{ id: string, x: number, direction: number, speed: number, nextTurnAt: number, nextSayAt: number }>} */
+  let actors = [];
+  let walking = true;
+  let random = seededRandom(1);
   let frame = null;
   let lastFrameAt = performance.now();
-  const onKeyDown = (event) => {
-    if (event.target instanceof HTMLInputElement) return;
-    if (event.key === "ArrowLeft") self.movingLeft = true;
-    if (event.key === "ArrowRight") self.movingRight = true;
-  };
-  const onKeyUp = (event) => {
-    if (event.key === "ArrowLeft") self.movingLeft = false;
-    if (event.key === "ArrowRight") self.movingRight = false;
-  };
+
+  function clearActors() {
+    for (const actor of actors) removePeer(ctx, actor.id);
+    actors = [];
+  }
+
+  function setSceneStatus(count) {
+    ctx.statusRowEl.hidden = false;
+    ctx.statusEl.textContent = `You plus ${count} simulated ${count === 1 ? "character" : "characters"}`;
+  }
+
+  function setCount(count) {
+    clearActors();
+    random = seededRandom(count * 9973);
+    const now = performance.now();
+    actors = Array.from({ length: count }, (_, index) => {
+      const id = `sim-${index + 1}`;
+      const x = randomSpawnX(random);
+      applyPeerState(ctx, {
+        id,
+        x,
+        displayName: `Visitor ${index + 1}`,
+        color: CHARACTER_COLORS[index % CHARACTER_COLORS.length],
+      });
+      return {
+        id,
+        x,
+        direction: random() < 0.5 ? -1 : 1,
+        speed: MOVEMENT_SPEED_MIN + random() * (MOVEMENT_SPEED_MAX - MOVEMENT_SPEED_MIN),
+        nextTurnAt: now + 1000 + random() * 3500,
+        nextSayAt: now + 500 + random() * 5000,
+      };
+    });
+    setSceneStatus(count);
+  }
+
+  function stepActor(actor, now, dt) {
+    const peer = ctx.peers.get(actor.id);
+    if (!peer) return;
+
+    if (walking) {
+      if (now >= actor.nextTurnAt) {
+        actor.direction = random() < 0.5 ? -1 : 1;
+        actor.nextTurnAt = now + 1200 + random() * 4400;
+      }
+      actor.x += actor.direction * actor.speed * dt;
+      if (actor.x <= MIN_X || actor.x >= MAX_X) {
+        actor.x = clamp(actor.x, MIN_X, MAX_X);
+        actor.direction *= -1;
+        actor.nextTurnAt = now + 900 + random() * 2500;
+      }
+      // applyPeerState re-renders the figure and faces it by its movement delta,
+      // exactly as an incoming "move" message would.
+      applyPeerState(ctx, { id: actor.id, x: actor.x });
+      setWalking(peer.avatar, true);
+    } else {
+      setWalking(peer.avatar, false);
+    }
+
+    if (now >= actor.nextSayAt) {
+      sayMessage(peer.avatar, { text: LINES[Math.floor(random() * LINES.length)], at: Date.now() });
+      actor.nextSayAt = now + (2500 + random() * 8500) / tuning.talkRate;
+    }
+  }
 
   const tick = (now) => {
     const dt = Math.min(0.05, (now - lastFrameAt) / 1000);
     lastFrameAt = now;
-    stepSelf(self, now, dt);
-    for (const actor of actors) {
-      stepActor(actor, now, dt, random, actorsWalking);
-    }
-    layoutBubbleColumns(stage, [self, ...actors], self.x, layoutConfigFor(tuning.layout, expandController.isExpanded()));
+    for (const actor of actors) stepActor(actor, now, dt);
     frame = requestAnimationFrame(tick);
   };
-
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
   frame = requestAnimationFrame(tick);
 
   return {
-    setActorsWalking(nextWalking) {
-      actorsWalking = nextWalking;
-      if (!actorsWalking) {
-        for (const actor of actors) {
-          setWalking(actor.avatar, false);
-        }
-      }
+    setCount,
+    setWalking(next) {
+      walking = next;
     },
     destroy() {
       if (frame !== null) cancelAnimationFrame(frame);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      expandButton.removeEventListener("click", onExpandClick);
-      expandController.destroy();
-      unwireHelpPanel();
-      root.replaceChildren();
+      clearActors();
     },
   };
 }
 
+/**
+ * Seed a few perched birds so the no-socket dev scene still shows the ambient
+ * layer. Uses the real bird code path; in production these arrive from the server.
+ *
+ * @param {import("../widget/context.mjs").WidgetContext} ctx
+ */
+function seedBirds(ctx) {
+  const perches = [...ctx.birdPerchesById.values()].slice(0, 3);
+  syncBirdsFromHello(ctx, perches.map((perch, index) => ({
+    id: index + 1,
+    perchId: perch.id,
+    x: perch.x,
+  })));
+}
+
+const { ctx } = mountTownSquare(root, { simulate: true, layout: tuning.layout });
+seedBirds(ctx);
+const simulation = createSimulation(ctx);
+
 function applyCount(count) {
-  handle?.destroy();
   countInput.value = String(count);
   writeCount(count);
-  handle = mountDevScene(count, walkingInput.checked);
+  simulation.setCount(count);
 }
 
 form.addEventListener("submit", (event) => {
@@ -301,12 +214,12 @@ form.addEventListener("submit", (event) => {
 });
 
 walkingInput.addEventListener("change", () => {
-  handle?.setActorsWalking(walkingInput.checked);
+  simulation.setWalking(walkingInput.checked);
 });
 
 // --- Live tuning panel: proximity dials, talk rate, mobile frame -----------
-// Sliders mutate `tuning` in place, so the running scene picks changes up on
-// its next frame — no rebuild, no reset. The readout mirrors the current
+// Sliders mutate `tuning` in place, so the running widget loop picks changes up
+// on its next frame — no rebuild, no reset. The readout mirrors the current
 // values so good settings can be read off and baked into DEFAULT_LAYOUT_CONFIG.
 
 const host = document.querySelector(".dev-host");
@@ -365,7 +278,8 @@ for (const button of frameButtons) {
 }
 
 resetButton?.addEventListener("click", () => {
-  tuning.layout = { ...DEFAULT_LAYOUT_CONFIG };
+  // Mutate in place so the loop keeps reading the same `tuning.layout` object.
+  Object.assign(tuning.layout, DEFAULT_LAYOUT_CONFIG);
   tuning.talkRate = 1;
   for (const input of tuneInputs) syncInput(input);
   refreshReadout();

@@ -6,8 +6,9 @@
  * new scene features can grow without turning the mount file into a monolith.
  */
 
-import { submitChat } from "./widget/chat.mjs";
+import { setLocalTyping, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds } from "./widget/birds.mjs";
+import { setupConnections, teardownConnections } from "./widget/connections.mjs";
 import { CHARACTER_COLORS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
 import {
@@ -63,12 +64,16 @@ import {
  * @property {"auto" | "light" | "dark" | "host"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; `host` follows common host-page dark mode signals.
  * @property {boolean} [preview=false] Static customization preview: fixed spawn, local prop settle, no socket, in-place scene/style updates via the mount handle.
  * @property {boolean} [solo=false] Live socket, but hide other visitors on the client.
+ * @property {boolean} [simulate=false] Dev simulation harness: no socket and local prop settle (like `preview`), but peers and birds stay visible so the scene matches production. The caller drives simulated peers through the exposed `ctx`.
+ * @property {import("./widget/bubble-layout.mjs").LayoutConfig} [layout] Live reading-experience dials read by the loop every frame. Omit in production to run on the defaults; the dev scene passes a mutable object its sliders edit in place.
+ * @property {Array<{ side: "left"|"right", label?: string, url: string }>} [connections] Neighbouring towns linked at the stage edges. Each grows a signpost on its side that opens a "walk over" modal.
  */
 
 /**
  * @typedef {Object} TownSquareHandle
- * @property {(config?: { scene?: MountOptions["scene"], style?: MountOptions["style"] }) => void} updateConfig Refresh scene props and/or style tokens without remounting.
+ * @property {(config?: { scene?: MountOptions["scene"], style?: MountOptions["style"], connections?: MountOptions["connections"] }) => void} updateConfig Refresh scene props, style tokens, and/or neighbour connections without remounting.
  * @property {() => void} destroy Tear down listeners, animation, socket, and mounted DOM.
+ * @property {import("./widget/context.mjs").WidgetContext} ctx Live mount context. Exposed for the dev simulation harness to drive peers; host pages should not touch it.
  */
 
 const PREVIEW_SPAWN_X = (MIN_X + MAX_X) / 2;
@@ -124,7 +129,12 @@ export function mountTownSquare(root, options = {}) {
   const readingActive = document.visibilityState === "visible" && document.hasFocus();
   const preview = options.preview === true;
   const solo = options.solo === true;
-  const spawnX = preview || solo ? PREVIEW_SPAWN_X : randomSpawnX();
+  // The dev simulation harness mounts the real widget but runs without a server:
+  // no socket, prop-settle resolves locally (as in preview), yet peers and birds
+  // stay on screen so the scene behaves exactly like production.
+  const simulate = options.simulate === true;
+  const localOnly = preview || simulate;
+  const spawnX = preview || solo || simulate ? PREVIEW_SPAWN_X : randomSpawnX();
   const peers = new Map();
   const coarsePointer = typeof window.matchMedia === "function"
     && window.matchMedia("(pointer: coarse)").matches;
@@ -188,7 +198,9 @@ export function mountTownSquare(root, options = {}) {
       readingLabel,
       readingUrl,
       readingActive,
+      typing: false,
       isOwner: false,
+      badgeColor: "",
       propZoneEnteredAt: 0,
       settlePropId: null,
       settleRequested: false,
@@ -205,14 +217,16 @@ export function mountTownSquare(root, options = {}) {
           }
         },
         onSubmitChat: () => submitChat(ctx),
+        onTypingChange: (typing) => setLocalTyping(ctx, typing),
         composerHost: coarsePointer ? app : undefined,
       }),
       walkTimer: null,
     },
-    socket: preview
+    socket: localOnly
       ? { readyState: WebSocket.CLOSED, close() {}, send() {} }
       : new WebSocket(socketUrl),
     reconnectTimer: null,
+    typingTimer: null,
     quiet: false,
     expanded: false,
     disposed: false,
@@ -233,6 +247,7 @@ export function mountTownSquare(root, options = {}) {
 
   const setQuiet = (quiet) => {
     ctx.quiet = quiet;
+    if (quiet) setLocalTyping(ctx, false);
     if (quiet) setExpanded(false);
     ctx.app.classList.toggle("townsquare--quiet", quiet);
     ctx.quietButton.classList.toggle("townsquare__control--active", quiet);
@@ -278,21 +293,23 @@ export function mountTownSquare(root, options = {}) {
   stage.appendChild(ctx.self.avatar.el);
   renderAvatar(ctx.self.avatar, ctx.self.x);
   updatePose(ctx.self.avatar, ctx.self.pose);
-  if (preview) {
+  if (localOnly) {
     setStatusMessage(ctx, null);
   } else {
     updateStatus(ctx);
   }
 
-  if (!preview) {
+  if (!localOnly) {
     wireSocket(ctx);
   }
+  setupConnections(ctx);
   wireKeyboard(ctx);
   wireStagePointer(ctx);
   startGameLoop(ctx);
 
   return {
-    updateConfig({ scene, style } = {}) {
+    ctx,
+    updateConfig({ scene, style, connections } = {}) {
       if (scene) {
         const sceneConfig = sanitizeSceneConfig(scene);
         ctx.options = { ...ctx.options, scene: sceneConfig };
@@ -306,6 +323,10 @@ export function mountTownSquare(root, options = {}) {
         ctx.options = { ...ctx.options, style };
         applySiteStyle(root, style);
       }
+      if (connections !== undefined) {
+        ctx.options = { ...ctx.options, connections };
+        setupConnections(ctx);
+      }
     },
     destroy() {
       ctx.disposed = true;
@@ -315,6 +336,7 @@ export function mountTownSquare(root, options = {}) {
       unwireKeyboard(ctx);
       unwireStagePointer(ctx);
       unwireHelpPanel();
+      teardownConnections(ctx);
       jumpButton.removeEventListener("click", onJumpClick);
       highFiveButton.removeEventListener("click", onHighFiveClick);
       closeTrays(ctx);
@@ -326,6 +348,8 @@ export function mountTownSquare(root, options = {}) {
       expandController.destroy();
       clearTimeout(ctx.reconnectTimer);
       ctx.reconnectTimer = null;
+      clearTimeout(ctx.typingTimer);
+      ctx.typingTimer = null;
       ctx.socket.close();
       root.replaceChildren();
     },

@@ -258,6 +258,206 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* Neighbouring-town fingerposts at the stage edges. */
+.townsquare .townsquare-signpost {
+  position: absolute;
+  bottom: 53px;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--prop-ink);
+  cursor: pointer;
+  z-index: 3;
+}
+
+.townsquare .townsquare-signpost--left {
+  left: 12px;
+}
+
+.townsquare .townsquare-signpost--right {
+  right: 12px;
+}
+
+.townsquare-signpost__sign {
+  display: block;
+  width: 22px;
+  height: 38px;
+  opacity: 0.6;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.townsquare-signpost__sign svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.townsquare-signpost__sign svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.townsquare-signpost:hover .townsquare-signpost__sign,
+.townsquare-signpost:focus-visible .townsquare-signpost__sign,
+.townsquare-signpost--near .townsquare-signpost__sign {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.townsquare-signpost:focus-visible {
+  outline: none;
+}
+
+.townsquare-signpost:focus-visible .townsquare-signpost__sign {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.townsquare-signpost__hint {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--you);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+
+.townsquare-signpost--left .townsquare-signpost__hint {
+  left: 0;
+}
+
+.townsquare-signpost--right .townsquare-signpost__hint {
+  right: 0;
+}
+
+.townsquare-signpost--near .townsquare-signpost__hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* "Walk over" modal listing the towns on one side. */
+.townsquare-connections {
+  position: absolute;
+  inset: 0;
+  z-index: 2147483005;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.townsquare-connections__backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--ink) 38%, transparent);
+}
+
+.townsquare-connections__panel {
+  position: relative;
+  z-index: 1;
+  width: min(280px, 86%);
+  max-height: 86%;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--hair-2);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 18px 40px -24px rgba(42, 41, 38, 0.6);
+}
+
+.townsquare-connections__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.townsquare-connections__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.townsquare-connections__close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.townsquare-connections__close:hover,
+.townsquare-connections__close:focus-visible {
+  color: var(--ink);
+}
+
+.townsquare-connections__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.townsquare-connections__item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name go"
+    "host go";
+  align-items: center;
+  column-gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in oklab, var(--hair-2) 70%, transparent);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.townsquare-connections__item:hover,
+.townsquare-connections__item:focus-visible {
+  border-color: var(--you);
+  background: var(--you-tint);
+  outline: none;
+}
+
+.townsquare-connections__item-name {
+  grid-area: name;
+  font-size: 13px;
+}
+
+.townsquare-connections__item-host {
+  grid-area: host;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.townsquare-connections__item-go {
+  grid-area: go;
+  font-size: 12px;
+  color: var(--you-deep);
+  white-space: nowrap;
+}
+
 .townsquare--quiet {
   min-height: 46px;
   overflow: visible;
@@ -600,6 +800,41 @@
   line-height: 1;
   letter-spacing: 0;
   pointer-events: none;
+}
+
+.townsquare-avatar--typing:not(.townsquare-avatar--raised-hand)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -16px;
+  width: 26px;
+  height: 15px;
+  padding: 0;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background-color: color-mix(in oklab, var(--surface) 88%, transparent);
+  background-image:
+    radial-gradient(circle, currentColor 2px, transparent 2.5px),
+    radial-gradient(circle, currentColor 2px, transparent 2.5px),
+    radial-gradient(circle, currentColor 2px, transparent 2.5px);
+  background-position: 5px 6px, 11px 8px, 17px 8px;
+  background-repeat: no-repeat;
+  background-size: 5px 5px;
+  color: color-mix(in oklab, currentColor 62%, transparent);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  animation: presence-typing 900ms ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes presence-typing {
+  0%, 80%, 100% { background-position: 5px 8px, 11px 8px, 17px 8px; }
+  20% { background-position: 5px 4px, 11px 8px, 17px 8px; }
+  40% { background-position: 5px 8px, 11px 4px, 17px 8px; }
+  60% { background-position: 5px 8px, 11px 8px, 17px 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .townsquare-avatar--typing::after { animation: none; }
 }
 
 .townsquare-avatar--raised-hand::after {
@@ -1052,7 +1287,7 @@
   scrollbar-gutter: stable;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 4px);
+  transform: translate(calc(-50% + var(--tray-shift, 0px)), 4px);
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
@@ -1061,7 +1296,7 @@
 .townsquare-avatar--tray-open .townsquare-avatar__tray {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(-50%, 0);
+  transform: translate(calc(-50% + var(--tray-shift, 0px)), 0);
 }
 
 /* composing: your tray would sit over neighbours' speech bubbles */
@@ -1070,7 +1305,7 @@
 .townsquare-avatar--self.townsquare-avatar--has-history:has(.townsquare-avatar__below:hover) .townsquare-avatar__tray {
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 4px);
+  transform: translate(calc(-50% + var(--tray-shift, 0px)), 4px);
 }
 
 .townsquare-avatar--self.townsquare-avatar--composing .townsquare-avatar__above,
@@ -1216,6 +1451,13 @@
   overflow: hidden;
 }
 
+.townsquare-avatar__peer-name-row {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .townsquare-avatar__peer-name {
   display: inline-block;
   max-width: 100%;
@@ -1229,17 +1471,53 @@
 .townsquare-avatar__peer-name[hidden] { display: none; }
 
 /* Owner badge: a server-verified crown that ordinary visitors cannot fake. */
-.townsquare-avatar--owner .townsquare-avatar__plate-name::before,
-.townsquare-avatar--owner .townsquare-avatar__peer-name::before {
-  content: "👑";
+.townsquare-avatar__owner-crown {
+  flex-shrink: 0;
   margin-right: 4px;
   font-size: 0.95em;
   /* Render the emoji in its own colors even when the name is tinted. */
   -webkit-text-fill-color: initial;
+  cursor: default;
 }
 
-.townsquare-avatar--owner .townsquare-avatar__peer-label {
-  background: color-mix(in oklab, var(--surface) 70%, gold 14%);
+.townsquare-avatar__owner-crown[hidden] { display: none; }
+
+.townsquare-avatar__owner-crown:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.townsquare-avatar__owner-role {
+  display: none;
+  align-self: stretch;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  font-weight: 620;
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.townsquare-avatar__owner-role[hidden] { display: none; }
+
+.townsquare-avatar--owner.townsquare-avatar--peer:has(.townsquare-avatar__owner-crown:hover) .townsquare-avatar__owner-role,
+.townsquare-avatar--owner.townsquare-avatar--peer:has(.townsquare-avatar__owner-crown:focus-visible) .townsquare-avatar__owner-role {
+  display: block;
+}
+
+.townsquare-avatar--owner.townsquare-avatar--peer:has(.townsquare-avatar__owner-crown:hover) .townsquare-avatar__reading,
+.townsquare-avatar--owner.townsquare-avatar--peer:has(.townsquare-avatar__owner-crown:focus-visible) .townsquare-avatar__reading {
+  display: none !important;
+}
+
+.townsquare-avatar--owner .townsquare-avatar__peer-label,
+.townsquare-avatar--owner .townsquare-avatar__plate {
+  background: var(--owner-badge-bg, color-mix(in oklab, var(--surface) 70%, gold 14%));
   box-shadow: 0 6px 14px -9px rgba(150, 110, 20, 0.5);
 }
 
