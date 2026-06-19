@@ -541,13 +541,6 @@ export function applyConfigToForm(form, config = {}) {
   syncStyleColorFields(form);
 }
 
-export function getSceneCountNoun(field, count) {
-  const n = Number(count);
-  const singular = field.itemLabel.toLowerCase();
-  const plural = field.label.toLowerCase();
-  return n === 1 ? singular : plural;
-}
-
 export function syncSceneCountProse(form) {
   if (!(form instanceof HTMLFormElement)) return;
 

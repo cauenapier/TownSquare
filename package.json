@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && for f in public/*.mjs public/widget/*.mjs; do node --check \"$f\" || exit 1; done",
+    "check": "node --check server.js && find public -name '*.mjs' -exec node --check {} \\;",
     "smoke": "node scripts/smoke-test.js"
   },
   "dependencies": {

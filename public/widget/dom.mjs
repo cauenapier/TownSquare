@@ -111,12 +111,13 @@ const PENCIL_ICON = `
 `;
 
 const TOWNSQUARE_URL = "https://townsquare.cauenapier.com/";
+const MAP_URL = "https://townsquare.cauenapier.com/map";
 
 /**
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement }}
  */
 export function renderShell(container) {
   const element = document.createElement("section");
@@ -125,14 +126,6 @@ export function renderShell(container) {
   const controls = document.createElement("div");
   controls.className = "townsquare__controls";
 
-  const quietButton = document.createElement("button");
-  quietButton.className = "townsquare__control";
-  quietButton.type = "button";
-  quietButton.innerHTML = QUIET_ICON;
-  quietButton.setAttribute("aria-label", "Turn quiet mode on");
-  quietButton.setAttribute("aria-pressed", "false");
-  quietButton.title = "Quiet mode";
-
   const expandButton = document.createElement("button");
   expandButton.className = "townsquare__control townsquare__control--expand";
   expandButton.type = "button";
@@ -140,6 +133,14 @@ export function renderShell(container) {
   expandButton.setAttribute("aria-label", "Expand widget");
   expandButton.setAttribute("aria-pressed", "false");
   expandButton.title = "Expand";
+
+  const quietButton = document.createElement("button");
+  quietButton.className = "townsquare__control";
+  quietButton.type = "button";
+  quietButton.innerHTML = QUIET_ICON;
+  quietButton.setAttribute("aria-label", "Disable TownSquare");
+  quietButton.setAttribute("aria-pressed", "false");
+  quietButton.title = "Disable TownSquare";
 
   const helpButton = document.createElement("button");
   helpButton.className = "townsquare__control townsquare__help-button";
@@ -150,12 +151,19 @@ export function renderShell(container) {
   helpButton.title = "About TownSquare";
   helpButton.textContent = "?";
 
+  const helpScrim = document.createElement("div");
+  helpScrim.className = "townsquare__help-scrim";
+  helpScrim.hidden = true;
+
   const helpPanel = document.createElement("div");
   helpPanel.className = "townsquare__help-panel";
   helpPanel.id = "townsquare-help-panel";
-  helpPanel.hidden = true;
+  helpPanel.setAttribute("role", "dialog");
+  helpPanel.setAttribute("aria-modal", "true");
+  helpPanel.setAttribute("aria-labelledby", "townsquare-help-title");
 
   const helpTitle = document.createElement("strong");
+  helpTitle.id = "townsquare-help-title";
   helpTitle.textContent = "TownSquare";
 
   const description = document.createElement("p");
@@ -165,15 +173,31 @@ export function renderShell(container) {
   instructions.textContent =
     "Move with the arrow keys or tap where you want to walk. Press J to jump and H to show a high-five; on touch, use the action buttons. Press T or tap your nameplate to chat, and tap a character to see their recent messages.";
 
-  const link = document.createElement("a");
-  link.href = TOWNSQUARE_URL;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
-  link.textContent = "townsquare.cauenapier.com";
+  const links = document.createElement("p");
+  links.className = "townsquare__help-links";
 
-  helpPanel.append(helpTitle, description, instructions, link);
+  const mapLink = document.createElement("a");
+  mapLink.href = MAP_URL;
+  mapLink.target = "_blank";
+  mapLink.rel = "noopener noreferrer";
+  mapLink.textContent = "map";
 
-  controls.append(quietButton, expandButton, helpButton, helpPanel);
+  const homeLink = document.createElement("a");
+  homeLink.href = TOWNSQUARE_URL;
+  homeLink.target = "_blank";
+  homeLink.rel = "noopener noreferrer";
+  homeLink.textContent = "townsquare.cauenapier.com";
+
+  links.append(
+    "View the world of Town Squares and its active cities on the ", mapLink, ".",
+    document.createElement("br"),
+    "Learn more and add your own Town Square at ", homeLink, "."
+  );
+
+  helpPanel.append(helpTitle, description, instructions, links);
+  helpScrim.appendChild(helpPanel);
+
+  controls.append(expandButton, quietButton, helpButton);
 
   const actions = document.createElement("div");
   actions.className = "townsquare__actions";
@@ -210,7 +234,7 @@ export function renderShell(container) {
   stageEl.appendChild(ground);
 
   element.append(controls, actions, statusRow, stageEl);
-  container.appendChild(element);
+  container.append(element, helpScrim);
   return {
     app: element,
     stage: stageEl,
@@ -219,6 +243,7 @@ export function renderShell(container) {
     quietButton,
     expandButton,
     helpButton,
+    helpScrim,
     helpPanel,
     jumpButton,
     highFiveButton,
@@ -229,20 +254,25 @@ export function renderShell(container) {
  * Toggle the About panel from the help button; closes on outside click.
  *
  * @param {HTMLButtonElement} helpButton
+ * @param {HTMLElement} helpScrim
  * @param {HTMLElement} helpPanel
+ * @param {HTMLButtonElement} quietButton
  * @returns {() => void}
  */
-export function wireHelpPanel(helpButton, helpPanel) {
+export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
   const setHelpOpen = (open) => {
-    helpPanel.hidden = !open;
+    helpScrim.hidden = !open;
     helpButton.setAttribute("aria-expanded", String(open));
   };
 
-  const onHelpClick = () => setHelpOpen(helpPanel.hidden);
+  const onHelpClick = () => setHelpOpen(helpScrim.hidden);
   const onHelpPointerDown = (event) => {
-    if (helpPanel.hidden) return;
+    if (helpScrim.hidden) return;
     const target = event.target;
-    if (target instanceof Node && (helpButton.contains(target) || helpPanel.contains(target))) return;
+    if (
+      target instanceof Node
+      && (helpButton.contains(target) || helpPanel.contains(target) || quietButton.contains(target))
+    ) return;
     setHelpOpen(false);
   };
 

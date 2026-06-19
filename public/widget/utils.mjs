@@ -2,6 +2,7 @@
  * Pure browser helpers used during widget mount and connection setup.
  */
 
+import { normalizeAbsoluteOrigin } from "../shared/url.mjs";
 import {
   BROWSER_ID_KEY,
   BROWSER_SECRET_KEY,
@@ -284,11 +285,11 @@ export function saveStoredProfile(profile) {
  * @returns {string}
  */
 export function normalizeOrigin(origin) {
-  const normalized = new URL(origin, window.location.href);
-  normalized.hash = "";
-  normalized.search = "";
-  normalized.pathname = normalized.pathname.replace(/\/$/, "");
-  return normalized.toString().replace(/\/$/, "");
+  const normalized = normalizeAbsoluteOrigin(origin);
+  if (!normalized) {
+    throw new Error(`Invalid TownSquare server origin: ${String(origin)}`);
+  }
+  return normalized;
 }
 
 /**

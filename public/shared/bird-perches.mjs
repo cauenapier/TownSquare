@@ -19,6 +19,3 @@ import { buildBirdPerches } from "./site-config.mjs";
 
 /** @type {Array<BirdPerch>} */
 export const BIRD_PERCHES = buildBirdPerches(PROPS);
-
-/** @type {Map<string, BirdPerch>} */
-export const BIRD_PERCHES_BY_ID = new Map(BIRD_PERCHES.map((perch) => [perch.id, perch]));

@@ -43,7 +43,9 @@ const PLAUSIBLE_HTML_PAGES = new Set([
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
-const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
+const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
+const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
+let ALLOWED_ORIGINS = new Set();
 const DEFAULT_DEV_ORIGINS = new Set([
   `http://${HOST}:${PORT}`,
   `http://127.0.0.1:${PORT}`,
@@ -95,6 +97,8 @@ let DEFAULT_OWNER_BADGE_COLOR;
 let CHARACTER_COLORS = new Set();
 /** @type {Set<string>} */
 let OWNER_BADGE_COLORS = new Set();
+/** @type {() => number} */
+let randomSpawnX;
 
 function loadEnvFile(filePath = path.join(__dirname, ".env")) {
   try {
@@ -142,6 +146,9 @@ let buildBirdPerches = () => [];
 let buildSiteCss = () => "";
 /** @type {(prop: import("./public/shared/site-config.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
+let validateMapWorld;
+let mapWorld;
+let normalizeOrigin;
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -162,20 +169,6 @@ function parseAllowedOrigins(value) {
       .map((origin) => normalizeOrigin(origin))
       .filter(Boolean),
   );
-}
-
-function normalizeOrigin(origin) {
-  if (typeof origin !== "string" || !origin.trim()) return null;
-
-  try {
-    const url = new URL(origin);
-    url.hash = "";
-    url.search = "";
-    url.pathname = "";
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return null;
-  }
 }
 
 function isAllowedOrigin(origin, hostHeader) {
@@ -270,10 +263,6 @@ function createIdentity(id, browserId, x) {
     awaySince: null,
     messages: [],
   };
-}
-
-function randomSpawnX() {
-  return MIN_X + Math.random() * (MAX_X - MIN_X);
 }
 
 function clampPosition(x) {
@@ -604,6 +593,7 @@ function resolvePublicFile(requestUrl, hostHeader) {
     ["/service-admin", "/hosted/service-admin.html"],
     ["/docs", "/docs.html"],
     ["/changelog", "/changelog.html"],
+    ["/map", "/map.html"],
     ["/dev", "/dev/dev.html"],
     ["/walk-sandbox", "/dev/walk-sandbox.html"],
   ]);
@@ -618,12 +608,12 @@ function resolvePublicFile(requestUrl, hostHeader) {
   return filePath;
 }
 
-function readJsonBody(req, res, callback) {
+function readJsonBody(req, res, callback, maxBytes = 4096) {
   let raw = "";
 
   req.on("data", (chunk) => {
     raw += chunk;
-    if (raw.length > 4096) {
+    if (raw.length > maxBytes) {
       res.writeHead(413, { "content-type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ error: "request too large" }));
       req.destroy();
@@ -873,6 +863,51 @@ function handleRegisterSite(req, res) {
   });
 }
 
+function publicMapSite(site) {
+  const scene = scenes.get(site.siteKey);
+  return {
+    siteKey: site.siteKey,
+    name: site.name,
+    origin: site.origin,
+    verifiedAt: site.verifiedAt,
+    lastSeenAt: site.lastSeenAt,
+    messageCount: site.messageCount || 0,
+    activeVisitors: scene ? countActiveVisitors(scene) : 0,
+    connections: getConnections(site),
+  };
+}
+
+function handleMap(req, res) {
+  const sites = Array.from(sitesByKey.values())
+    .filter((site) => site.verifiedAt && !site.disabled)
+    .map(publicMapSite);
+
+  sendJson(res, 200, { sites, world: mapWorld });
+}
+
+function loadMapWorld() {
+  const readWorld = (filePath) => validateMapWorld(JSON.parse(fs.readFileSync(filePath, "utf8")));
+  try {
+    const saved = readWorld(MAP_WORLD_FILE);
+    if (saved.ok) return saved.world;
+    console.warn(`Ignoring invalid saved map world: ${saved.error}`);
+  } catch (error) {
+    if (error.code !== "ENOENT") console.warn(`Could not load saved map world: ${error.message}`);
+  }
+
+  const fallback = readWorld(DEFAULT_MAP_WORLD_FILE);
+  if (!fallback.ok) throw new Error(`Invalid default map world: ${fallback.error}`);
+  return fallback.world;
+}
+
+function saveMapWorld(nextWorld) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmpFile = `${MAP_WORLD_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify(nextWorld, null, 2)}\n`);
+  fs.renameSync(tmpFile, MAP_WORLD_FILE);
+  mapWorld = nextWorld;
+}
+
 function sendAdminSite(req, res, site, adminToken) {
   if (!site) {
     sendJson(res, 403, { error: "Invalid site key or admin token." });
@@ -1100,12 +1135,11 @@ function isServiceAdminAuthorized(req, body, res) {
 
 function serviceAdminSite(site) {
   const scene = scenes.get(site.siteKey);
-  const sceneStats = scene ? getSceneStats(scene) : { activeVisitors: 0 };
 
   return {
     ...publicSite(site),
     updatedAt: site.updatedAt,
-    activeVisitors: sceneStats.activeVisitors,
+    activeVisitors: scene ? countActiveVisitors(scene) : 0,
   };
 }
 
@@ -1130,6 +1164,31 @@ function handleServiceAdminSites(req, res) {
     if (!isServiceAdminAuthorized(req, body, res)) return;
     sendServiceAdminSites(res);
   });
+}
+
+function handleServiceAdminMap(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+    sendJson(res, 200, { world: mapWorld });
+  });
+}
+
+function handleServiceAdminMapSave(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+    const result = validateMapWorld(body.world);
+    if (!result.ok) {
+      sendJson(res, 400, { error: result.error });
+      return;
+    }
+    try {
+      saveMapWorld(result.world);
+      sendJson(res, 200, { world: mapWorld });
+    } catch (error) {
+      console.warn(`Could not save map world: ${error.message}`);
+      sendJson(res, 500, { error: "Could not save the map." });
+    }
+  }, 524288);
 }
 
 /** Each handler mutates the site and returns the JSON response body. */
@@ -1191,24 +1250,44 @@ function send(ws, message) {
   ws.send(JSON.stringify(message));
 }
 
-function snapshotIdentity(identity) {
-  const snapshot = {
+function serializeIdentity(identity, options = {}) {
+  const {
+    reading = false,
+    owner = false,
+    messages = false,
+    clientCount = false,
+    badge = false,
+  } = options;
+  const serialized = {
     id: identity.id,
     x: identity.x,
     pose: identity.pose,
     propId: identity.propId,
     displayName: identity.displayName,
     color: identity.color,
-    readingLabel: identity.readingLabel,
-    readingUrl: identity.readingUrl,
-    readingActive: identity.readingActive,
-    isOwner: identity.isOwner,
-    messages: identity.messages,
   };
-  if (identity.isOwner) {
-    snapshot.badgeColor = identity.badgeColor;
+  if (clientCount) {
+    serialized.clientCount = identity.clients.size;
   }
-  return snapshot;
+  if (reading) {
+    serialized.readingLabel = identity.readingLabel;
+    serialized.readingUrl = identity.readingUrl;
+    serialized.readingActive = identity.readingActive;
+  }
+  if (owner) {
+    serialized.isOwner = identity.isOwner;
+  }
+  if (badge && identity.isOwner) {
+    serialized.badgeColor = identity.badgeColor;
+  }
+  if (messages) {
+    serialized.messages = identity.messages;
+  }
+  return serialized;
+}
+
+function snapshotIdentity(identity) {
+  return serializeIdentity(identity, { reading: true, owner: true, messages: true, badge: true });
 }
 
 function getIdentityReadingActive(identity) {
@@ -1291,23 +1370,27 @@ function broadcast(scene, message, options = {}) {
   }
 }
 
-function emitIdentityState(identity, options = {}) {
-  const { scene } = identity;
-  const { exceptConnectionId = null } = options;
-  const message = {
-    type: "move",
+function broadcastReading(scene, identity, options = {}) {
+  const {
+    exceptConnectionId = null,
+    readingLabel = identity.readingLabel,
+    readingUrl = identity.readingUrl,
+    readingActive = identity.readingActive,
+  } = options;
+  broadcast(scene, {
+    type: "reading",
     id: identity.id,
-    x: identity.x,
-    pose: identity.pose,
-    propId: identity.propId,
-    displayName: identity.displayName,
-    color: identity.color,
-    readingLabel: identity.readingLabel,
-    readingUrl: identity.readingUrl,
-    readingActive: identity.readingActive,
-  };
+    readingLabel,
+    readingUrl,
+    readingActive,
+  }, { exceptConnectionId });
+}
 
-  broadcast(scene, message, { exceptConnectionId });
+function emitIdentityState(identity, options = {}) {
+  broadcast(identity.scene, {
+    type: "move",
+    ...serializeIdentity(identity, { reading: true }),
+  }, { exceptConnectionId: options.exceptConnectionId ?? null });
 }
 
 function createEphemeralIdentity(scene, fallbackX, connectionId) {
@@ -1644,19 +1727,17 @@ function getScene(sceneKey, site = null) {
 function getSceneStats(scene) {
   const visitors = Array.from(scene.identities.values())
     .filter((identity) => identity.joined)
-    .map((identity) => ({
-      id: identity.id,
-      x: identity.x,
-      pose: identity.pose,
-      propId: identity.propId,
-      displayName: identity.displayName,
-      color: identity.color,
-      clientCount: identity.clients.size,
-      isOwner: identity.isOwner,
-      messages: identity.messages,
-    }));
+    .map((identity) => serializeIdentity(identity, { owner: true, messages: true, clientCount: true }));
 
   return { activeVisitors: visitors.length, visitors };
+}
+
+function countActiveVisitors(scene) {
+  let count = 0;
+  for (const identity of scene.identities.values()) {
+    if (identity.joined) count += 1;
+  }
+  return count;
 }
 
 function validateSiteAccess(reqUrl) {
@@ -1706,6 +1787,11 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
 
+  if (req.method === "GET" && url.pathname === "/api/map") {
+    handleMap(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/sites") {
     handleRegisterSite(req, res);
     return;
@@ -1728,6 +1814,16 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/service-admin/sites") {
     handleServiceAdminSites(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/map") {
+    handleServiceAdminMap(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/map/save") {
+    handleServiceAdminMapSave(req, res);
     return;
   }
 
@@ -1831,21 +1927,14 @@ function handleInit(client, message) {
     .filter((peer) => peer.joined && peer.id !== identity.id)
     .map(snapshotIdentity);
 
+  const self = serializeIdentity(identity, { reading: true, owner: true, messages: true, badge: true });
+  const { id, ...selfFields } = self;
+
   send(client.ws, {
     type: "hello",
-    id: identity.id,
+    id,
     browserSecret: identity.browserSecret,
-    x: identity.x,
-    pose: identity.pose,
-    propId: identity.propId,
-    displayName: identity.displayName,
-    color: identity.color,
-    readingLabel: identity.readingLabel,
-    readingUrl: identity.readingUrl,
-    readingActive: identity.readingActive,
-    isOwner: identity.isOwner,
-    ...(identity.isOwner ? { badgeColor: identity.badgeColor } : {}),
-    messages: identity.messages,
+    ...selfFields,
     peers,
     birds: snapshotBirds(scene),
   });
@@ -1856,13 +1945,7 @@ function handleInit(client, message) {
       || identity.readingUrl !== previousReadingUrl
       || identity.readingActive !== previousReadingActive
     ) {
-      broadcast(scene, {
-        type: "reading",
-        id: identity.id,
-        readingLabel: identity.readingLabel,
-        readingUrl: identity.readingUrl,
-        readingActive: identity.readingActive,
-      }, { exceptConnectionId: client.connectionId });
+      broadcastReading(scene, identity, { exceptConnectionId: client.connectionId });
     }
     // Reconnect during the grace window: the owner gets applyOwnerProfile above
     // but we skip the join broadcast, so refresh peers with the claimed look.
@@ -1992,13 +2075,7 @@ function handleReading(client, message) {
     && client.identity.readingActive === previousReadingActive
   ) return;
 
-  broadcast(client.scene, {
-    type: "reading",
-    id: client.identity.id,
-    readingLabel,
-    readingUrl,
-    readingActive: client.identity.readingActive,
-  });
+  broadcastReading(client.scene, client.identity, { readingLabel, readingUrl });
 }
 
 function handleSceneConfig(client, message) {
@@ -2106,13 +2183,7 @@ function handleClientClose(client) {
 
   if (identity.clients.size > 0) {
     if (refreshIdentityReadingActive(identity)) {
-      broadcast(identity.scene, {
-        type: "reading",
-        id: identity.id,
-        readingLabel: identity.readingLabel,
-        readingUrl: identity.readingUrl,
-        readingActive: identity.readingActive,
-      });
+      broadcastReading(identity.scene, identity);
     }
     syncIdentityAwayState(identity);
     return;
@@ -2223,6 +2294,7 @@ async function startServer() {
   DEFAULT_OWNER_BADGE_COLOR = shared.DEFAULT_OWNER_BADGE_COLOR;
   CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);
   OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
+  randomSpawnX = shared.randomSpawnX;
 
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
@@ -2230,11 +2302,13 @@ async function startServer() {
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry] = await Promise.all([
+  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule] = await Promise.all([
     import("./public/shared/site-config.mjs"),
     import("./public/shared/scene-props.mjs"),
     import("./public/shared/bird-perches.mjs"),
     import("./public/shared/scene-prop-geometry.mjs"),
+    import("./public/shared/map-world.mjs"),
+    import("./public/shared/url.mjs"),
   ]);
 
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
@@ -2246,6 +2320,10 @@ async function loadSharedModules() {
   buildBirdPerches = siteConfig.buildBirdPerches;
   buildSiteCss = siteConfig.buildSiteCss;
   isWithinPropSettleZone = geometry.isWithinPropSettleZone;
+  validateMapWorld = mapWorldModule.validateMapWorld;
+  normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
+  ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
+  mapWorld = loadMapWorld();
 
   PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
   BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;

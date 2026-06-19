@@ -139,18 +139,6 @@ export function setStatus(element, message, isError = false, { hideWhenEmpty = f
   }
 }
 
-/**
- * Write `value` into an input unless the user is actively editing it.
- *
- * @param {HTMLInputElement | HTMLTextAreaElement} input
- * @param {string} value
- */
-export function setValueIfIdle(input, value) {
-  if (document.activeElement !== input) {
-    input.value = value;
-  }
-}
-
 const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
@@ -204,27 +192,4 @@ export function createCredentialStore(key, { ttlMs = REMEMBER_TTL_MS } = {}) {
       localStorage.removeItem(key);
     },
   };
-}
-
-/**
- * Render `{ label, value }` entries as a `<dl>` definition list.
- *
- * @param {HTMLElement} container
- * @param {Array<{ label: string, value: unknown }>} entries
- */
-export function renderDefinitionList(container, entries) {
-  container.replaceChildren();
-  const list = document.createElement("dl");
-
-  for (const entry of entries) {
-    const row = document.createElement("div");
-    const key = document.createElement("dt");
-    const value = document.createElement("dd");
-    key.textContent = entry.label;
-    value.textContent = String(entry.value);
-    row.append(key, value);
-    list.appendChild(row);
-  }
-
-  container.appendChild(list);
 }

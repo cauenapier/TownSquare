@@ -57,6 +57,49 @@
           </div>
         </section>
 
+        <section class="hosted-section map-editor" aria-labelledby="map-editor-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="map-editor-title">World map</h2>
+              <p class="hosted-note">Paint scenery around the public TownSquares, then save to publish it.</p>
+            </div>
+            <p class="hosted-status map-editor__status" id="map-editor-status" role="status">Loading map...</p>
+          </div>
+
+          <div class="map-editor__toolbar" role="toolbar" aria-label="Map painting tools">
+            <div class="map-editor__tools">
+              <button type="button" data-map-tool="tree" aria-pressed="true">Tree brush</button>
+              <button type="button" data-map-tool="mountain" aria-pressed="false">Mountain</button>
+              <button type="button" data-map-tool="lake" aria-pressed="false">Lake brush</button>
+              <button type="button" data-map-tool="river" aria-pressed="false">River</button>
+              <button type="button" data-map-tool="erase" aria-pressed="false">Eraser</button>
+            </div>
+            <div class="map-editor__brush-controls">
+              <label>
+                <span>Brush size <output id="map-brush-size-value">90</output></span>
+                <input id="map-brush-size" type="range" min="24" max="180" value="90" />
+              </label>
+              <label id="map-density-control">
+                <span>Tree density <output id="map-density-value">5</output></span>
+                <input id="map-density" type="range" min="1" max="10" value="5" />
+              </label>
+            </div>
+            <div class="map-editor__actions">
+              <button type="button" class="hosted-quiet-button" id="map-undo" disabled>Undo</button>
+              <button type="button" class="hosted-quiet-button" id="map-redo" disabled>Redo</button>
+              <button type="button" class="hosted-quiet-button" id="map-discard" disabled>Discard</button>
+              <button type="button" id="map-save" disabled>Save map</button>
+            </div>
+          </div>
+
+          <div
+            class="map-editor__canvas"
+            id="map-editor-canvas"
+            aria-label="World map scenery editor"
+            hidden
+          ></div>
+        </section>
+
         <section class="service-sites" id="site-list" aria-live="polite">
           <div class="service-toolbar">
             <label class="service-filter">

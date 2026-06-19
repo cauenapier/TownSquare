@@ -6,6 +6,7 @@ const SERVER_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
 const HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
+const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 
@@ -317,6 +318,70 @@ async function assertServiceAdminCanManageSites(hostedA, hostedB) {
   );
 }
 
+async function assertServiceAdminCanEditMap() {
+  if (!SERVICE_ADMIN_PASSWORD) return;
+
+  const publicBefore = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
+  assert(publicBefore.world?.width === 1800, "public map did not include the world");
+  assert(
+    publicBefore.sites.every((site) => Number.isFinite(site.messageCount)),
+    "public map sites did not include total message counts",
+  );
+  assert(
+    publicBefore.sites.every((site) => Number.isFinite(site.activeVisitors)),
+    "public map sites did not include active visitor counts",
+  );
+  assert(Array.isArray(publicBefore.world?.props), "public map world did not include props");
+  assert(Array.isArray(publicBefore.world?.water), "public map world did not include water strokes");
+
+  const unauthorized = await postJson("/api/service-admin/map", { password: "wrong-map-password" });
+  assert(unauthorized.response.status === 403, "map editor accepted an invalid service password");
+
+  const loaded = await serviceAdminApi("/api/service-admin/map");
+  assert(Array.isArray(loaded.world?.props), "service admin did not load the map world");
+  const original = loaded.world;
+  const edited = {
+    ...original,
+    water: [
+      ...original.water.slice(0, 198),
+      { type: "lake", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
+      { type: "river", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
+    ],
+  };
+
+  try {
+    const saved = await serviceAdminApi("/api/service-admin/map/save", { world: edited });
+    assert(saved.world.water.some((stroke) => stroke.type === "lake"), "service admin did not save a lake");
+    assert(saved.world.water.some((stroke) => stroke.type === "river"), "service admin did not save a river");
+    const persisted = JSON.parse(fs.readFileSync(MAP_WORLD_FILE, "utf8"));
+    assert(persisted.water.some((stroke) => stroke.type === "lake"), "map world was not persisted to DATA_DIR");
+
+    const publicAfter = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
+    assert(publicAfter.world.water.some((stroke) => stroke.type === "lake"), "saved world was not public");
+
+    for (const world of [
+      { ...edited, props: [{ type: "castle", x: 10, y: 10 }] },
+      { ...edited, props: [{ type: "tree", x: -1, y: 10 }] },
+      { ...edited, props: Array.from({ length: 1001 }, () => ({ type: "tree", x: 10, y: 10 })) },
+      { ...edited, water: [{ type: "ocean", width: 50, points: [{ x: 10, y: 10 }] }] },
+    ]) {
+      const invalid = await postJson("/api/service-admin/map/save", {
+        password: SERVICE_ADMIN_PASSWORD,
+        world,
+      });
+      assert(invalid.response.status === 400, "service admin accepted an invalid map world");
+    }
+
+    const afterInvalid = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
+    assert(
+      JSON.stringify(afterInvalid.world) === JSON.stringify(edited),
+      "an invalid save changed the public map world",
+    );
+  } finally {
+    await serviceAdminApi("/api/service-admin/map/save", { world: original });
+  }
+}
+
 async function assertServiceAdminShowsActiveVisitors(hostedA, hostedB) {
   if (!SERVICE_ADMIN_PASSWORD) return;
 
@@ -433,6 +498,7 @@ async function main() {
   }
 
   await assertEmbeddableAssetsAreCrossOriginLoadable();
+  await assertServiceAdminCanEditMap();
 
   const first = await connect({
     x: 0.25,

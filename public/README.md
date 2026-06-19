@@ -19,7 +19,7 @@ widget/   shared/   hosted/   dev/   lib/
   presence, protocol, movement, birds, page-watch, the `expand` controller,
   plus `constants`/`math`/`utils`). Start in `townsquare.mjs` and follow imports.
 - `shared/` — `shared-constants.mjs`, `scene-props.mjs`, `scene-prop-geometry.mjs`,
-  `bird-perches.mjs`, `site-config.mjs` (scene/style config + customization CSS).
+  `bird-perches.mjs`, `site-config.mjs`, `map-world.mjs`, and `url.mjs` (shared validation/config).
 - `demo.mjs` + `index.html` — the live demo that mounts the widget.
 - `widget.css` / `tokens.css` / `page.css` — see Styles below.
 
@@ -28,6 +28,7 @@ widget/   shared/   hosted/   dev/   lib/
 `register.html` / `admin.html` / `service-admin.html` with their matching
 `.mjs`, plus `hosted-common.mjs` (shared API/status/auto-refresh helpers).
 Served at the clean routes `/register`, `/admin`, `/service-admin`.
+The service-admin page also edits global map scenery through its authenticated API.
 
 ## Dev tooling — `dev/`
 

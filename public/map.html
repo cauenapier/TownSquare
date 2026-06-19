@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare map</title>
+    <meta
+      name="description"
+      content="Explore the wider TownSquare network and the neighbour links between verified sites."
+    />
+    <link rel="stylesheet" href="/page.css" />
+  </head>
+  <body class="map-page">
+    <main class="map-shell" aria-labelledby="map-title">
+      <header class="map-header">
+        <a class="map-home" href="/">← TownSquare</a>
+        <div>
+          <p class="eyebrow">TownSquare map</p>
+          <h1 id="map-title">A small world of public squares</h1>
+        </div>
+        <p>
+          Verified TownSquares appear as places on the map. Paths between them follow the
+          neighbour links each site owner defines at their square's edges.
+        </p>
+      </header>
+
+      <section class="map-stage" aria-label="TownSquare network map">
+        <div class="map-toolbar" aria-label="Map controls">
+          <button type="button" data-map-zoom="in" aria-label="Zoom in">+</button>
+          <button type="button" data-map-zoom="out" aria-label="Zoom out">−</button>
+          <button type="button" data-map-reset>Reset</button>
+        </div>
+
+        <div id="map-status" class="map-status" role="status">Loading verified TownSquares...</div>
+        <div id="townsquare-map" class="map-canvas" tabindex="0" aria-label="Pan and zoom map"></div>
+
+      </section>
+
+      <dialog id="map-detail" class="map-detail" aria-labelledby="map-detail-title">
+        <button type="button" class="map-detail__close" aria-label="Close site details">×</button>
+        <p class="eyebrow">Site</p>
+        <h2 id="map-detail-title"></h2>
+        <a class="map-detail__origin" target="_blank" rel="noopener noreferrer"></a>
+        <a class="map-detail__visit" target="_blank" rel="noopener noreferrer">Visit site</a>
+      </dialog>
+    </main>
+
+    <script type="module" src="/map.mjs"></script>
+  </body>
+</html>

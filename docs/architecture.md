@@ -31,6 +31,7 @@ TownSquare currently has three practical surfaces:
      `ownerBrowserIds`; the server stamps `isOwner` on that identity (gated by the
      visitor's `browserSecret`, so it cannot be spoofed) and broadcasts it as a crown
    - service admin password for operator-level site management
+   - service-admin world editor for the public network map
    - small JSON site registry
 
 That separation is now reflected directly in the repo:
@@ -54,6 +55,8 @@ That separation is now reflected directly in the repo:
   and reading-tuning panel — so the dev scene behaves exactly like production
   with no duplicated runtime logic.
 - `public/lib/` = generic browser helpers shared across pages (`ui-common.mjs`)
+- `public/map*.mjs` = public map rendering and shared deterministic town layout;
+  the server persists operator-edited point props and water strokes under `DATA_DIR`.
 - `server.js` = static + realtime service. Public embed URLs (`/townsquare.mjs`,
   `/widget.css`) are a stable contract; clean routes (`/admin`, `/dev`, …) are
   aliased to their files in `resolvePublicFile`, so files can move without
