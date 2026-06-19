@@ -22,7 +22,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `server.js` — Node server for static assets, health checks, and WebSocket presence
 - `public/townsquare.mjs` — reusable embeddable widget mount API (public embed URL `/townsquare.mjs`)
 - `public/widget/` — widget implementation modules (DOM, chat, presence, protocol, movement)
-- `public/shared/` — protocol/scene/style definitions shared with the server (`shared-constants`, `scene-props`, `scene-prop-geometry`, `bird-perches`, `site-config`)
+- `public/shared/` — protocol, scene, style, and map definitions shared with the server
 - `public/widget.css` — embeddable widget styling (scoped to `#townsquare-root`)
 - `public/page.css` — full-page chrome for TownSquare host pages only
 - `public/tokens.css` — shared design tokens (imported by widget.css and page.css)
@@ -226,7 +226,7 @@ Registered sites are stored in `.data/sites.json` by default.
 Set `DATA_DIR` if the registry should live somewhere else.
 Set `PUBLIC_ORIGIN` in production so generated snippets use the public HTTPS origin.
 Set `AUTH_FAILURES_PER_HOUR` to tune per-IP failed admin sign-in throttling; `0` disables it.
-Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can list registered sites, reset site admin tokens, disable sites or chat, and delete site records.
+Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering, freehand lakes, and curved rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
 Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to send a Telegram notification whenever a chat message is sent.
 Set `INACTIVE_DISCONNECT_MS` and `INACTIVE_CHECK_INTERVAL_MS` to control away/inactive disconnects (see `.env.example`).
 For local runs, copy `.env.example` to `.env` (or create `.env` directly); `server.js` loads it on startup. Real environment variables win over `.env` values.
@@ -321,6 +321,7 @@ The smoke test verifies:
 - say
 - leave
 - hosted site isolation and admin token hashing
+- service-admin map validation and persistence
 
 To also verify inactive disconnect, restart the server with a short timeout and rerun smoke:
 

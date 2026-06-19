@@ -16,3 +16,6 @@ npm-debug.log*
 
 # Local hosted-site registry
 .data/
+
+# Admin scripts
+/scripts/admin/*

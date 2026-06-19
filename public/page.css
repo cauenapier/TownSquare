@@ -1543,6 +1543,97 @@ body {
   margin-top: 24px;
 }
 
+.map-editor__status {
+  margin: 0;
+  text-align: right;
+}
+
+.map-editor__toolbar,
+.map-editor__tools,
+.map-editor__brush-controls,
+.map-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-editor__brush-controls label {
+  display: grid;
+  gap: 3px;
+  min-width: 130px;
+  color: var(--ink-soft);
+  font: 650 0.72rem var(--font);
+}
+
+.map-editor__brush-controls [hidden] {
+  display: none;
+}
+
+.map-editor__brush-controls output {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.map-editor__brush-controls input[type="range"] {
+  width: 130px;
+  accent-color: var(--you);
+}
+
+.map-editor__toolbar {
+  justify-content: space-between;
+  margin: 14px 0 10px;
+}
+
+.map-editor__toolbar button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--hair-2);
+  font: 700 0.84rem var(--font);
+  cursor: pointer;
+}
+
+.map-editor__toolbar button[aria-pressed="true"],
+.map-editor__toolbar #map-save {
+  background: var(--ink);
+  color: var(--surface);
+  box-shadow: none;
+}
+
+.map-editor__toolbar button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.map-editor__canvas {
+  overflow: hidden;
+  aspect-ratio: 3 / 2;
+  min-height: 360px;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(200, 100, 31, 0.08), transparent 26%),
+    linear-gradient(180deg, var(--page), var(--scene-edge));
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.map-editor__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.map-editor__svg .map-scenery,
+.map-editor__towns {
+  pointer-events: none;
+}
+
 .service-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -2131,6 +2222,29 @@ body {
   opacity: 0.72;
 }
 
+.map-lake {
+  fill: none;
+  stroke: color-mix(in oklab, #79a9b5 58%, var(--surface) 42%);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-river,
+.map-river__bank {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-river__bank {
+  stroke: color-mix(in oklab, #527f8a 50%, var(--page) 50%);
+  opacity: 0.55;
+}
+
+.map-river {
+  stroke: color-mix(in oklab, #79a9b5 72%, var(--surface) 28%);
+}
+
 .map-tree__crown {
   fill: color-mix(in oklab, #5f7d55 84%, var(--surface) 16%);
   stroke: color-mix(in oklab, #5f7d55 76%, var(--ink) 24%);
@@ -2448,6 +2562,12 @@ body {
   .visitor-row {
     align-items: stretch;
     flex-direction: column;
+  }
+  .map-editor__status {
+    text-align: left;
+  }
+  .map-editor__canvas {
+    min-height: 260px;
   }
   .townsquare-host { margin-top: 32px; }
   .docs-shell { padding: 24px 14px 48px; gap: 8px; }

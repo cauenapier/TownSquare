@@ -43,6 +43,8 @@ const PLAUSIBLE_HTML_PAGES = new Set([
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
+const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
+const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
 const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
 const DEFAULT_DEV_ORIGINS = new Set([
   `http://${HOST}:${PORT}`,
@@ -142,6 +144,8 @@ let buildBirdPerches = () => [];
 let buildSiteCss = () => "";
 /** @type {(prop: import("./public/shared/site-config.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
+let validateMapWorld;
+let mapWorld;
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -619,12 +623,12 @@ function resolvePublicFile(requestUrl, hostHeader) {
   return filePath;
 }
 
-function readJsonBody(req, res, callback) {
+function readJsonBody(req, res, callback, maxBytes = 4096) {
   let raw = "";
 
   req.on("data", (chunk) => {
     raw += chunk;
-    if (raw.length > 4096) {
+    if (raw.length > maxBytes) {
       res.writeHead(413, { "content-type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ error: "request too large" }));
       req.destroy();
@@ -890,7 +894,30 @@ function handleMap(req, res) {
     .filter((site) => site.verifiedAt && !site.disabled)
     .map(publicMapSite);
 
-  sendJson(res, 200, { sites });
+  sendJson(res, 200, { sites, world: mapWorld });
+}
+
+function loadMapWorld() {
+  const readWorld = (filePath) => validateMapWorld(JSON.parse(fs.readFileSync(filePath, "utf8")));
+  try {
+    const saved = readWorld(MAP_WORLD_FILE);
+    if (saved.ok) return saved.world;
+    console.warn(`Ignoring invalid saved map world: ${saved.error}`);
+  } catch (error) {
+    if (error.code !== "ENOENT") console.warn(`Could not load saved map world: ${error.message}`);
+  }
+
+  const fallback = readWorld(DEFAULT_MAP_WORLD_FILE);
+  if (!fallback.ok) throw new Error(`Invalid default map world: ${fallback.error}`);
+  return fallback.world;
+}
+
+function saveMapWorld(nextWorld) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmpFile = `${MAP_WORLD_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify(nextWorld, null, 2)}\n`);
+  fs.renameSync(tmpFile, MAP_WORLD_FILE);
+  mapWorld = nextWorld;
 }
 
 function sendAdminSite(req, res, site, adminToken) {
@@ -1150,6 +1177,31 @@ function handleServiceAdminSites(req, res) {
     if (!isServiceAdminAuthorized(req, body, res)) return;
     sendServiceAdminSites(res);
   });
+}
+
+function handleServiceAdminMap(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+    sendJson(res, 200, { world: mapWorld });
+  });
+}
+
+function handleServiceAdminMapSave(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+    const result = validateMapWorld(body.world);
+    if (!result.ok) {
+      sendJson(res, 400, { error: result.error });
+      return;
+    }
+    try {
+      saveMapWorld(result.world);
+      sendJson(res, 200, { world: mapWorld });
+    } catch (error) {
+      console.warn(`Could not save map world: ${error.message}`);
+      sendJson(res, 500, { error: "Could not save the map." });
+    }
+  }, 524288);
 }
 
 /** Each handler mutates the site and returns the JSON response body. */
@@ -1756,6 +1808,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/service-admin/map") {
+    handleServiceAdminMap(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/map/save") {
+    handleServiceAdminMapSave(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/service-admin/action") {
     handleServiceAdminAction(req, res);
     return;
@@ -2255,11 +2317,12 @@ async function startServer() {
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry] = await Promise.all([
+  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule] = await Promise.all([
     import("./public/shared/site-config.mjs"),
     import("./public/shared/scene-props.mjs"),
     import("./public/shared/bird-perches.mjs"),
     import("./public/shared/scene-prop-geometry.mjs"),
+    import("./public/shared/map-world.mjs"),
   ]);
 
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
@@ -2271,6 +2334,8 @@ async function loadSharedModules() {
   buildBirdPerches = siteConfig.buildBirdPerches;
   buildSiteCss = siteConfig.buildSiteCss;
   isWithinPropSettleZone = geometry.isWithinPropSettleZone;
+  validateMapWorld = mapWorldModule.validateMapWorld;
+  mapWorld = loadMapWorld();
 
   PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
   BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;

@@ -1,160 +1,65 @@
 import { mountainPath, treeCrownPath, treeTrunkPath } from "./map-glyphs.mjs";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const GLYPH_TYPES = new Set(["mountains", "trees"]);
-const DEFAULT_WORLD = { width: 1800, height: 1200, clusters: [] };
-/** Minimum center-to-center gap for scattered trees (crown is ~56px wide). */
-const TREE_MIN_SPACING = 30;
-const SCATTER_ATTEMPTS = 40;
-
-function hashString(value) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
 
 function createSvgElement(tag, attrs = {}) {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [name, value] of Object.entries(attrs)) {
-    el.setAttribute(name, String(value));
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, String(value));
+  return element;
+}
+
+function smoothPath(points) {
+  if (points.length === 1) return `M${points[0].x} ${points[0].y} l0.01 0`;
+  if (points.length === 2) return `M${points[0].x} ${points[0].y} L${points[1].x} ${points[1].y}`;
+
+  let path = `M${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[Math.max(0, index - 1)];
+    const current = points[index];
+    const next = points[index + 1];
+    const after = points[Math.min(points.length - 1, index + 2)];
+    const control1 = { x: current.x + (next.x - previous.x) / 6, y: current.y + (next.y - previous.y) / 6 };
+    const control2 = { x: next.x - (after.x - current.x) / 6, y: next.y - (after.y - current.y) / 6 };
+    path += ` C${control1.x} ${control1.y} ${control2.x} ${control2.y} ${next.x} ${next.y}`;
   }
-  return el;
+  return path;
 }
 
-function isPoint(value) {
-  return Array.isArray(value)
-    && value.length === 2
-    && Number.isFinite(value[0])
-    && Number.isFinite(value[1]);
-}
-
-function clampPoint(x, y, width, height, margin = 40) {
-  return {
-    x: Math.max(margin, Math.min(width - margin, x)),
-    y: Math.max(margin, Math.min(height - margin, y)),
-  };
-}
-
-function scatterPoint(clusterIndex, glyphIndex, center, radius, width, height, salt = 0) {
-  const hash = hashString(`cluster:${clusterIndex}:${glyphIndex}:${salt}`);
-  const angle = (hash % 6283) / 1000;
-  const distance = radius * (((hash >>> 10) % 1000) / 1000);
-  const x = center[0] + Math.cos(angle) * distance;
-  const y = center[1] + Math.sin(angle) * distance;
-  return clampPoint(x, y, width, height);
-}
-
-function minDistanceToPlaced(point, placed) {
-  let minDist = Infinity;
-  for (const existing of placed) {
-    const dx = point.x - existing.x;
-    const dy = point.y - existing.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist < minDist) minDist = dist;
-  }
-  return minDist;
-}
-
-function scatterPointWithSpacing(clusterIndex, glyphIndex, center, radius, width, height, placed, minSpacing) {
-  if (!minSpacing || placed.length === 0) {
-    return scatterPoint(clusterIndex, glyphIndex, center, radius, width, height);
-  }
-
-  let best = scatterPoint(clusterIndex, glyphIndex, center, radius, width, height, 0);
-  let bestMinDist = minDistanceToPlaced(best, placed);
-  if (bestMinDist >= minSpacing) return best;
-
-  for (let attempt = 1; attempt < SCATTER_ATTEMPTS; attempt += 1) {
-    const point = scatterPoint(clusterIndex, glyphIndex, center, radius, width, height, attempt);
-    const minDist = minDistanceToPlaced(point, placed);
-    if (minDist >= minSpacing) return point;
-    if (minDist > bestMinDist) {
-      best = point;
-      bestMinDist = minDist;
+function renderWater(world, createElement) {
+  const group = createElement("g", { class: "map-water", "aria-hidden": "true" });
+  for (const stroke of world.water) {
+    const path = smoothPath(stroke.points);
+    if (stroke.type === "river") {
+      group.append(
+        createElement("path", { class: "map-river__bank", d: path, "stroke-width": stroke.width + 6 }),
+        createElement("path", { class: "map-river", d: path, "stroke-width": stroke.width }),
+      );
+    } else {
+      group.appendChild(createElement("path", {
+        class: "map-lake",
+        d: path,
+        "stroke-width": stroke.width,
+      }));
     }
   }
-
-  return best;
+  return group;
 }
 
-function expandCluster(cluster, clusterIndex, width, height) {
-  if (!GLYPH_TYPES.has(cluster.type)) {
-    console.warn(`Unknown map cluster type: ${cluster.type}`);
-    return [];
+function renderProp(prop, createElement) {
+  if (prop.type === "mountain") {
+    return createElement("path", { class: "map-mountain", d: mountainPath(prop.x, prop.y) });
   }
-
-  if (Array.isArray(cluster.points)) {
-    return cluster.points
-      .filter(isPoint)
-      .map(([x, y]) => ({ type: cluster.type, ...clampPoint(x, y, width, height) }));
-  }
-
-  if (!isPoint(cluster.center) || !Number.isFinite(cluster.count) || !Number.isFinite(cluster.radius)) {
-    console.warn("Skipping invalid map cluster", cluster);
-    return [];
-  }
-
-  const count = Math.max(1, Math.floor(cluster.count));
-  const radius = Math.max(1, cluster.radius);
-  const minSpacing = cluster.type === "trees" ? TREE_MIN_SPACING : 0;
-  const points = [];
-  const placed = [];
-
-  for (let index = 0; index < count; index += 1) {
-    const point = scatterPointWithSpacing(
-      clusterIndex,
-      index,
-      cluster.center,
-      radius,
-      width,
-      height,
-      placed,
-      minSpacing,
-    );
-    points.push({ type: cluster.type, ...point });
-    placed.push(point);
-  }
-
-  return points;
-}
-
-export function parseMapWorld(raw) {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_WORLD };
-
-  const width = Number.isFinite(raw.width) && raw.width > 0 ? raw.width : DEFAULT_WORLD.width;
-  const height = Number.isFinite(raw.height) && raw.height > 0 ? raw.height : DEFAULT_WORLD.height;
-  const clusters = Array.isArray(raw.clusters) ? raw.clusters : [];
-
-  return { width, height, clusters };
+  const tree = createElement("g", { class: "map-tree" });
+  tree.append(
+    createElement("path", { class: "map-tree__crown", d: treeCrownPath(prop.x, prop.y) }),
+    createElement("path", { class: "map-tree__trunk", d: treeTrunkPath(prop.x, prop.y) }),
+  );
+  return tree;
 }
 
 export function renderSceneryLayer(world, createElement = createSvgElement) {
   const group = createElement("g", { class: "map-scenery", "aria-hidden": "true" });
-  const glyphs = [];
-
-  for (const [index, cluster] of world.clusters.entries()) {
-    glyphs.push(...expandCluster(cluster, index, world.width, world.height));
-  }
-
-  for (const glyph of glyphs) {
-    if (glyph.type === "mountains") {
-      group.appendChild(createElement("path", {
-        class: "map-mountain",
-        d: mountainPath(glyph.x, glyph.y),
-      }));
-      continue;
-    }
-
-    const tree = createElement("g", { class: "map-tree" });
-    tree.append(
-      createElement("path", { class: "map-tree__crown", d: treeCrownPath(glyph.x, glyph.y) }),
-      createElement("path", { class: "map-tree__trunk", d: treeTrunkPath(glyph.x, glyph.y) }),
-    );
-    group.appendChild(tree);
-  }
-
+  group.appendChild(renderWater(world, createElement));
+  for (const prop of world.props) group.appendChild(renderProp(prop, createElement));
   return group;
 }
