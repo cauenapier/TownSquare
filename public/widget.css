@@ -1742,7 +1742,7 @@
 /* ── Touch: bottom toolbar ──
    On coarse pointers chat moves off the (moving) figure into a fixed bar at the
    bottom of the widget: an always-visible input, the rename pencil, and the
-   jump / high-five actions. The figure keeps only a static "you" label, and the
+   jump / high-five actions. The figure keeps a compact identity label, and the
    virtual keyboard can't clip any of it. */
 .townsquare__toolbar {
   position: absolute;
@@ -1782,7 +1782,7 @@
   z-index: 1;
 }
 
-/* Static identity under the figure: just "you" (full name lives in the editor). */
+/* Compact identity under the figure: display name, or "you" when unset. */
 .townsquare-avatar__self-id {
   display: inline-flex;
   align-items: center;

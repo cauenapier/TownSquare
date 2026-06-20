@@ -43,7 +43,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLInputElement} [input]
  * @property {HTMLButtonElement} [send]
  * @property {HTMLParagraphElement} [hint] Slow-mode "wait" notice above the composer.
- * @property {boolean} [staticSelfLabel] Touch toolbar mode: pin the under-figure label to "you".
+ * @property {boolean} [staticSelfLabel] Touch toolbar mode: show display name or "you" under the figure.
  * @property {() => void} [openComposer] Open the composer and focus the chat input.
  * @property {ReturnType<typeof setTimeout> | null} [jumpTimer]
  * @property {ReturnType<typeof setTimeout> | null} [raisedHandTimer]
@@ -301,7 +301,7 @@ export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
  * clipping, virtual keyboard cover, overlap with peers), so callers can pass
  * `toolbarHost` to dock a fixed bottom bar instead: an always-visible chat
  * input plus the rename pencil (and, wired by the mount, the action buttons).
- * The under-figure label then shrinks to a static "you".
+ * The under-figure label then shows the display name, or "you" when unset.
  *
  * @param {{
  *   isSelf: boolean,
@@ -388,7 +388,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   const color = profile.color || "";
 
   // On touch the chat input lives in a fixed bottom toolbar instead of floating
-  // under the (moving) figure, so the figure keeps only a static "you" label.
+  // under the (moving) figure, so the figure keeps a compact identity label.
   const toolbarMode = Boolean(toolbarHost);
 
   // Self carries a persistent nameplate at its base: identity, the chat way in,
@@ -531,8 +531,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     input,
     send,
     hint: cooldownHint,
-    // Toolbar mode pins the under-figure label to "you"; the full name only
-    // surfaces in the rename editor (read by setAvatarProfile).
+    // Toolbar mode keeps a compact under-figure label (name or "you").
     staticSelfLabel: toolbarMode,
   };
 
@@ -709,10 +708,8 @@ export function setAvatarProfile(avatar, profile = {}) {
     avatar.el.style.removeProperty("--owner-badge-bg");
   }
   if (avatar.nameEl) {
-    // Toolbar mode pins the under-figure label to "you"; the name still rides in
-    // dataset.value so the rename editor pre-fills correctly.
     avatar.nameEl.textContent = avatar.staticSelfLabel
-      ? "you"
+      ? (displayName || "you")
       : displayName || (isPeer ? (isOwner ? "owner" : "") : "you");
     avatar.nameEl.dataset.value = displayName;
     // Owners always show a nameplate so the verified crown stays visible.
