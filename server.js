@@ -63,7 +63,7 @@ const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
 const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
-const DEFAULT_CHAT_THROTTLE_MS = 1500;
+const DEFAULT_CHAT_THROTTLE_MS = 500;
 const MAX_CHAT_THROTTLE_MS = 30000;
 const MAX_BLOCKED_WORDS = 60;
 const MAX_BLOCKED_WORD_LEN = 40;
@@ -1080,6 +1080,9 @@ const ADMIN_ACTIONS = {
     site.blockedWords = sanitizeBlockedWords(body.blockedWords);
     site.chatThrottleMs = sanitizeChatThrottle(body.chatThrottleMs);
     touchSite(site);
+    // Push the new cooldown to connected widgets so their "wait" hint stays in
+    // sync — otherwise a visitor keeps the old limit until they reconnect.
+    broadcast(scene, { type: "chatThrottle", ms: getChatThrottle(site) });
   },
   kickVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -2137,6 +2140,7 @@ function handleInit(client, message) {
     ...selfFields,
     peers,
     birds: snapshotBirds(scene),
+    chatThrottleMs: getChatThrottle(site),
   });
 
   if (identity.joined) {

@@ -184,7 +184,36 @@ export function sayMessage(avatar, message) {
 }
 
 /**
+ * Show "Wait Ns…" above the composer for the remaining cooldown, keeping the
+ * typed text in place. Auto-clears once the cooldown lapses.
+ *
+ * @param {WidgetContext} ctx
+ * @param {number} remainingMs
+ */
+function showCooldownHint(ctx, remainingMs) {
+  const { hint } = ctx.self.avatar;
+  if (!hint) return;
+  hint.textContent = `Wait ${Math.max(1, Math.ceil(remainingMs / 1000))}s…`;
+  hint.hidden = false;
+  clearTimeout(ctx.cooldownHintTimer);
+  ctx.cooldownHintTimer = setTimeout(() => hideCooldownHint(ctx), remainingMs + 150);
+}
+
+/** @param {WidgetContext} ctx */
+function hideCooldownHint(ctx) {
+  clearTimeout(ctx.cooldownHintTimer);
+  ctx.cooldownHintTimer = null;
+  const { hint } = ctx.self.avatar;
+  if (hint) hint.hidden = true;
+}
+
+/**
  * Send the local composer's text, then show it immediately on your own figure.
+ *
+ * Slow mode is enforced here too: if the cooldown has not elapsed we keep the
+ * typed text and tell the sender how long to wait, rather than letting the
+ * server silently drop the line (which the sender's local echo would otherwise
+ * hide from them).
  *
  * @param {WidgetContext} ctx
  */
@@ -202,9 +231,18 @@ export function submitChat(ctx) {
   const localOnly = ctx.options.preview === true || ctx.options.simulate === true;
   if (!localOnly && ctx.socket.readyState !== WebSocket.OPEN) return;
 
+  const cooldown = ctx.chatThrottleMs || 0;
+  const now = Date.now();
+  if (!localOnly && cooldown > 0 && ctx.self.lastSayAt && now - ctx.self.lastSayAt < cooldown) {
+    showCooldownHint(ctx, cooldown - (now - ctx.self.lastSayAt));
+    return;
+  }
+
   if (ctx.socket.readyState === WebSocket.OPEN) {
     ctx.socket.send(JSON.stringify({ type: "say", text }));
   }
-  sayMessage(ctx.self.avatar, { text, at: Date.now() });
+  sayMessage(ctx.self.avatar, { text, at: now });
+  ctx.self.lastSayAt = now;
   input.value = "";
+  hideCooldownHint(ctx);
 }

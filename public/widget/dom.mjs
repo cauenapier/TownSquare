@@ -42,6 +42,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLFormElement} [composer]
  * @property {HTMLInputElement} [input]
  * @property {HTMLButtonElement} [send]
+ * @property {HTMLParagraphElement} [hint] Slow-mode "wait" notice above the composer.
  * @property {() => void} [openComposer] Open the composer and focus the chat input.
  * @property {ReturnType<typeof setTimeout> | null} [jumpTimer]
  * @property {ReturnType<typeof setTimeout> | null} [raisedHandTimer]
@@ -468,7 +469,15 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   send.innerHTML = ENTER_ICON;
   send.setAttribute("aria-label", "Send message");
 
-  composer.append(input, send);
+  // Slow-mode notice ("Wait 2s…") shown above the composer without clearing the
+  // typed text. Hidden until the cooldown blocks a send.
+  const cooldownHint = document.createElement("p");
+  cooldownHint.className = "townsquare-avatar__composer-hint";
+  cooldownHint.hidden = true;
+  cooldownHint.setAttribute("role", "status");
+  cooldownHint.setAttribute("aria-live", "polite");
+
+  composer.append(input, send, cooldownHint);
   if (composerHost) {
     composer.classList.add("townsquare-avatar__composer--docked");
     below.append(plateRow, ownerRoleEl, profileForm);
@@ -494,6 +503,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     composer,
     input,
     send,
+    hint: cooldownHint,
   };
 
   const closeProfile = () => {

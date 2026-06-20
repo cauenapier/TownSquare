@@ -15,6 +15,8 @@ export {
   randomSpawnX,
 } from "../shared/shared-constants.mjs";
 
+/** Fallback chat cooldown before the server's live value arrives in `hello`. */
+export const DEFAULT_CHAT_THROTTLE_MS = 500;
 export const BUBBLE_TTL_MS = 6000;
 /** Bubble linger time in expanded (fullscreen) mode — more room to read the scene. */
 export const BUBBLE_TTL_EXPANDED_MS = 12_000;

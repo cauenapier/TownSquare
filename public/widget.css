@@ -1664,6 +1664,7 @@
 }
 
 .townsquare-avatar__composer {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -1676,6 +1677,26 @@
 }
 
 .townsquare-avatar__composer[hidden] { display: none; }
+
+/* Slow-mode "Wait Ns…" caption, floating just above the composer pill. */
+.townsquare-avatar__composer-hint {
+  position: absolute;
+  left: 19px;
+  bottom: calc(100% + 6px);
+  margin: 0;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--tray-shadow);
+  color: var(--ink-soft);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.townsquare-avatar__composer-hint[hidden] { display: none; }
 
 .townsquare-avatar__input {
   flex: 1;

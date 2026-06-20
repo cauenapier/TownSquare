@@ -140,6 +140,7 @@ export function wireSocket(ctx) {
       if (message.type === "hello") {
         self.id = message.id;
         saveBrowserSecret(message.browserSecret);
+        if (typeof message.chatThrottleMs === "number") ctx.chatThrottleMs = message.chatThrottleMs;
         applySelfState(ctx, message);
         // Backlog seeds the hover tray only — it never pops a live bubble, so a
         // refresh doesn't replay everyone's last messages into the scene.
@@ -153,6 +154,12 @@ export function wireSocket(ctx) {
         }
         syncBirdsFromHello(ctx, message.birds);
         updateStatus(ctx);
+        return;
+      }
+
+      // Owner changed slow mode mid-session: keep the local cooldown in sync.
+      if (message.type === "chatThrottle") {
+        if (typeof message.ms === "number") ctx.chatThrottleMs = message.ms;
         return;
       }
 

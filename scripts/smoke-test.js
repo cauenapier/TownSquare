@@ -228,6 +228,10 @@ async function assertModerationTools() {
   const observer = await connect({ x: 0.7, browserId: "mod-observer", siteKey, origin: HTTP_ORIGIN });
   await delay(80);
 
+  // The widget enforces slow mode client-side (to show a "wait" hint), so the
+  // server hands it the live cooldown on connect.
+  assert(sender.hello.chatThrottleMs === 500, "hello did not carry the default chat cooldown");
+
   // --- Forbidden-word filter: matched words are masked for peers; the list is
   // lowercased and de-duped server-side. ---
   const filtered = await postJson("/api/admin/action", {
@@ -285,8 +289,13 @@ async function assertModerationTools() {
   });
   assert(slowed.response.ok, slowed.body.error || "slow-mode update failed");
   assert(slowed.body.site.chatThrottleMs === 5000, "slow-mode cooldown did not persist");
+  await delay(80);
+  assert(
+    observer.seen.some((m) => m.type === "chatThrottle" && m.ms === 5000),
+    "connected widget was not told about the new slow-mode cooldown",
+  );
 
-  await delay(1600); // past the default 1.5s but well under the new 5s cooldown
+  await delay(1600); // well under the new 5s cooldown, so the message is dropped
   sender.ws.send(JSON.stringify({ type: "say", text: "too fast for slow mode" }));
   await delay(200);
   assert(

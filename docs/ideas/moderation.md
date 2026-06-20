@@ -48,8 +48,9 @@ Moderation section.
   - *Note:* like the existing site-wide chat disable, the muted user still sees
     their own optimistic local echo (the widget echoes before the server);
     peers never receive it. Timed/auto-expiring mutes were deferred.
-- [x] **Configurable slow mode.** `site.chatThrottleMs` (default 1.5s, capped at
-  30s) read by `getChatThrottle()`. Owners pick a cooldown in the admin UI.
+- [x] **Configurable slow mode.** `site.chatThrottleMs` (default 0.5s, capped at
+  30s) read by `getChatThrottle()`. Owners pick a cooldown in the admin UI; the
+  widget enforces it too, showing a "wait" hint instead of silently dropping.
 - [x] **Moderation log.** `site.moderationLog` (newest-first, capped at 50) via
   `logModeration()`. Records kick/block/mute/unmute and chat/site toggles;
   rendered read-only in the admin Moderation section.

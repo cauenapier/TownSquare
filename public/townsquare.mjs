@@ -9,7 +9,7 @@
 import { setLocalTyping, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds } from "./widget/birds.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
-import { CHARACTER_COLORS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
+import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
 import {
   createAvatar,
@@ -182,6 +182,9 @@ export function mountTownSquare(root, options = {}) {
     statusEl,
     quietButton,
     expandButton,
+    // Chat cooldown (slow mode); the server sends the live value in `hello` and
+    // again whenever an owner changes it.
+    chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
     self: {
       id: null,
       x: spawnX,
@@ -190,6 +193,7 @@ export function mountTownSquare(root, options = {}) {
       targetX: null,
       lastSentX: spawnX,
       lastSendAt: 0,
+      lastSayAt: 0,
       lastJumpAt: 0,
       lastHighFiveAt: 0,
       pose: null,
