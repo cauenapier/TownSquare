@@ -97,13 +97,13 @@ function getKeyboardInset(viewport) {
  * @param {VisualViewport | undefined} viewport
  * @param {boolean} expanded
  */
-function revealAppAboveKeyboard(app, viewport, expanded) {
+function revealAppAboveKeyboard(app, viewport, expanded, overlayInset = 0) {
   if (!(app instanceof HTMLElement) || !viewport) return;
   if (!(document.activeElement instanceof HTMLElement) || !app.contains(document.activeElement)) return;
   const keyboardInset = getKeyboardInset(viewport);
   if (keyboardInset < MOBILE_KEYBOARD_MIN_HEIGHT) return;
   if (expanded) {
-    const visibleBottom = viewport.offsetTop + viewport.height;
+    const visibleBottom = viewport.offsetTop + viewport.height - Math.max(0, overlayInset);
     const overlap = app.getBoundingClientRect().bottom + MOBILE_KEYBOARD_SCROLL_GAP - visibleBottom;
     if (overlap > 0) {
       app.scrollBy({ top: overlap, behavior: "auto" });
@@ -344,12 +344,16 @@ export function mountTownSquare(root, options = {}) {
   const onViewportChange = () => {
     const hidden = getKeyboardInset(viewport);
     const keyboardVisible = hidden >= MOBILE_KEYBOARD_MIN_HEIGHT;
+    const expanded = expandController.isExpanded();
+    const toolbarOverlayInset = expanded && keyboardVisible
+      ? toolbar.getBoundingClientRect().height + MOBILE_KEYBOARD_SCROLL_GAP
+      : 0;
     app.style.setProperty("--ts-keyboard", `${Math.round(hidden)}px`);
     app.style.setProperty(
       "--ts-keyboard-scroll-room",
-      keyboardVisible && expandController.isExpanded() ? `${Math.round(hidden)}px` : "0px",
+      expanded && keyboardVisible ? `${Math.round(hidden + toolbarOverlayInset)}px` : "0px",
     );
-    revealAppAboveKeyboard(app, viewport, expandController.isExpanded());
+    revealAppAboveKeyboard(app, viewport, expanded, toolbarOverlayInset);
   };
   const onAppFocusIn = () => {
     window.requestAnimationFrame(onViewportChange);
