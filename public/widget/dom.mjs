@@ -82,7 +82,9 @@ const ENTER_ICON = `
 const QUIET_ICON = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M19 12.8A7.2 7.2 0 0 1 11.2 5 6.8 6.8 0 1 0 19 12.8Z"></path>
+    <path d="M5 16h4.5L5.5 20h5.5"></path>
+    <path d="M10.5 11h4L11 14.5h5"></path>
+    <path d="M15 6h4.5L16 9.5h5"></path>
   </svg>
 `;
 
@@ -137,12 +139,12 @@ export function renderShell(container) {
   expandButton.title = "Expand";
 
   const quietButton = document.createElement("button");
-  quietButton.className = "townsquare__control";
+  quietButton.className = "townsquare__control townsquare__control--quiet-mode";
   quietButton.type = "button";
   quietButton.innerHTML = QUIET_ICON;
   quietButton.setAttribute("aria-label", "Disable TownSquare");
   quietButton.setAttribute("aria-pressed", "false");
-  quietButton.title = "Disable TownSquare";
+  quietButton.dataset.tooltip = "quiet mode/disable town square";
 
   const helpButton = document.createElement("button");
   helpButton.className = "townsquare__control townsquare__help-button";

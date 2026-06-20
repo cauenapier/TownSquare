@@ -308,7 +308,6 @@ export function mountTownSquare(root, options = {}) {
     ctx.quietButton.classList.toggle("townsquare__control--active", quiet);
     ctx.quietButton.setAttribute("aria-pressed", String(quiet));
     ctx.quietButton.setAttribute("aria-label", quiet ? "Enable TownSquare" : "Disable TownSquare");
-    ctx.quietButton.title = quiet ? "Enable TownSquare" : "Disable TownSquare";
     ctx.self.movingLeft = false;
     ctx.self.movingRight = false;
     ctx.self.avatar.composer?.reset();

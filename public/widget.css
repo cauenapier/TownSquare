@@ -86,6 +86,36 @@
   height: 16px;
 }
 
+.townsquare__control--quiet-mode {
+  position: relative;
+}
+
+.townsquare__control--quiet-mode::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 6px);
+  transform: translateY(-50%);
+  z-index: 1;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  box-shadow: 0 4px 12px -10px rgba(42, 41, 38, 0.38);
+  font: 600 0.72rem/1.2 var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.townsquare__control--quiet-mode:hover::after,
+.townsquare__control--quiet-mode:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
 .townsquare__actions {
   position: absolute;
   z-index: 2147483001;
