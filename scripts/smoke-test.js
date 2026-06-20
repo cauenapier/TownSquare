@@ -43,11 +43,12 @@ function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", 
   });
 }
 
-async function createSite(name) {
+async function createSite(name, options = {}) {
+  const { origin = HTTP_ORIGIN, includeMatchingWww = false } = options;
   const response = await fetch(`${HTTP_ORIGIN}/api/sites`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name, origin: HTTP_ORIGIN }),
+    body: JSON.stringify({ name, origin, includeMatchingWww }),
   });
   const body = await response.json();
   assert(response.ok, body.error || "site registration failed");
@@ -112,8 +113,10 @@ async function assertCustomizationPersists() {
     siteKey: body.site.siteKey,
     adminToken: body.adminToken,
     action: "updateSiteDetails",
+    origin: HTTP_ORIGIN,
     name: "Renamed Site",
     email: "new-owner@example.com",
+    includeMatchingWww: false,
   });
   assert(details.response.ok, details.body.error || "admin site details update failed");
   assert(details.body.site.name === "Renamed Site", "admin did not update the site name");
@@ -123,8 +126,10 @@ async function assertCustomizationPersists() {
     siteKey: body.site.siteKey,
     adminToken: body.adminToken,
     action: "updateSiteDetails",
+    origin: HTTP_ORIGIN,
     name: "Should Not Save",
     email: "not-an-email",
+    includeMatchingWww: false,
   });
   assert(invalidDetails.response.status === 400, "admin accepted an invalid site email");
 
@@ -134,6 +139,49 @@ async function assertCustomizationPersists() {
   });
   assert(persisted.body.site.name === "Renamed Site", "invalid details update changed the site name");
   assert(persisted.body.site.email === "new-owner@example.com", "admin site details did not persist");
+}
+
+async function assertMatchingWwwOriginsWork() {
+  const hosted = await createSite("WWW Pair", { origin: "https://example.com", includeMatchingWww: true });
+  assert(hosted.site.includeMatchingWww === true, "registered site did not report matching-www support");
+  assert(
+    JSON.stringify(hosted.site.allowedOrigins) === JSON.stringify(["https://example.com", "https://www.example.com"]),
+    "registered site did not persist both allowed origins",
+  );
+
+  const apex = await connect({
+    x: 0.25,
+    browserId: "pair-apex",
+    siteKey: hosted.site.siteKey,
+    origin: "https://example.com",
+  });
+  const www = await connect({
+    x: 0.75,
+    browserId: "pair-www",
+    siteKey: hosted.site.siteKey,
+    origin: "https://www.example.com",
+  });
+  await delay(100);
+  assert(www.hello.peers.some((peer) => peer.id === apex.id), "www origin did not join the same hosted scene");
+
+  const narrowed = await postJson("/api/admin/action", {
+    siteKey: hosted.site.siteKey,
+    adminToken: hosted.adminToken,
+    action: "updateSiteDetails",
+    origin: "https://www.example.com",
+    includeMatchingWww: false,
+    name: hosted.site.name,
+    email: "",
+  });
+  assert(narrowed.response.ok, narrowed.body.error || "admin site details update for www pair failed");
+  assert(narrowed.body.site.origin === "https://www.example.com", "admin did not update the canonical website URL");
+  assert(
+    JSON.stringify(narrowed.body.site.allowedOrigins) === JSON.stringify(["https://www.example.com"]),
+    "admin did not narrow the allowed origins back to one URL",
+  );
+
+  apex.ws.close();
+  www.ws.close();
 }
 
 async function assertOwnerProfilePersists() {
@@ -838,6 +886,7 @@ async function main() {
   assert(first.seen.some((message) => message.type === "leave" && message.id === third.id), "first client did not observe different-browser leave");
 
   await assertCustomizationPersists();
+  await assertMatchingWwwOriginsWork();
   await assertOwnerProfilePersists();
 
   const hostedA = await createSite("Smoke A");

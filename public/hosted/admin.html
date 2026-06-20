@@ -57,6 +57,10 @@
           <form class="hosted-form" id="site-details-form">
             <div class="hosted-grid">
               <label>
+                <span>Website URL</span>
+                <input id="site-origin" name="origin" type="url" autocomplete="url" maxlength="320" required />
+              </label>
+              <label>
                 <span>Site name</span>
                 <input id="site-name" name="name" type="text" maxlength="80" required />
               </label>
@@ -65,6 +69,11 @@
                 <input id="site-email" name="email" type="email" autocomplete="email" maxlength="254" />
               </label>
             </div>
+            <label class="hosted-toggle">
+              <input type="checkbox" id="include-matching-www" name="includeMatchingWww" />
+              <span id="include-matching-www-label">Also allow the matching www/non-www version</span>
+            </label>
+            <p class="hosted-note" id="include-matching-www-note">Recommended if both versions of your site work.</p>
             <div class="hosted-actions">
               <button type="submit" id="save-site-details" disabled>Save site details</button>
             </div>

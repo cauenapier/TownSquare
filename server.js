@@ -160,6 +160,9 @@ let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 let mapWorld;
 let normalizeOrigin;
+let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
+let getMatchingWwwOrigin = () => null;
+let originUsesMatchingWwwPair = () => false;
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -343,7 +346,7 @@ function labelFromReadingUrl(url) {
 function readingUrlAllowedForClient(client, url) {
   const urlOrigin = normalizeOrigin(url.origin);
   if (!urlOrigin) return false;
-  if (client.site) return urlOrigin === client.site.origin;
+  if (client.site) return isOriginAllowedForSite(urlOrigin, client.site);
   return !client.origin || urlOrigin === client.origin;
 }
 
@@ -762,6 +765,46 @@ function buildStyleSnippet(site) {
   return buildSiteCss(getStyleConfig(site));
 }
 
+function getAllowedOrigins(site) {
+  if (!site) return [];
+  const origins = [];
+  const seen = new Set();
+  const add = (value) => {
+    const normalized = normalizeOrigin(value || "");
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    origins.push(normalized);
+  };
+
+  add(site.origin);
+  if (Array.isArray(site.allowedOrigins)) {
+    site.allowedOrigins.forEach(add);
+  }
+  return origins;
+}
+
+function siteUsesMatchingWwwOrigin(site) {
+  if (!site) return false;
+  const matching = getMatchingWwwOrigin(site.origin);
+  return Boolean(matching && getAllowedOrigins(site).includes(matching));
+}
+
+function parseSiteOriginSettings(body, { defaultIncludeMatchingWww = true } = {}) {
+  const origin = normalizeOrigin(String(body.origin || "").slice(0, MAX_ORIGIN_LEN));
+  if (!origin) {
+    return { error: "Enter a valid website origin, like https://example.com." };
+  }
+
+  const includeMatchingWww = body.includeMatchingWww === undefined
+    ? defaultIncludeMatchingWww
+    : Boolean(body.includeMatchingWww);
+  return {
+    origin,
+    allowedOrigins: buildAllowedOrigins(origin, { includeMatchingWww }),
+    includeMatchingWww,
+  };
+}
+
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
   const connections = getConnections(site);
@@ -851,9 +894,9 @@ function handleRegisterSite(req, res) {
       return;
     }
 
-    const origin = normalizeOrigin(String(body.origin || "").slice(0, MAX_ORIGIN_LEN));
-    if (!origin) {
-      sendJson(res, 400, { error: "Enter a valid website origin, like https://example.com." });
+    const originSettings = parseSiteOriginSettings(body, { defaultIncludeMatchingWww: true });
+    if (originSettings.error) {
+      sendJson(res, 400, { error: originSettings.error });
       return;
     }
 
@@ -865,7 +908,8 @@ function handleRegisterSite(req, res) {
 
     const { site, adminToken } = createSiteRecord({
       name: body.name,
-      origin,
+      origin: originSettings.origin,
+      allowedOrigins: originSettings.allowedOrigins,
       email: parsedEmail.email,
       sceneConfig: body.sceneConfig,
       styleConfig: body.styleConfig,
@@ -1010,11 +1054,20 @@ function handleAdminLogin(req, res) {
 
 const ADMIN_ACTIONS = {
   updateSiteDetails(site, scene, body) {
+    const originSettings = parseSiteOriginSettings(body, {
+      defaultIncludeMatchingWww: siteUsesMatchingWwwOrigin(site),
+    });
+    if (originSettings.error) {
+      return { error: originSettings.error };
+    }
+
     const parsedEmail = parseOptionalEmail(body.email);
     if (!parsedEmail.ok) {
       return { error: "Enter a valid email address, or leave the field empty." };
     }
 
+    site.origin = originSettings.origin;
+    site.allowedOrigins = originSettings.allowedOrigins;
     site.name = sanitizeSiteName(body.name, site.origin);
     site.email = parsedEmail.email;
     touchSite(site);
@@ -1662,7 +1715,7 @@ function rebuildSceneProps(scene, site) {
   }
 }
 
-function createSiteRecord({ name, origin, email, sceneConfig, styleConfig, connections }) {
+function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, styleConfig, connections }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -1672,6 +1725,7 @@ function createSiteRecord({ name, origin, email, sceneConfig, styleConfig, conne
       adminTokenHash: hashAdminToken(adminToken),
       name: sanitizeSiteName(name, origin),
       origin,
+      allowedOrigins: Array.isArray(allowedOrigins) && allowedOrigins.length > 0 ? allowedOrigins : [origin],
       email: email || null,
       sceneConfig: sanitizeSceneConfig(sceneConfig),
       styleConfig: sanitizeSiteStyle(styleConfig),
@@ -1714,6 +1768,11 @@ function loadSites() {
       }
       if (!Array.isArray(site.connections)) {
         site.connections = [];
+      }
+      const nextAllowedOrigins = getAllowedOrigins(site);
+      if (JSON.stringify(nextAllowedOrigins) !== JSON.stringify(site.allowedOrigins || [])) {
+        site.allowedOrigins = nextAllowedOrigins;
+        sitesMigratedOnLoad = true;
       }
       if (typeof site.messageCount !== "number") {
         site.messageCount = 0;
@@ -1762,6 +1821,8 @@ function publicSite(site) {
     siteKey: site.siteKey,
     name: site.name,
     origin: site.origin,
+    allowedOrigins: getAllowedOrigins(site),
+    includeMatchingWww: siteUsesMatchingWwwOrigin(site),
     email: site.email || null,
     sceneConfig: getSceneConfig(site),
     styleConfig: getStyleConfig(site),
@@ -1821,7 +1882,7 @@ function validateSiteAccess(reqUrl) {
 function isOriginAllowedForSite(origin, site) {
   if (!site) return true;
   const normalized = normalizeOrigin(origin);
-  return Boolean(normalized && normalized === site.origin);
+  return Boolean(normalized && getAllowedOrigins(site).includes(normalized));
 }
 
 const sitesByKey = loadSites();
@@ -2409,6 +2470,9 @@ async function loadSharedModules() {
   isWithinPropSettleZone = geometry.isWithinPropSettleZone;
   validateMapWorld = mapWorldModule.validateMapWorld;
   normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
+  buildAllowedOrigins = urlModule.buildAllowedOrigins;
+  getMatchingWwwOrigin = urlModule.getMatchingWwwOrigin;
+  originUsesMatchingWwwPair = urlModule.originUsesMatchingWwwPair;
   ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
   mapWorld = loadMapWorld();
 

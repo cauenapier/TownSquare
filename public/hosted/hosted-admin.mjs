@@ -21,6 +21,7 @@ import {
   sanitizeSceneConfig,
   sanitizeSiteStyle,
 } from "../shared/site-config.mjs";
+import { getMatchingWwwOrigin } from "../shared/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../shared/shared-constants.mjs";
 
@@ -35,8 +36,12 @@ const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const metaEl = document.getElementById("site-meta");
 const siteDetailsForm = document.getElementById("site-details-form");
+const siteOriginInput = document.getElementById("site-origin");
 const siteNameInput = document.getElementById("site-name");
 const siteEmailInput = document.getElementById("site-email");
+const includeMatchingWwwInput = document.getElementById("include-matching-www");
+const includeMatchingWwwLabel = document.getElementById("include-matching-www-label");
+const includeMatchingWwwNote = document.getElementById("include-matching-www-note");
 const saveSiteDetailsButton = document.getElementById("save-site-details");
 const siteDetailsStatusEl = document.getElementById("site-details-status");
 const customizationForm = document.getElementById("customization-form");
@@ -141,9 +146,26 @@ const session = createAdminSession({
 
 function siteDetailsAreDirty() {
   return Boolean(currentSite) && (
-    siteNameInput.value.trim() !== currentSite.name
+    siteOriginInput.value.trim() !== currentSite.origin
+    || siteNameInput.value.trim() !== currentSite.name
     || siteEmailInput.value.trim() !== (currentSite.email || "")
+    || includeMatchingWwwInput.checked !== Boolean(currentSite.includeMatchingWww)
   );
+}
+
+function updateMatchingWwwControls() {
+  const matching = getMatchingWwwOrigin(siteOriginInput.value);
+  if (!matching) {
+    includeMatchingWwwInput.checked = false;
+    includeMatchingWwwInput.disabled = true;
+    includeMatchingWwwLabel.textContent = "Also allow the matching www/non-www version";
+    includeMatchingWwwNote.textContent = "Shown for standard domain names like example.com or www.example.com.";
+    return;
+  }
+
+  includeMatchingWwwInput.disabled = false;
+  includeMatchingWwwLabel.textContent = `Also allow ${matching}`;
+  includeMatchingWwwNote.textContent = "Recommended if both versions of your site work.";
 }
 
 function updateSiteDetailsControls() {
@@ -161,10 +183,13 @@ function updateSiteDetailsControls() {
 
 function syncSiteDetailsFromServer() {
   if (!siteDetailsTouched || !siteDetailsAreDirty()) {
+    siteOriginInput.value = currentSite.origin;
     siteNameInput.value = currentSite.name;
     siteEmailInput.value = currentSite.email || "";
+    includeMatchingWwwInput.checked = Boolean(currentSite.includeMatchingWww);
     siteDetailsTouched = false;
   }
+  updateMatchingWwwControls();
   updateSiteDetailsControls();
 }
 
@@ -175,8 +200,10 @@ async function saveSiteDetails() {
   updateSiteDetailsControls();
 
   const ok = await session.action("updateSiteDetails", {
+    origin: siteOriginInput.value,
     name: siteNameInput.value,
     email: siteEmailInput.value,
+    includeMatchingWww: includeMatchingWwwInput.checked,
   });
 
   siteDetailsBusy = false;
@@ -600,7 +627,8 @@ function render(data) {
   metaEl.innerHTML = `
     <dl>
       <div><dt>Site</dt><dd>${escapeHtml(currentSite.name)}</dd></div>
-      <div><dt>Origin</dt><dd>${escapeHtml(currentSite.origin)}</dd></div>
+      <div><dt>Website</dt><dd>${escapeHtml(currentSite.origin)}</dd></div>
+      <div><dt>Also allows</dt><dd>${escapeHtml((currentSite.allowedOrigins || []).filter((origin) => origin !== currentSite.origin).join(", ") || "—")}</dd></div>
       <div><dt>Status</dt><dd>${currentSite.disabled ? "Disabled" : "Enabled"}</dd></div>
       <div><dt>Verified</dt><dd>${formatTime(currentSite.verifiedAt, "Not seen yet")}</dd></div>
       <div><dt>Messages</dt><dd>${currentSite.messageCount ?? 0}</dd></div>
@@ -679,6 +707,7 @@ bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnipp
 siteDetailsForm.addEventListener("input", () => {
   siteDetailsTouched = true;
   siteDetailsSavedMessage = "";
+  updateMatchingWwwControls();
   updateSiteDetailsControls();
 });
 

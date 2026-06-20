@@ -12,11 +12,16 @@ import {
   renderStyleOverrideFields,
   sanitizeSceneConfig,
 } from "../shared/site-config.mjs";
+import { getMatchingWwwOrigin } from "../shared/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 
 const registerView = document.getElementById("register-view");
 const successView = document.getElementById("success-view");
 const form = document.getElementById("register-form");
+const siteOriginInput = document.getElementById("site-origin");
+const includeMatchingWwwInput = document.getElementById("include-matching-www");
+const includeMatchingWwwLabel = document.getElementById("include-matching-www-label");
+const includeMatchingWwwNote = document.getElementById("include-matching-www-note");
 const submitButton = document.getElementById("register-submit");
 const statusEl = document.getElementById("register-status");
 const successSiteEl = document.getElementById("success-site");
@@ -47,7 +52,10 @@ function syncScenePositionInputs(sceneConfig = readSceneConfigFromForm(form)) {
 }
 
 function showSuccess(body) {
-  successSiteEl.textContent = `${body.site.name} — ${body.site.origin}`;
+  const aliasText = Array.isArray(body.site.allowedOrigins) && body.site.allowedOrigins.length > 1
+    ? ` (also allows ${body.site.allowedOrigins.filter((origin) => origin !== body.site.origin).join(", ")})`
+    : "";
+  successSiteEl.textContent = `${body.site.name} — ${body.site.origin}${aliasText}`;
   adminTokenEl.value = body.adminToken;
   snippetEl.value = body.embedSnippet;
   styleSnippetEl.value = body.styleSnippet;
@@ -59,7 +67,25 @@ function showSuccess(body) {
   window.scrollTo({ top: 0 });
 }
 
+function updateMatchingWwwControls() {
+  const matching = getMatchingWwwOrigin(siteOriginInput.value);
+  if (!matching) {
+    includeMatchingWwwInput.checked = false;
+    includeMatchingWwwInput.disabled = true;
+    includeMatchingWwwLabel.textContent = "Also allow the matching www/non-www version";
+    includeMatchingWwwNote.textContent = "Shown for standard domain names like example.com or www.example.com.";
+    return;
+  }
+
+  includeMatchingWwwInput.disabled = false;
+  includeMatchingWwwLabel.textContent = `Also allow ${matching}`;
+  includeMatchingWwwNote.textContent = "Recommended if both versions of your site work.";
+}
+
 form.addEventListener("input", (event) => {
+  if (event.target === siteOriginInput) {
+    updateMatchingWwwControls();
+  }
   if (isSceneCountInputName(event.target?.name || "")) {
     syncScenePositionInputs(readSceneConfigFromForm(form));
   }
@@ -78,6 +104,7 @@ form.addEventListener("submit", async (event) => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         origin: formData.get("origin"),
+        includeMatchingWww: includeMatchingWwwInput.checked,
         name: formData.get("name"),
         email: formData.get("email"),
         sceneConfig: readSceneConfigFromForm(form),
@@ -108,4 +135,5 @@ bindStyleColorFields(form);
 bindSceneCountProse(form);
 applyConfigToForm(form);
 syncScenePositionInputs();
+updateMatchingWwwControls();
 preview.mount();

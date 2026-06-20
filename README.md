@@ -165,6 +165,7 @@ https://your-townsquare-host/register
 The flow is intentionally accountless:
 
 - enter a website URL
+- optionally allow the matching `www`/non-`www` version with one checkbox
 - receive an embed snippet with a public site key
 - receive a private admin token and admin link
 - paste the snippet into the website
