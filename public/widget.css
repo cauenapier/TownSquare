@@ -475,6 +475,7 @@
 
 .townsquare--quiet .townsquare__status,
 .townsquare--quiet .townsquare__actions,
+.townsquare--quiet .townsquare__toolbar,
 .townsquare--quiet .townsquare__stage {
   display: none;
 }
@@ -517,11 +518,6 @@
   flex: 1 1 auto;
   height: auto;
   min-height: 0;
-}
-
-.townsquare--expanded .townsquare__actions {
-  right: 18px;
-  bottom: calc(18px + var(--ts-keyboard, 0px));
 }
 
 .townsquare .prop--tree .canopy {
@@ -1743,26 +1739,67 @@
   .townsquare-avatar__composer { min-width: min(260px, 80cqw); }
 }
 
-/* ── Touch: docked composer ──
-   On coarse pointers the composer detaches from the figure and docks as a bar
-   at the bottom of the widget, where the virtual keyboard can't clip it. */
-.townsquare-avatar__composer.townsquare-avatar__composer--docked {
+/* ── Touch: bottom toolbar ──
+   On coarse pointers chat moves off the (moving) figure into a fixed bar at the
+   bottom of the widget: an always-visible input, the rename pencil, and the
+   jump / high-five actions. The figure keeps only a static "you" label, and the
+   virtual keyboard can't clip any of it. */
+.townsquare__toolbar {
   position: absolute;
+  z-index: 2147483002;
   left: 10px;
   right: 10px;
   bottom: 10px;
-  z-index: 2147483002;
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The docked composer fills the bar instead of floating on its own. */
+.townsquare__toolbar .townsquare-avatar__composer--docked {
+  position: static;
+  flex: 1 1 auto;
   min-width: 0;
   max-width: none;
 }
 
-/* in expanded (fixed) mode the page can't scroll, so ride above the keyboard */
-.townsquare--expanded .townsquare-avatar__composer.townsquare-avatar__composer--docked {
+/* Pencil matches the action buttons' touch target inside the bar. */
+.townsquare__toolbar .townsquare-avatar__profile-button {
+  width: 42px;
+  height: 42px;
+}
+
+.townsquare__toolbar .townsquare-avatar__profile-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Rename editor pops above the bar rather than docking in the row. */
+.townsquare__toolbar .townsquare-avatar__profile {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 1;
+}
+
+/* Static identity under the figure: just "you" (full name lives in the editor). */
+.townsquare-avatar__self-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px;
+  border-radius: 11px;
+  background: var(--surface);
+  box-shadow: var(--bshadow);
+}
+
+/* In expanded (fixed) mode the page can't scroll, so ride above the keyboard. */
+.townsquare--expanded .townsquare__toolbar {
   bottom: calc(10px + var(--ts-keyboard, 0px));
 }
 
 @media (pointer: coarse) {
-  .townsquare__actions {
+  .townsquare__toolbar {
     display: flex;
   }
 
@@ -1778,10 +1815,6 @@
 
   .townsquare__status {
     right: 152px;
-  }
-
-  .townsquare-avatar__plate {
-    padding: 9px 15px 9px 13px;
   }
 
   /* fingers need an even wider tap zone than mouse pointers */

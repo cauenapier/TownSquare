@@ -43,6 +43,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLInputElement} [input]
  * @property {HTMLButtonElement} [send]
  * @property {HTMLParagraphElement} [hint] Slow-mode "wait" notice above the composer.
+ * @property {boolean} [staticSelfLabel] Touch toolbar mode: pin the under-figure label to "you".
  * @property {() => void} [openComposer] Open the composer and focus the chat input.
  * @property {ReturnType<typeof setTimeout> | null} [jumpTimer]
  * @property {ReturnType<typeof setTimeout> | null} [raisedHandTimer]
@@ -118,7 +119,7 @@ const MAP_URL = "https://townsquare.cauenapier.com/map";
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement, toolbar: HTMLElement }}
  */
 export function renderShell(container) {
   const element = document.createElement("section");
@@ -234,7 +235,12 @@ export function renderShell(container) {
   ground.className = "townsquare__ground";
   stageEl.appendChild(ground);
 
-  element.append(controls, actions, statusRow, stageEl);
+  // Touch-only bottom bar. Empty until coarse-pointer mounts dock the composer,
+  // pencil, and action buttons into it; hidden via CSS on fine pointers.
+  const toolbar = document.createElement("div");
+  toolbar.className = "townsquare__toolbar";
+
+  element.append(controls, actions, statusRow, stageEl, toolbar);
   container.append(element, helpScrim);
   return {
     app: element,
@@ -248,6 +254,7 @@ export function renderShell(container) {
     helpPanel,
     jumpButton,
     highFiveButton,
+    toolbar,
   };
 }
 
@@ -290,9 +297,11 @@ export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
 /**
  * Create an avatar figure with optional self-only chat controls.
  *
- * On touch devices the floating composer under the figure is fragile (edge
- * clipping, virtual keyboard cover), so callers can pass `composerHost` to
- * dock the composer as a bar at the bottom of the widget instead.
+ * On touch devices the floating nameplate under the figure is fragile (edge
+ * clipping, virtual keyboard cover, overlap with peers), so callers can pass
+ * `toolbarHost` to dock a fixed bottom bar instead: an always-visible chat
+ * input plus the rename pencil (and, wired by the mount, the action buttons).
+ * The under-figure label then shrinks to a static "you".
  *
  * @param {{
  *   isSelf: boolean,
@@ -301,11 +310,11 @@ export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
  *   onProfileChange?: (profile: { displayName: string, color: string }) => void,
  *   onSubmitChat?: () => boolean | void,
  *   onTypingChange?: (typing: boolean) => void,
- *   composerHost?: HTMLElement
+ *   toolbarHost?: HTMLElement
  * }} options
  * @returns {AvatarView}
  */
-export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChange, onSubmitChat, onTypingChange, composerHost }) {
+export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChange, onSubmitChat, onTypingChange, toolbarHost }) {
   const el = document.createElement("div");
   el.className = `townsquare-avatar ${isSelf ? "townsquare-avatar--self" : "townsquare-avatar--peer"}`;
   el.innerHTML = figureMarkup('aria-hidden="true"');
@@ -378,18 +387,14 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
 
   const color = profile.color || "";
 
+  // On touch the chat input lives in a fixed bottom toolbar instead of floating
+  // under the (moving) figure, so the figure keeps only a static "you" label.
+  const toolbarMode = Boolean(toolbarHost);
+
   // Self carries a persistent nameplate at its base: identity, the chat way in,
   // and a compact profile editor for the accountless session identity.
   const below = document.createElement("div");
   below.className = "townsquare-avatar__below";
-
-  const plateRow = document.createElement("div");
-  plateRow.className = "townsquare-avatar__plate-row";
-
-  const plate = document.createElement("button");
-  plate.className = "townsquare-avatar__plate";
-  plate.type = "button";
-  plate.setAttribute("aria-label", "Say something");
 
   const dot = document.createElement("span");
   dot.className = "townsquare-avatar__plate-dot";
@@ -399,11 +404,6 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   const nameEl = document.createElement("span");
   nameEl.className = "townsquare-avatar__plate-name";
 
-  const hint = document.createElement("span");
-  hint.className = "townsquare-avatar__plate-hint";
-  hint.textContent = "· say something";
-  plate.append(dot, crownEl, nameEl, hint);
-
   const profileButton = document.createElement("button");
   profileButton.className = "townsquare-avatar__profile-button";
   profileButton.type = "button";
@@ -412,7 +412,31 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   profileButton.setAttribute("aria-expanded", "false");
   profileButton.title = "Edit character";
 
-  plateRow.append(plate, profileButton);
+  // Desktop: a "you · say something" pill that opens the inline composer, with
+  // the pencil beside it. Toolbar mode drops the pill (the input is always
+  // visible in the bar) and keeps only the static identity label.
+  let plate = null;
+  let plateRow = null;
+  let selfId = null;
+  if (toolbarMode) {
+    selfId = document.createElement("div");
+    selfId.className = "townsquare-avatar__self-id";
+    selfId.append(dot, crownEl, nameEl);
+  } else {
+    plate = document.createElement("button");
+    plate.className = "townsquare-avatar__plate";
+    plate.type = "button";
+    plate.setAttribute("aria-label", "Say something");
+
+    const hint = document.createElement("span");
+    hint.className = "townsquare-avatar__plate-hint";
+    hint.textContent = "· say something";
+    plate.append(dot, crownEl, nameEl, hint);
+
+    plateRow = document.createElement("div");
+    plateRow.className = "townsquare-avatar__plate-row";
+    plateRow.append(plate, profileButton);
+  }
 
   const ownerRoleEl = createOwnerRoleEl();
   ownerRoleEl.classList.add("townsquare-avatar__owner-role--self");
@@ -478,10 +502,13 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   cooldownHint.setAttribute("aria-live", "polite");
 
   composer.append(input, send, cooldownHint);
-  if (composerHost) {
+  if (toolbarMode) {
     composer.classList.add("townsquare-avatar__composer--docked");
-    below.append(plateRow, ownerRoleEl, profileForm);
-    composerHost.appendChild(composer);
+    composer.hidden = false;
+    below.append(selfId, ownerRoleEl);
+    // profileForm is absolutely positioned above the bar via CSS, so its order
+    // among the toolbar's flex children doesn't matter.
+    toolbarHost.append(composer, profileButton, profileForm);
   } else {
     below.append(plateRow, ownerRoleEl, profileForm, composer);
   }
@@ -504,6 +531,9 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     input,
     send,
     hint: cooldownHint,
+    // Toolbar mode pins the under-figure label to "you"; the full name only
+    // surfaces in the rename editor (read by setAvatarProfile).
+    staticSelfLabel: toolbarMode,
   };
 
   const closeProfile = () => {
@@ -524,7 +554,9 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   };
 
   const openProfile = () => {
-    if (!composer.hidden) closeComposer();
+    // Toolbar mode keeps the chat input permanently visible, so opening the
+    // rename editor must not try to close it.
+    if (!toolbarMode && !composer.hidden) closeComposer();
     profileForm.hidden = false;
     profileButton.setAttribute("aria-expanded", "true");
     profileInput.value = nameEl.dataset.value || "";
@@ -567,24 +599,23 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
 
   setAvatarProfile(selfAvatar, profile);
 
-  const openComposer = () => {
-    closeProfile();
-    el.classList.add("townsquare-avatar--composing");
-    plate.hidden = true;
-    profileButton.hidden = true;
-    composer.hidden = false;
-    input.value = "";
-    setSendReady(selfAvatar, false);
-    input.focus();
-    if (composerHost) {
-      // Keep the input visible once the virtual keyboard pushes the page around.
-      setTimeout(() => {
-        if (!composer.hidden) input.scrollIntoView({ block: "center", behavior: "smooth" });
-      }, 250);
-    }
-  };
+  // Toolbar mode: the input is always present, so "open" is just a focus and
+  // there is no resting plate to swap back to.
+  const openComposer = toolbarMode
+    ? () => { closeProfile(); input.focus(); }
+    : () => {
+      closeProfile();
+      el.classList.add("townsquare-avatar--composing");
+      plate.hidden = true;
+      profileButton.hidden = true;
+      composer.hidden = false;
+      input.value = "";
+      setSendReady(selfAvatar, false);
+      input.focus();
+    };
 
   const closeComposer = () => {
+    if (toolbarMode) return;
     el.classList.remove("townsquare-avatar--composing");
     composer.hidden = true;
     plate.hidden = false;
@@ -594,7 +625,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     onTypingChange?.(false);
   };
 
-  plate.addEventListener("click", openComposer);
+  plate?.addEventListener("click", openComposer);
   selfAvatar.openComposer = openComposer;
 
   input.addEventListener("input", () => {
@@ -605,15 +636,23 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
   input.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      closeComposer();
+      if (toolbarMode) input.blur();
+      else closeComposer();
     }
   });
 
-  // Clicking away with nothing typed returns to the resting nameplate. A pending
-  // value keeps the composer open so the send button stays reachable.
-  input.addEventListener("blur", () => {
-    if (input.value.trim() === "") closeComposer();
-  });
+  if (toolbarMode) {
+    // Suppress the history tray / lingering bubbles only while actively typing,
+    // not for the whole life of the always-visible field.
+    input.addEventListener("focus", () => el.classList.add("townsquare-avatar--composing"));
+    input.addEventListener("blur", () => el.classList.remove("townsquare-avatar--composing"));
+  } else {
+    // Clicking away with nothing typed returns to the resting nameplate. A
+    // pending value keeps the composer open so the send button stays reachable.
+    input.addEventListener("blur", () => {
+      if (input.value.trim() === "") closeComposer();
+    });
+  }
 
   composer.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -624,7 +663,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
       return;
     }
     onTypingChange?.(false);
-    if (composerHost) {
+    if (toolbarMode) {
       // Docked bar stays open for back-and-forth; reopening costs a tiny tap.
       input.value = "";
       setSendReady(selfAvatar, false);
@@ -670,7 +709,11 @@ export function setAvatarProfile(avatar, profile = {}) {
     avatar.el.style.removeProperty("--owner-badge-bg");
   }
   if (avatar.nameEl) {
-    avatar.nameEl.textContent = displayName || (isPeer ? (isOwner ? "owner" : "") : "you");
+    // Toolbar mode pins the under-figure label to "you"; the name still rides in
+    // dataset.value so the rename editor pre-fills correctly.
+    avatar.nameEl.textContent = avatar.staticSelfLabel
+      ? "you"
+      : displayName || (isPeer ? (isOwner ? "owner" : "") : "you");
     avatar.nameEl.dataset.value = displayName;
     // Owners always show a nameplate so the verified crown stays visible.
     avatar.nameEl.toggleAttribute("hidden", !displayName && !isOwner && isPeer);
