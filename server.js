@@ -3,8 +3,11 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
+const { plugins } = require("./server/plugins");
+const { registerPublicPlugins } = require("./plugins");
 
 loadEnvFile();
+registerPublicPlugins();
 
 /**
  * Tiny demo server for the first playable TownSquare slice.
@@ -26,8 +29,6 @@ loadEnvFile();
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8787);
 const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
-const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
-const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const LANDING_ORIGIN = parseHttpOrigin(process.env.LANDING_ORIGIN);
 const PLAUSIBLE_DOMAIN = String(process.env.PLAUSIBLE_DOMAIN || "").trim();
 const PLAUSIBLE_UPSTREAM = String(process.env.PLAUSIBLE_UPSTREAM || "https://plausible.io").replace(/\/$/, "");
@@ -70,7 +71,6 @@ const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 *
 const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS || 60000);
 const HEARTBEAT_INTERVAL_MS = 30000;
 const BIRD_TICK_INTERVAL_MS = 1000;
-const TELEGRAM_API_TIMEOUT_MS = 5000;
 const BIRD_FLEE_RADIUS = 0.07;
 const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
@@ -692,55 +692,6 @@ function getPublicOrigin(req) {
   return normalizeOrigin(`${proto}://${req.headers.host || `${HOST}:${PORT}`}`);
 }
 
-function escapeTelegramMarkdown(text) {
-  return String(text || "").replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
-}
-
-function buildTelegramMessage(site, identity, text, at) {
-  const siteLabel = site
-    ? `${site.name} (${site.origin})`
-    : "default scene";
-
-  return [
-    "*TownSquare message*",
-    `Site: ${escapeTelegramMarkdown(siteLabel)}`,
-    `Visitor: ${escapeTelegramMarkdown(String(identity.id))}`,
-    `Browser: ${escapeTelegramMarkdown(identity.browserId)}`,
-    `At: ${escapeTelegramMarkdown(new Date(at).toISOString())}`,
-    "",
-    escapeTelegramMarkdown(text),
-  ].join("\n");
-}
-
-async function sendTelegramChatNotification(site, identity, text, at) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TELEGRAM_API_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: buildTelegramMessage(site, identity, text, at),
-        parse_mode: "MarkdownV2",
-        disable_web_page_preview: true,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      console.warn(`Telegram notification failed with ${response.status}`);
-    }
-  } catch (error) {
-    console.warn(`Telegram notification failed: ${error.message}`);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 function getSceneConfig(site) {
   return sanitizeSceneConfig(site?.sceneConfig || DEFAULT_SITE_SCENE_CONFIG);
 }
@@ -808,9 +759,19 @@ function parseSiteOriginSettings(body, { defaultIncludeMatchingWww = true } = {}
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
   const connections = getConnections(site);
-  const connectionsLine = connections.length > 0
-    ? `\n    connections: ${JSON.stringify(connections)},`
-    : "";
+  const coreConfig = {
+    serverOrigin,
+    siteKey: site.siteKey,
+    scene: getSceneConfig(site),
+    ...(connections.length > 0 ? { connections } : {}),
+    theme: "host",
+  };
+  const extendedConfig = plugins.extend("extendWidgetConfig", coreConfig, { site: pluginSite(site) });
+  const widgetConfig = isPlainObject(extendedConfig) ? extendedConfig : coreConfig;
+  const configLines = Object.entries(widgetConfig)
+    .filter(([key]) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key))
+    .map(([key, value]) => `    ${key}: ${JSON.stringify(value)}`)
+    .join(",\n");
 
   return `<link rel="stylesheet" href="${serverOrigin}/widget.css" />
 <div id="townsquare-root"></div>
@@ -818,10 +779,7 @@ function buildEmbedSnippet(req, site) {
   import { mountTownSquare } from "${serverOrigin}/townsquare.mjs";
 
   mountTownSquare(document.getElementById("townsquare-root"), {
-    serverOrigin: "${serverOrigin}",
-    siteKey: "${site.siteKey}",
-    scene: ${JSON.stringify(getSceneConfig(site))},${connectionsLine}
-    theme: "host"
+${configLines}
   });
 </script>`;
 }
@@ -948,7 +906,9 @@ function handleMap(req, res) {
     .filter((site) => site.verifiedAt && !site.disabled)
     .map(publicMapSite);
 
-  sendJson(res, 200, { sites, world: mapWorld });
+  const coreMap = { sites, world: mapWorld };
+  const extendedMap = plugins.extend("extendMapData", coreMap);
+  sendJson(res, 200, isPlainObject(extendedMap) ? extendedMap : coreMap);
 }
 
 function getPublicStats() {
@@ -999,14 +959,16 @@ function sendAdminSite(req, res, site, adminToken) {
   }
 
   const scene = getScene(site.siteKey, site);
-  sendJson(res, 200, {
+  const panel = {
     site: publicSite(site),
     adminUrl: buildAdminUrl(req, adminToken),
     embedSnippet: buildEmbedSnippet(req, site),
     styleSnippet: buildStyleSnippet(site),
     scene: getSceneStats(scene),
     owners: getOwners(site, scene),
-  });
+  };
+  const extendedPanel = plugins.extend("extendAdminPanel", panel, { site: pluginSite(site) });
+  sendJson(res, 200, isPlainObject(extendedPanel) ? extendedPanel : panel);
 }
 
 function handlePostAdminSite(req, res) {
@@ -1207,7 +1169,9 @@ function handleAdminAction(req, res) {
       sendJson(res, 400, actionResult);
       return;
     }
-    sendJson(res, 200, { site: publicSite(site), scene: getSceneStats(scene), owners: getOwners(site, scene) });
+    const panel = { site: publicSite(site), scene: getSceneStats(scene), owners: getOwners(site, scene) };
+    const extendedPanel = plugins.extend("extendAdminPanel", panel, { site: pluginSite(site) });
+    sendJson(res, 200, isPlainObject(extendedPanel) ? extendedPanel : panel);
   });
 }
 
@@ -1817,7 +1781,7 @@ function closeIdentityClients(identity, code, reason) {
 }
 
 function publicSite(site) {
-  return {
+  const config = {
     siteKey: site.siteKey,
     name: site.name,
     origin: site.origin,
@@ -1837,6 +1801,27 @@ function publicSite(site) {
     blockedCount: site.blockedBrowserIds.length,
     supporter: Boolean(site.supporter),
   };
+  const extendedConfig = plugins.extend("extendSiteConfig", config, { site: pluginSite(site) });
+  return isPlainObject(extendedConfig) ? extendedConfig : config;
+}
+
+function pluginSite(site) {
+  if (!site) return null;
+  return Object.freeze({
+    siteKey: site.siteKey,
+    name: site.name,
+    origin: site.origin,
+  });
+}
+
+function pluginVisitor(identity) {
+  return Object.freeze({
+    id: identity.id,
+    browserId: identity.browserId,
+    displayName: identity.displayName,
+    color: identity.color,
+    isOwner: identity.isOwner,
+  });
 }
 
 function getScene(sceneKey, site = null) {
@@ -2124,6 +2109,11 @@ function handleInit(client, message) {
 
   broadcast(scene, { type: "join", peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
   syncIdentityAwayState(identity, joinedAt);
+  plugins.run("onVisitorJoin", Object.freeze({
+    site: pluginSite(site),
+    visitor: pluginVisitor(identity),
+    joinedAt,
+  }));
 }
 
 function handleMove(client, message) {
@@ -2256,8 +2246,15 @@ function handleSay(client, message) {
 
   const text = sanitizeMessage(message.text);
   if (!text) return;
-
   client.lastChatAt = now;
+
+  const event = Object.freeze({
+    site: pluginSite(client.site),
+    visitor: pluginVisitor(client.identity),
+    message: Object.freeze({ text, at: now }),
+  });
+  if (!plugins.run("onMessage", event)) return;
+
   client.identity.messages.push({ text, at: now });
   client.identity.messages = client.identity.messages.slice(-MAX_RECENT_MESSAGES);
   touchIdentityActivity(client.identity, now);
@@ -2270,8 +2267,6 @@ function handleSay(client, message) {
       saveSites();
     }
   }
-
-  void sendTelegramChatNotification(client.site, client.identity, text, now);
 
   broadcast(
     client.scene,
@@ -2306,6 +2301,16 @@ function handleClientMessage(client, raw) {
 
   if (!isPlainObject(message)) return;
   if (typeof message.type !== "string") return;
+
+  const pluginMessage = { ...message };
+  delete pluginMessage.browserSecret;
+  const accepted = plugins.run("onSocketMessage", Object.freeze({
+    site: pluginSite(client.site),
+    visitor: client.identity ? pluginVisitor(client.identity) : null,
+    message: Object.freeze(pluginMessage),
+  }));
+  if (!accepted) return;
+
   if (!Object.hasOwn(MESSAGE_HANDLERS, message.type)) return;
 
   if (message.type !== "init" && !client.joined) return;

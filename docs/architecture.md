@@ -57,10 +57,47 @@ That separation is now reflected directly in the repo:
 - `public/lib/` = generic browser helpers shared across pages (`ui-common.mjs`)
 - `public/map*.mjs` = public map rendering and shared deterministic town layout;
   the server persists operator-edited point props and water strokes under `DATA_DIR`.
+- `server/plugins.js` = the small in-process plugin registry and hook contract.
+- `plugins/` = public feature modules registered by this distribution. These are
+  trusted server modules, not remotely installed extensions. Telegram message
+  notifications are the first existing feature extracted behind this boundary.
 - `server.js` = static + realtime service. Public embed URLs (`/townsquare.mjs`,
   `/widget.css`) are a stable contract; clean routes (`/admin`, `/dev`, …) are
   aliased to their files in `resolvePublicFile`, so files can move without
   changing URLs.
+
+## Server plugins
+
+Plugins add hosted/network features around the core runtime. The core remains
+responsible for presence, movement, chat storage/broadcast, embeds, and
+self-hosting.
+
+Stable decision/event hooks are `onVisitorJoin`, `onMessage`, and
+`onSocketMessage`. Returning `false` from `onMessage` or `onSocketMessage` stops
+that core action; otherwise hooks observe it. Stable payload hooks are
+`extendSiteConfig`, `extendAdminPanel`, `extendMapData`, and
+`extendWidgetConfig`; each returns the next payload. Hooks run synchronously in
+registration order. Async side effects may be started by an event hook, but an
+async result cannot veto an action.
+
+Plugins receive small event objects rather than WebSocket, response, scene, or
+registry internals. Socket events never include `browserSecret`. Extension
+payloads are JSON-shaped objects so the widget/runtime protocol does not depend
+on plugin implementation details.
+
+A hosted bootstrap can register private modules before starting the public
+server:
+
+```js
+const { registerPlugin } = require("../TownSquare/server/plugins");
+const supporterPlugin = require("./plugins/supporter-badges");
+
+registerPlugin(supporterPlugin);
+require("../TownSquare/server");
+```
+
+This keeps public and private modules composable without a remote plugin loader
+or a repository split.
 
 ## Why this boundary matters
 
