@@ -240,6 +240,10 @@ export function mountTownSquare(root, options = {}) {
     frameHandle: null,
     onKeyDown: () => {},
     onKeyUp: () => {},
+    onStagePointerDown: () => {},
+    onStagePointerMove: () => {},
+    onStagePointerUp: () => {},
+    onStagePointerCancel: () => {},
     onStageClick: () => {},
   };
 

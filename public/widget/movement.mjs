@@ -1,5 +1,5 @@
 /**
- * Keyboard and stage tap input, local movement animation, and prop settle requests.
+ * Keyboard and stage pointer input, local movement animation, and prop settle requests.
  */
 
 import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } from "./connections.mjs";
@@ -127,6 +127,8 @@ export function maybeSendMove(ctx) {
 // Block re-jumping until the current jump animation finishes.
 const JUMP_COOLDOWN_MS = JUMP_MS;
 const HIGH_FIVE_COOLDOWN_MS = 360;
+const SWIPE_THRESHOLD_PX = 12;
+const SWIPE_CLICK_SUPPRESSION_MS = 500;
 
 /**
  * @param {EventTarget | null} target
@@ -355,16 +357,64 @@ export function closeTrays(ctx) {
 }
 
 /**
- * Tap input on the stage: tapping ground walks there, tapping a character
- * toggles their recent-message tray. Click fires for both mouse and touch and
- * is suppressed by the browser during scroll gestures, so page scrolling
- * through the embed keeps working.
+ * Stage input: tapping ground walks there, tapping a character toggles their
+ * recent-message tray, and a horizontal touch swipe walks by the same distance.
+ * The stage's `touch-action: pan-y` leaves vertical page scrolling to the
+ * browser, which cancels the pending swipe when it takes over.
  *
  * @param {WidgetContext} ctx
  */
 export function wireStagePointer(ctx) {
+  /** @type {{ pointerId: number, startClientX: number, startClientY: number, startX: number, dragging: boolean } | null} */
+  let swipe = null;
+  let suppressClickUntil = 0;
+
+  ctx.onStagePointerDown = (event) => {
+    if (ctx.quiet || event.pointerType !== "touch" || !event.isPrimary) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, select, button, a, [contenteditable]")) return;
+
+    swipe = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: ctx.self.x,
+      dragging: false,
+    };
+  };
+
+  ctx.onStagePointerMove = (event) => {
+    if (!swipe || event.pointerId !== swipe.pointerId) return;
+    const deltaX = event.clientX - swipe.startClientX;
+    const deltaY = event.clientY - swipe.startClientY;
+    if (!swipe.dragging && Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return;
+    if (!swipe.dragging && Math.abs(deltaX) <= Math.abs(deltaY)) return;
+
+    const rect = ctx.stage.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    if (!swipe.dragging) {
+      swipe.dragging = true;
+      ctx.stage.setPointerCapture(event.pointerId);
+    }
+    ctx.self.targetX = clampSelfX(swipe.startX + deltaX / rect.width);
+  };
+
+  const finishSwipe = (event) => {
+    if (!swipe || event.pointerId !== swipe.pointerId) return;
+    if (swipe.dragging) {
+      suppressClickUntil = performance.now() + SWIPE_CLICK_SUPPRESSION_MS;
+      if (ctx.stage.hasPointerCapture(event.pointerId)) {
+        ctx.stage.releasePointerCapture(event.pointerId);
+      }
+    }
+    swipe = null;
+  };
+  ctx.onStagePointerUp = finishSwipe;
+  ctx.onStagePointerCancel = finishSwipe;
+
   ctx.onStageClick = (event) => {
     if (ctx.quiet) return;
+    if (performance.now() < suppressClickUntil) return;
 
     const target = event.target instanceof Element ? event.target : null;
     // Signposts open the connections modal; their own handler stops propagation,
@@ -392,6 +442,10 @@ export function wireStagePointer(ctx) {
     ctx.self.targetX = clampSelfX((event.clientX - rect.left) / rect.width);
   };
 
+  ctx.stage.addEventListener("pointerdown", ctx.onStagePointerDown);
+  ctx.stage.addEventListener("pointermove", ctx.onStagePointerMove);
+  ctx.stage.addEventListener("pointerup", ctx.onStagePointerUp);
+  ctx.stage.addEventListener("pointercancel", ctx.onStagePointerCancel);
   ctx.stage.addEventListener("click", ctx.onStageClick);
 }
 
@@ -399,5 +453,9 @@ export function wireStagePointer(ctx) {
  * @param {WidgetContext} ctx
  */
 export function unwireStagePointer(ctx) {
+  ctx.stage.removeEventListener("pointerdown", ctx.onStagePointerDown);
+  ctx.stage.removeEventListener("pointermove", ctx.onStagePointerMove);
+  ctx.stage.removeEventListener("pointerup", ctx.onStagePointerUp);
+  ctx.stage.removeEventListener("pointercancel", ctx.onStagePointerCancel);
   ctx.stage.removeEventListener("click", ctx.onStageClick);
 }

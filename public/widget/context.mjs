@@ -15,7 +15,7 @@
  * @property {number} x
  * @property {boolean} movingLeft
  * @property {boolean} movingRight
- * @property {number | null} targetX Tap-to-walk destination; null when none.
+ * @property {number | null} targetX Pointer-selected walk destination; null when none.
  * @property {number} lastSentX
  * @property {number} lastSendAt
  * @property {number} lastSayAt
@@ -85,6 +85,10 @@
  * @property {number | null} frameHandle
  * @property {(event: KeyboardEvent) => void} onKeyDown
  * @property {(event: KeyboardEvent) => void} onKeyUp
+ * @property {(event: PointerEvent) => void} onStagePointerDown
+ * @property {(event: PointerEvent) => void} onStagePointerMove
+ * @property {(event: PointerEvent) => void} onStagePointerUp
+ * @property {(event: PointerEvent) => void} onStagePointerCancel
  * @property {(event: MouseEvent) => void} onStageClick
  * @property {Map<number, import("./birds.mjs").BirdView>} [birds]
  * @property {HTMLElement} [birdLayer]

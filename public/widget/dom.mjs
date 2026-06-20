@@ -173,7 +173,7 @@ export function renderShell(container) {
 
   const instructions = document.createElement("p");
   instructions.textContent =
-    "Move with the arrow keys or tap where you want to walk. Press J to jump and H to show a high-five; on touch, use the action buttons. Press T or tap your nameplate to chat, and tap a character to see their recent messages.";
+    "Move with the arrow keys, tap where you want to walk, or swipe left and right on touch screens. Press J to jump and H to show a high-five; on touch, use the action buttons. Press T or tap your nameplate to chat, and tap a character to see their recent messages.";
 
   const links = document.createElement("p");
   links.className = "townsquare__help-links";

@@ -216,8 +216,8 @@
   height: var(--ts-stage-height);
   border-radius: var(--r) var(--r) 0 0;
   background: transparent;
-  /* taps move the character; keep page panning, drop double-tap zoom */
-  touch-action: manipulation;
+  /* horizontal touch swipes walk; vertical gestures still pan the host page */
+  touch-action: pan-y pinch-zoom;
   /* Speech bubbles, trays, and composers size against the stage (cqw), not the
      viewport — otherwise a long line in a narrow embed renders wider than the
      stage and bleeds past its clipped edge. */
