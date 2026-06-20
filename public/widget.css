@@ -504,6 +504,10 @@
     Canvas;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .townsquare--expanded .townsquare__controls {
@@ -518,9 +522,9 @@
 }
 
 .townsquare--expanded .townsquare__stage {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   height: auto;
-  min-height: 0;
+  min-height: calc(var(--ts-stage-height) + var(--ts-keyboard, 0px));
 }
 
 .townsquare .prop--tree .canopy {

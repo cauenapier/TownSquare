@@ -77,6 +77,46 @@ import {
  */
 
 const PREVIEW_SPAWN_X = (MIN_X + MAX_X) / 2;
+const MOBILE_KEYBOARD_SCROLL_GAP = 12;
+const MOBILE_KEYBOARD_MIN_HEIGHT = 60;
+
+/**
+ * @param {VisualViewport | undefined} viewport
+ */
+function getKeyboardInset(viewport) {
+  if (!viewport) return 0;
+  return Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+}
+
+/**
+ * When a docked mobile input focuses near the bottom of a long page, browsers
+ * keep the input reachable but may still leave the square's lower edge behind
+ * the virtual keyboard. Scroll the page just enough to reveal the whole widget.
+ *
+ * @param {HTMLElement} app
+ * @param {VisualViewport | undefined} viewport
+ * @param {boolean} expanded
+ */
+function revealAppAboveKeyboard(app, viewport, expanded) {
+  if (!(app instanceof HTMLElement) || !viewport) return;
+  if (!(document.activeElement instanceof HTMLElement) || !app.contains(document.activeElement)) return;
+  const keyboardInset = getKeyboardInset(viewport);
+  if (keyboardInset < MOBILE_KEYBOARD_MIN_HEIGHT) return;
+  if (expanded) {
+    const visibleBottom = viewport.offsetTop + viewport.height;
+    const overlap = app.getBoundingClientRect().bottom + MOBILE_KEYBOARD_SCROLL_GAP - visibleBottom;
+    if (overlap > 0) {
+      app.scrollBy({ top: overlap, behavior: "auto" });
+    }
+    return;
+  }
+  const appBottom = window.scrollY + app.getBoundingClientRect().bottom;
+  const visibleBottom = window.scrollY + viewport.offsetTop + viewport.height;
+  const overlap = appBottom + MOBILE_KEYBOARD_SCROLL_GAP - visibleBottom;
+  if (overlap > 0) {
+    window.scrollBy({ top: overlap, behavior: "auto" });
+  }
+}
 
 /**
  * @param {import("./widget/context.mjs").WidgetContext} ctx
@@ -292,16 +332,23 @@ export function mountTownSquare(root, options = {}) {
   const unwatchPage = watchCurrentPage(ctx);
 
   // While the virtual keyboard is up, expose how much of the layout viewport it
-  // hides so the docked composer can ride above it in expanded mode.
+  // hides so the docked composer can ride above it in expanded mode. On long
+  // mobile pages, also nudge the document scroll so the square's lower edge is
+  // not left behind the keyboard while an input inside it is focused.
   const viewport = window.visualViewport;
   const onViewportChange = () => {
-    if (!viewport) return;
-    const hidden = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    const hidden = getKeyboardInset(viewport);
     app.style.setProperty("--ts-keyboard", `${Math.round(hidden)}px`);
+    revealAppAboveKeyboard(app, viewport, expandController.isExpanded());
+  };
+  const onAppFocusIn = () => {
+    window.requestAnimationFrame(onViewportChange);
   };
   if (coarsePointer && viewport) {
     viewport.addEventListener("resize", onViewportChange);
     viewport.addEventListener("scroll", onViewportChange);
+    app.addEventListener("focusin", onAppFocusIn);
+    onViewportChange();
   }
 
   if (!preview) {
@@ -361,6 +408,7 @@ export function mountTownSquare(root, options = {}) {
       if (coarsePointer && viewport) {
         viewport.removeEventListener("resize", onViewportChange);
         viewport.removeEventListener("scroll", onViewportChange);
+        app.removeEventListener("focusin", onAppFocusIn);
       }
       expandController.destroy();
       clearTimeout(ctx.reconnectTimer);
