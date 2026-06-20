@@ -74,6 +74,7 @@ const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 *
 const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS || 60000);
 const HEARTBEAT_INTERVAL_MS = 30000;
 const BIRD_TICK_INTERVAL_MS = 1000;
+const BALL_TICK_INTERVAL_MS = 50; // mirrors shared BALL_TICK_MS; module-level so the timer can start before BALL is populated
 const TELEGRAM_API_TIMEOUT_MS = 5000;
 const BIRD_FLEE_RADIUS = 0.07;
 const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
@@ -91,6 +92,8 @@ let MAX_DISPLAY_NAME_LEN;
 let MAX_READING_LABEL_LEN;
 let MAX_RECENT_MESSAGES;
 let HIGH_FIVE_DISTANCE;
+/** @type {Record<string, number>} Ball physics, populated from shared-constants at startup. */
+let BALL;
 let DEFAULT_CHARACTER_COLOR;
 let DEFAULT_OWNER_BADGE_COLOR;
 /** @type {Set<string>} */
@@ -1747,6 +1750,77 @@ function tickSceneBirds(scene, now) {
   spawnBird(scene);
 }
 
+function snapshotBall(scene) {
+  const { x, y, vx, vy } = scene.ball;
+  return { x, y, vx, vy };
+}
+
+function broadcastBall(scene) {
+  broadcast(scene, { type: "ball", ...snapshotBall(scene), at: Date.now() });
+}
+
+/**
+ * Kick the ball away from a figure that ran into it — harder and higher the
+ * faster the figure was moving (capped). Called from handleMove, so a figure
+ * dribbling alongside re-kicks it each step. Returns true if it kicked.
+ */
+function kickBall(scene, playerX, speed) {
+  const ball = scene.ball;
+  if (Math.abs(playerX - ball.x) >= BALL.KICK_RADIUS) return false;
+  const dir = ball.x < playerX ? -1 : 1;
+  ball.vx = dir * Math.min(BALL.KICK_BASE + speed * BALL.KICK_GAIN, BALL.KICK_MAX);
+  ball.vy = Math.min(BALL.LOFT_BASE + speed * BALL.LOFT_GAIN, BALL.LOFT_MAX);
+  broadcastBall(scene);
+  return true;
+}
+
+/**
+ * Roll a moving ball one step (gravity arc + landing bounce + rolling friction
+ * + edge bounce) and broadcast its position. A ball at rest does nothing, so an
+ * idle square stays silent on the wire.
+ */
+function tickSceneBall(scene, dt) {
+  const ball = scene.ball;
+  if (ball.vx === 0 && ball.vy === 0 && ball.y === 0) return;
+
+  // Horizontal travel + edge bounce.
+  ball.x += ball.vx * dt;
+  if (ball.x < MIN_X) {
+    ball.x = MIN_X;
+    ball.vx = -ball.vx * BALL.EDGE_BOUNCE;
+  } else if (ball.x > MAX_X) {
+    ball.x = MAX_X;
+    ball.vx = -ball.vx * BALL.EDGE_BOUNCE;
+  }
+
+  // Vertical: gravity arc + landing bounce.
+  ball.y += ball.vy * dt;
+  ball.vy -= BALL.GRAVITY * dt;
+  if (ball.y <= 0) {
+    ball.y = 0;
+    if (ball.vy < 0) ball.vy = -ball.vy * BALL.BOUNCE;
+    if (Math.abs(ball.vy) < BALL.REST_VY) ball.vy = 0;
+  }
+
+  // Rolling friction + trap, only while on the ground.
+  if (ball.y === 0) {
+    ball.vx *= BALL.FRICTION;
+    if (Math.abs(ball.vx) < BALL.REST_VX) ball.vx = 0;
+    if (ball.vx !== 0) {
+      for (const identity of scene.identities.values()) {
+        if (identity.joined && Math.abs(identity.x - ball.x) < BALL.TRAP_RADIUS) {
+          ball.x = identity.x;
+          ball.vx = 0;
+          ball.vy = 0;
+          break;
+        }
+      }
+    }
+  }
+
+  broadcastBall(scene);
+}
+
 function createScene(key, site = null) {
   const now = Date.now();
   const config = getSceneConfig(site);
@@ -1764,6 +1838,7 @@ function createScene(key, site = null) {
     birds: new Map(),
     nextBirdId: 1,
     nextSpawnAt: now + BIRD_FIRST_SPAWN_MS,
+    ball: { x: BALL.START_X, y: 0, vx: 0, vy: 0 },
   };
 }
 
@@ -2219,6 +2294,7 @@ function handleInit(client, message) {
     ...selfFields,
     peers,
     birds: snapshotBirds(scene),
+    ball: snapshotBall(scene),
     chatThrottleMs: getChatThrottle(site),
   });
 
@@ -2273,8 +2349,10 @@ function handleMove(client, message) {
   if (nextX === null) return;
 
   const now = Date.now();
-  if (now - client.lastMoveAt < MOVE_THROTTLE_MS) return;
+  const sinceLastMove = now - client.lastMoveAt;
+  if (sinceLastMove < MOVE_THROTTLE_MS) return;
 
+  const prevX = client.identity.x;
   client.lastMoveAt = now;
   client.identity.x = nextX;
   clearPose(client.identity);
@@ -2282,6 +2360,10 @@ function handleMove(client, message) {
 
   emitIdentityState(client.identity, { exceptConnectionId: client.connectionId });
   maybeFleeBirds(client.scene, nextX);
+
+  // Run into the ball to kick it; speed (x-units/sec) drives kick + loft.
+  const speed = sinceLastMove > 0 ? Math.abs(nextX - prevX) / (sinceLastMove / 1000) : 0;
+  kickBall(client.scene, nextX, speed);
 }
 
 function handleAction(client, message) {
@@ -2507,6 +2589,16 @@ const heartbeatTimer = setInterval(() => {
 
 heartbeatTimer.unref?.();
 
+const ballTimer = setInterval(() => {
+  if (!BALL) return; // shared constants not loaded yet (startup race)
+  const dt = BALL.TICK_MS / 1000;
+  for (const scene of scenes.values()) {
+    tickSceneBall(scene, dt);
+  }
+}, BALL_TICK_INTERVAL_MS);
+
+ballTimer.unref?.();
+
 const birdTimer = setInterval(() => {
   const now = Date.now();
   for (const scene of scenes.values()) {
@@ -2583,6 +2675,24 @@ async function startServer() {
   MAX_READING_LABEL_LEN = shared.READING_LABEL_MAX;
   MAX_RECENT_MESSAGES = shared.MAX_RECENT_MESSAGES;
   HIGH_FIVE_DISTANCE = shared.HIGH_FIVE_DISTANCE;
+  BALL = {
+    TICK_MS: shared.BALL_TICK_MS,
+    KICK_RADIUS: shared.BALL_KICK_RADIUS,
+    TRAP_RADIUS: shared.BALL_TRAP_RADIUS,
+    KICK_BASE: shared.BALL_KICK_BASE,
+    KICK_GAIN: shared.BALL_KICK_GAIN,
+    KICK_MAX: shared.BALL_KICK_MAX,
+    LOFT_BASE: shared.BALL_LOFT_BASE,
+    LOFT_GAIN: shared.BALL_LOFT_GAIN,
+    LOFT_MAX: shared.BALL_LOFT_MAX,
+    GRAVITY: shared.BALL_GRAVITY,
+    BOUNCE: shared.BALL_BOUNCE,
+    EDGE_BOUNCE: shared.BALL_EDGE_BOUNCE,
+    FRICTION: shared.BALL_FRICTION,
+    REST_VX: shared.BALL_REST_VX,
+    REST_VY: shared.BALL_REST_VY,
+    START_X: shared.BALL_START_X,
+  };
   DEFAULT_CHARACTER_COLOR = shared.DEFAULT_CHARACTER_COLOR;
   DEFAULT_OWNER_BADGE_COLOR = shared.DEFAULT_OWNER_BADGE_COLOR;
   CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);

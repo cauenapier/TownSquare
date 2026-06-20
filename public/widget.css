@@ -676,6 +676,29 @@
   animation: bird-flee 0.7s ease-in forwards;
 }
 
+/* Soccer ball — shared, server-simulated. x -> left like figures/birds; y lifts
+   it off the 53px ground line. The transition smooths the server's 50ms frames.
+   --ball-fill / --ball-ink are overridable so a customized square can re-skin it. */
+.townsquare__ball {
+  position: absolute;
+  left: calc(var(--ball-x, 0.5) * 100%);
+  bottom: calc(53px + var(--ball-lift, 0px));
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  transition: left 55ms linear, bottom 55ms linear;
+  z-index: 1;
+  border: 1px solid color-mix(in oklab, var(--ball-ink, #1a1a1a) 70%, transparent);
+  background:
+    radial-gradient(circle at 50% 50%, var(--ball-ink, #1a1a1a) 0 2px, transparent 2.6px),
+    radial-gradient(circle at 26% 32%, var(--ball-ink, #1a1a1a) 0 1.3px, transparent 1.7px),
+    radial-gradient(circle at 74% 32%, var(--ball-ink, #1a1a1a) 0 1.3px, transparent 1.7px),
+    radial-gradient(circle at 30% 74%, var(--ball-ink, #1a1a1a) 0 1.3px, transparent 1.7px),
+    radial-gradient(circle at 72% 72%, var(--ball-ink, #1a1a1a) 0 1.3px, transparent 1.7px),
+    var(--ball-fill, #fff);
+}
+
 @keyframes bird-wing-left {
   from {
     transform: rotate(16deg);

@@ -4,6 +4,7 @@
 
 import { recordMessage, sayMessage } from "./chat.mjs";
 import { applyBirdFlee, applyBirdSpawn, syncBirdsFromHello } from "./birds.mjs";
+import { applyBallState } from "./ball.mjs";
 import { clearPresencePose, needsStandUp, playHighFivePair, playJump, playRaisedHand, setWalking } from "./dom.mjs";
 import {
   applyPeerState,
@@ -148,6 +149,7 @@ export function wireSocket(ctx) {
           }
         }
         syncBirdsFromHello(ctx, message.birds);
+        applyBallState(ctx, message.ball);
         updateStatus(ctx);
         return;
       }
@@ -164,6 +166,11 @@ export function wireSocket(ctx) {
         } else if (message.action === "flee") {
           applyBirdFlee(ctx, message);
         }
+        return;
+      }
+
+      if (message.type === "ball") {
+        applyBallState(ctx, message);
         return;
       }
 
