@@ -28,6 +28,7 @@
 
 .townsquare {
   --ts-stage-height: 180px;
+  --ts-scene-floor: 53px;
   /* Space below the stage for the touch toolbar (see .townsquare__toolbar). */
   --ts-toolbar-reserve: 80px;
   position: relative;
@@ -226,7 +227,7 @@
 
 .townsquare__ground {
   position: absolute;
-  inset: auto 0 52px;
+  inset: auto 0 calc(var(--ts-scene-floor) - 1px);
   height: 1px;
   background: transparent;
 }
@@ -249,7 +250,7 @@
 
 .townsquare .prop {
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-scene-floor);
   transform: translateX(-50%);
   color: var(--prop-ink);
   opacity: 0.5;
@@ -274,7 +275,7 @@
 /* Neighbouring-town fingerposts at the stage edges. */
 .townsquare .townsquare-signpost {
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-scene-floor);
   display: block;
   margin: 0;
   padding: 0;
@@ -490,6 +491,7 @@
 .townsquare--expanded {
   position: fixed;
   inset: 0;
+  --ts-scene-floor: var(--ts-toolbar-overlay, 53px);
   z-index: 2147483000;
   width: 100vw;
   height: 100dvh;
@@ -725,7 +727,7 @@
   --townsquare-avatar-shade-filter: ;
   --townsquare-avatar-light-filter: ;
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-scene-floor);
   width: 18px;
   height: 46px;
   transform: translateX(-50%);

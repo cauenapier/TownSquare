@@ -345,10 +345,11 @@ export function mountTownSquare(root, options = {}) {
     const hidden = getKeyboardInset(viewport);
     const keyboardVisible = hidden >= MOBILE_KEYBOARD_MIN_HEIGHT;
     const expanded = expandController.isExpanded();
-    const toolbarOverlayInset = expanded && keyboardVisible
+    const toolbarOverlayInset = expanded
       ? toolbar.getBoundingClientRect().height + MOBILE_KEYBOARD_SCROLL_GAP
       : 0;
     app.style.setProperty("--ts-keyboard", `${Math.round(hidden)}px`);
+    app.style.setProperty("--ts-toolbar-overlay", `${Math.round(toolbarOverlayInset)}px`);
     app.style.setProperty(
       "--ts-keyboard-scroll-room",
       expanded && keyboardVisible ? `${Math.round(hidden + toolbarOverlayInset)}px` : "0px",
