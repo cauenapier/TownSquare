@@ -299,7 +299,7 @@ export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
  *   profile?: { displayName?: string, color?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean },
  *   colors?: Array<string>,
  *   onProfileChange?: (profile: { displayName: string, color: string }) => void,
- *   onSubmitChat?: () => void,
+ *   onSubmitChat?: () => boolean | void,
  *   onTypingChange?: (typing: boolean) => void,
  *   composerHost?: HTMLElement
  * }} options
@@ -617,7 +617,12 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
 
   composer.addEventListener("submit", (event) => {
     event.preventDefault();
-    onSubmitChat?.();
+    // A blocked send (e.g. slow mode) returns false: keep the text and stay
+    // open so the visitor can resend once the cooldown lapses.
+    if (onSubmitChat?.() === false) {
+      input.focus();
+      return;
+    }
     onTypingChange?.(false);
     if (composerHost) {
       // Docked bar stays open for back-and-forth; reopening costs a tiny tap.

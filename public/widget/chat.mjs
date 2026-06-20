@@ -216,26 +216,30 @@ function hideCooldownHint(ctx) {
  * hide from them).
  *
  * @param {WidgetContext} ctx
+ * @returns {boolean} Whether the line was sent. `false` (e.g. slow-mode block)
+ *   tells the composer to keep its text and stay open.
  */
 export function submitChat(ctx) {
-  if (ctx.quiet) return;
+  if (ctx.quiet) return false;
 
   const { input } = ctx.self.avatar;
-  if (!input) return;
+  if (!input) return false;
 
   const text = input.value.trim();
-  if (!text) return;
+  if (!text) return false;
 
   // Local-only modes (preview/dev simulate) have no server to echo the line
   // back, so they show it directly. Live modes still need an open socket.
   const localOnly = ctx.options.preview === true || ctx.options.simulate === true;
-  if (!localOnly && ctx.socket.readyState !== WebSocket.OPEN) return;
+  if (!localOnly && ctx.socket.readyState !== WebSocket.OPEN) return false;
 
+  // Slow mode is a client-side UX concern, so it applies in local modes too
+  // (it lets the /dev sandbox exercise the "wait" hint without a server).
   const cooldown = ctx.chatThrottleMs || 0;
   const now = Date.now();
-  if (!localOnly && cooldown > 0 && ctx.self.lastSayAt && now - ctx.self.lastSayAt < cooldown) {
+  if (cooldown > 0 && ctx.self.lastSayAt && now - ctx.self.lastSayAt < cooldown) {
     showCooldownHint(ctx, cooldown - (now - ctx.self.lastSayAt));
-    return;
+    return false;
   }
 
   if (ctx.socket.readyState === WebSocket.OPEN) {
@@ -245,4 +249,5 @@ export function submitChat(ctx) {
   ctx.self.lastSayAt = now;
   input.value = "";
   hideCooldownHint(ctx);
+  return true;
 }
