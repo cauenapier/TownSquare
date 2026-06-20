@@ -9,7 +9,7 @@
 import { setLocalTyping, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds } from "./widget/birds.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
-import { CHARACTER_COLORS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
+import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
 import {
   createAvatar,
@@ -154,6 +154,7 @@ export function mountTownSquare(root, options = {}) {
     helpPanel,
     jumpButton,
     highFiveButton,
+    toolbar,
   } = renderShell(root);
 
   // Only write palette tokens inline when the host explicitly passes `style`
@@ -182,6 +183,9 @@ export function mountTownSquare(root, options = {}) {
     statusEl,
     quietButton,
     expandButton,
+    // Chat cooldown (slow mode); the server sends the live value in `hello` and
+    // again whenever an owner changes it.
+    chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
     self: {
       id: null,
       x: spawnX,
@@ -190,6 +194,7 @@ export function mountTownSquare(root, options = {}) {
       targetX: null,
       lastSentX: spawnX,
       lastSendAt: 0,
+      lastSayAt: 0,
       lastJumpAt: 0,
       lastHighFiveAt: 0,
       pose: null,
@@ -219,7 +224,7 @@ export function mountTownSquare(root, options = {}) {
         },
         onSubmitChat: () => submitChat(ctx),
         onTypingChange: (typing) => setLocalTyping(ctx, typing),
-        composerHost: coarsePointer ? app : undefined,
+        toolbarHost: coarsePointer ? toolbar : undefined,
       }),
       walkTimer: null,
     },
@@ -235,6 +240,10 @@ export function mountTownSquare(root, options = {}) {
     frameHandle: null,
     onKeyDown: () => {},
     onKeyUp: () => {},
+    onStagePointerDown: () => {},
+    onStagePointerMove: () => {},
+    onStagePointerUp: () => {},
+    onStagePointerCancel: () => {},
     onStageClick: () => {},
   };
 
@@ -272,6 +281,12 @@ export function mountTownSquare(root, options = {}) {
   const onHighFiveClick = () => triggerHighFive(ctx);
   jumpButton.addEventListener("click", onJumpClick);
   highFiveButton.addEventListener("click", onHighFiveClick);
+  // Touch: gather the action buttons into the bottom toolbar beside the docked
+  // composer and pencil (createAvatar already placed those). Moving the nodes
+  // keeps their click listeners intact. Final bar order: input, pencil, jump, hi5.
+  if (coarsePointer) {
+    toolbar.append(jumpButton, highFiveButton);
+  }
   const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton);
 
   const unwatchPage = watchCurrentPage(ctx);

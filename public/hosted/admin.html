@@ -227,6 +227,35 @@
             <a href="/admin/chat" class="hosted-button">Open chat thread →</a>
           </div>
 
+          <h3 class="hosted-subhead">Chat filtering</h3>
+          <form class="hosted-form" id="moderation-form">
+            <div class="hosted-grid">
+              <label>
+                <span>Filtered words</span>
+                <textarea id="blocked-words" name="blockedWords" rows="3" placeholder="One word per line"></textarea>
+              </label>
+              <label>
+                <span>Slow mode</span>
+                <select id="chat-throttle" name="chatThrottleMs">
+                  <option value="0">Off · no limit</option>
+                  <option value="500">Fast · 0.5s</option>
+                  <option value="1500">Normal · 1.5s</option>
+                  <option value="3000">Slow · 3s</option>
+                  <option value="5000">Slower · 5s</option>
+                  <option value="10000">Slowest · 10s</option>
+                </select>
+              </label>
+            </div>
+            <p class="hosted-note">Filtered words are masked in chat and visitor names — whole-word and case-insensitive. Slow mode is the minimum time between a visitor's messages.</p>
+            <div class="hosted-actions">
+              <button type="submit" id="save-moderation" disabled>Save filtering</button>
+            </div>
+            <p class="hosted-status" id="moderation-status" role="status" hidden></p>
+          </form>
+
+          <h3 class="hosted-subhead">Recent actions</h3>
+          <div class="moderation-log" id="moderation-log"></div>
+
           <h3 class="hosted-subhead">Visitors</h3>
           <div class="visitor-list" id="visitor-list"></div>
         </section>

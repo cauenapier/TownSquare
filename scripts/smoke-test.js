@@ -267,6 +267,100 @@ async function assertOwnerProfilePersists() {
   reconnected.ws.close();
 }
 
+async function assertModerationTools() {
+  const hosted = await createSite("Moderation");
+  const { siteKey } = hosted.site;
+  const { adminToken } = hosted;
+
+  const sender = await connect({ x: 0.3, browserId: "mod-sender", siteKey, origin: HTTP_ORIGIN, displayName: "Talker" });
+  const observer = await connect({ x: 0.7, browserId: "mod-observer", siteKey, origin: HTTP_ORIGIN });
+  await delay(80);
+
+  // The widget enforces slow mode client-side (to show a "wait" hint), so the
+  // server hands it the live cooldown on connect.
+  assert(sender.hello.chatThrottleMs === 500, "hello did not carry the default chat cooldown");
+
+  // --- Forbidden-word filter: matched words are masked for peers; the list is
+  // lowercased and de-duped server-side. ---
+  const filtered = await postJson("/api/admin/action", {
+    siteKey, adminToken, action: "updateModeration", blockedWords: ["Badword", "badword", "secret"], chatThrottleMs: 1500,
+  });
+  assert(filtered.response.ok, filtered.body.error || "updateModeration failed");
+  assert(
+    JSON.stringify(filtered.body.site.blockedWords) === JSON.stringify(["badword", "secret"]),
+    "blocked words were not lowercased/de-duped",
+  );
+
+  sender.ws.send(JSON.stringify({ type: "say", text: "this is a badword and a Secret" }));
+  await waitFor(
+    () => observer.seen.some((m) => m.type === "say" && m.id === sender.id),
+    "filtered chat message did not reach the observer",
+  );
+  const filteredSay = findLast(observer.seen, (m) => m.type === "say" && m.id === sender.id);
+  assert(
+    filteredSay.text === "this is a ******* and a ******",
+    `forbidden words were not masked (got: ${filteredSay.text})`,
+  );
+
+  // --- Mute: a muted visitor stays present but their messages are dropped. ---
+  const muted = await postJson("/api/admin/action", { siteKey, adminToken, action: "muteVisitor", visitorId: sender.id });
+  assert(muted.response.ok, muted.body.error || "muteVisitor failed");
+  assert(
+    muted.body.scene.visitors.find((v) => v.id === sender.id)?.muted === true,
+    "muted visitor was not flagged in scene stats",
+  );
+
+  await delay(1600); // clear the default chat throttle from the previous message
+  sender.ws.send(JSON.stringify({ type: "say", text: "you should not hear this" }));
+  await delay(200);
+  assert(
+    !observer.seen.some((m) => m.type === "say" && m.id === sender.id && m.text.includes("not hear")),
+    "a muted visitor's message reached the observer",
+  );
+
+  // --- Unmute restores chat. ---
+  const unmuted = await postJson("/api/admin/action", { siteKey, adminToken, action: "unmuteVisitor", visitorId: sender.id });
+  assert(unmuted.response.ok, unmuted.body.error || "unmuteVisitor failed");
+  assert(
+    unmuted.body.scene.visitors.find((v) => v.id === sender.id)?.muted === false,
+    "unmuted visitor was still flagged as muted",
+  );
+  sender.ws.send(JSON.stringify({ type: "say", text: "back online" }));
+  await waitFor(
+    () => observer.seen.some((m) => m.type === "say" && m.id === sender.id && m.text === "back online"),
+    "unmuted visitor's message did not reach the observer",
+  );
+
+  // --- Slow mode: a custom cooldown suppresses an otherwise-allowed message. ---
+  const slowed = await postJson("/api/admin/action", {
+    siteKey, adminToken, action: "updateModeration", blockedWords: [], chatThrottleMs: 5000,
+  });
+  assert(slowed.response.ok, slowed.body.error || "slow-mode update failed");
+  assert(slowed.body.site.chatThrottleMs === 5000, "slow-mode cooldown did not persist");
+  await delay(80);
+  assert(
+    observer.seen.some((m) => m.type === "chatThrottle" && m.ms === 5000),
+    "connected widget was not told about the new slow-mode cooldown",
+  );
+
+  await delay(1600); // well under the new 5s cooldown, so the message is dropped
+  sender.ws.send(JSON.stringify({ type: "say", text: "too fast for slow mode" }));
+  await delay(200);
+  assert(
+    !observer.seen.some((m) => m.type === "say" && m.id === sender.id && m.text.includes("too fast")),
+    "slow mode did not suppress a message sent within the custom cooldown",
+  );
+
+  // --- Moderation log records enforcement actions, newest first. ---
+  const logView = await postJson("/api/admin/site", { siteKey, adminToken });
+  const actions = (logView.body.site.moderationLog || []).map((entry) => entry.action);
+  assert(actions.includes("mute") && actions.includes("unmute"), "moderation log did not record mute/unmute");
+  assert(actions.indexOf("unmute") < actions.indexOf("mute"), "moderation log is not newest-first");
+
+  sender.ws.close();
+  observer.ws.close();
+}
+
 async function loginWithAdminToken(adminToken) {
   const response = await fetch(`${HTTP_ORIGIN}/api/admin/login`, {
     method: "POST",
@@ -888,6 +982,7 @@ async function main() {
   await assertCustomizationPersists();
   await assertMatchingWwwOriginsWork();
   await assertOwnerProfilePersists();
+  await assertModerationTools();
 
   const hostedA = await createSite("Smoke A");
   const hostedB = await createSite("Smoke B");

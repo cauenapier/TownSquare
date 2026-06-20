@@ -95,6 +95,7 @@ http://127.0.0.1:8787/healthz
   - two tabs from the same browser still share one visitor
   - a different browser or browser profile shows a second visitor
   - arrow keys move your figure left/right
+  - tapping the stage walks there, while horizontal touch swipes walk by the swipe distance without blocking vertical page scrolling
   - pressing H shows a high-five emoji, and a nearby second visitor pressing H high-fives you
   - on touch devices, the jump and high-five buttons trigger the same actions
   - movement is reflected in the other window
@@ -341,6 +342,7 @@ The smoke test verifies:
 - say
 - leave
 - hosted site isolation and admin token hashing
+- moderation tools (word filter, mute/unmute, slow mode, moderation log)
 - service-admin map validation and persistence
 
 To also verify inactive disconnect, restart the server with a short timeout and rerun smoke:

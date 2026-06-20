@@ -65,7 +65,11 @@ const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
 const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
-const CHAT_THROTTLE_MS = 1500;
+const DEFAULT_CHAT_THROTTLE_MS = 500;
+const MAX_CHAT_THROTTLE_MS = 30000;
+const MAX_BLOCKED_WORDS = 60;
+const MAX_BLOCKED_WORD_LEN = 40;
+const MAX_MODERATION_LOG = 50;
 const RECONNECT_GRACE_MS = 1500;
 const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 * 60 * 1000);
 const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS || 60000);
@@ -298,6 +302,53 @@ function sanitizeBrowserSecret(browserSecret) {
 function sanitizeMessage(text) {
   if (typeof text !== "string") return "";
   return text.trim().slice(0, MAX_MESSAGE_LEN);
+}
+
+/** A site's forbidden-word list: trimmed, lowercased, de-duped, capped. */
+function sanitizeBlockedWords(input) {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set();
+  const words = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") continue;
+    const word = raw.trim().toLowerCase().slice(0, MAX_BLOCKED_WORD_LEN);
+    if (!word || seen.has(word)) continue;
+    seen.add(word);
+    words.push(word);
+    if (words.length >= MAX_BLOCKED_WORDS) break;
+  }
+  return words;
+}
+
+/** Per-site slow-mode cooldown, clamped to a sane range; falls back to default. */
+function sanitizeChatThrottle(input) {
+  const ms = Number(input);
+  if (!Number.isFinite(ms) || ms < 0) return DEFAULT_CHAT_THROTTLE_MS;
+  return Math.min(Math.round(ms), MAX_CHAT_THROTTLE_MS);
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Mask any forbidden word in `text` with asterisks. Whole-word and
+ * case-insensitive so innocent substrings (the Scunthorpe problem) survive.
+ * Returns the text unchanged when the site has no word list.
+ */
+function applyWordFilter(text, words) {
+  if (!text || !Array.isArray(words) || words.length === 0) return text;
+  let filtered = text;
+  for (const word of words) {
+    const pattern = new RegExp(`\\b${escapeRegExp(word)}\\b`, "gi");
+    filtered = filtered.replace(pattern, (match) => "*".repeat(match.length));
+  }
+  return filtered;
+}
+
+/** Names are visible to everyone, so they run through the same word filter. */
+function filterDisplayName(site, name) {
+  return site ? applyWordFilter(name, site.blockedWords) : name;
 }
 
 function sanitizeDisplayName(displayName) {
@@ -964,7 +1015,7 @@ function sendAdminSite(req, res, site, adminToken) {
     adminUrl: buildAdminUrl(req, adminToken),
     embedSnippet: buildEmbedSnippet(req, site),
     styleSnippet: buildStyleSnippet(site),
-    scene: getSceneStats(scene),
+    scene: getSceneStats(scene, site),
     owners: getOwners(site, scene),
   };
   const extendedPanel = plugins.extend("extendAdminPanel", panel, { site: pluginSite(site) });
@@ -1052,11 +1103,22 @@ const ADMIN_ACTIONS = {
   },
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
+    logModeration(site, site.chatDisabled ? "chat-off" : "chat-on");
     touchSite(site);
+  },
+  updateModeration(site, scene, body) {
+    site.blockedWords = sanitizeBlockedWords(body.blockedWords);
+    site.chatThrottleMs = sanitizeChatThrottle(body.chatThrottleMs);
+    touchSite(site);
+    // Push the new cooldown to connected widgets so their "wait" hint stays in
+    // sync — otherwise a visitor keeps the old limit until they reconnect.
+    broadcast(scene, { type: "chatThrottle", ms: getChatThrottle(site) });
   },
   kickVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
     if (identity) {
+      logModeration(site, "kick", visitorLogLabel(identity));
+      touchSite(site);
       closeIdentityClients(identity, 4001, "kicked");
     }
   },
@@ -1064,8 +1126,29 @@ const ADMIN_ACTIONS = {
     const identity = scene.identities.get(Number(body.visitorId));
     if (identity && !site.blockedBrowserIds.includes(identity.browserId)) {
       site.blockedBrowserIds.push(identity.browserId);
+      logModeration(site, "block", visitorLogLabel(identity));
       touchSite(site);
       closeIdentityClients(identity, 4003, "blocked");
+    }
+  },
+  muteVisitor(site, scene, body) {
+    const identity = scene.identities.get(Number(body.visitorId));
+    if (!identity) return;
+    if (!Array.isArray(site.mutedBrowserIds)) site.mutedBrowserIds = [];
+    if (!site.mutedBrowserIds.includes(identity.browserId)) {
+      site.mutedBrowserIds.push(identity.browserId);
+      logModeration(site, "mute", visitorLogLabel(identity));
+      touchSite(site);
+    }
+  },
+  unmuteVisitor(site, scene, body) {
+    const identity = scene.identities.get(Number(body.visitorId));
+    if (!identity || !Array.isArray(site.mutedBrowserIds)) return;
+    const index = site.mutedBrowserIds.indexOf(identity.browserId);
+    if (index !== -1) {
+      site.mutedBrowserIds.splice(index, 1);
+      logModeration(site, "unmute", visitorLogLabel(identity));
+      touchSite(site);
     }
   },
   setOwnerVisitor(site, scene, body) {
@@ -1129,9 +1212,12 @@ const ADMIN_ACTIONS = {
     for (const identity of scene.identities.values()) {
       identity.messages = [];
     }
+    logModeration(site, "clear-messages");
+    touchSite(site);
   },
   disableSite(site, scene, body) {
     site.disabled = Boolean(body.disabled);
+    logModeration(site, site.disabled ? "site-off" : "site-on");
     touchSite(site);
     if (site.disabled) {
       for (const client of Array.from(scene.clients.values())) {
@@ -1169,7 +1255,7 @@ function handleAdminAction(req, res) {
       sendJson(res, 400, actionResult);
       return;
     }
-    const panel = { site: publicSite(site), scene: getSceneStats(scene), owners: getOwners(site, scene) };
+    const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
     const extendedPanel = plugins.extend("extendAdminPanel", panel, { site: pluginSite(site) });
     sendJson(res, 200, isPlainObject(extendedPanel) ? extendedPanel : panel);
   });
@@ -1703,8 +1789,12 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       createdAt: now,
       updatedAt: now,
       blockedBrowserIds: [],
+      mutedBrowserIds: [],
       ownerBrowserIds: [],
       ownerProfiles: {},
+      blockedWords: [],
+      chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
+      moderationLog: [],
     },
   };
 }
@@ -1724,11 +1814,26 @@ function loadSites() {
         delete site.adminToken;
         sitesMigratedOnLoad = true;
       }
+      if (!Array.isArray(site.blockedBrowserIds)) {
+        site.blockedBrowserIds = [];
+      }
+      if (!Array.isArray(site.mutedBrowserIds)) {
+        site.mutedBrowserIds = [];
+      }
       if (!Array.isArray(site.ownerBrowserIds)) {
         site.ownerBrowserIds = [];
       }
       if (!isPlainObject(site.ownerProfiles)) {
         site.ownerProfiles = {};
+      }
+      if (!Array.isArray(site.blockedWords)) {
+        site.blockedWords = [];
+      }
+      if (typeof site.chatThrottleMs !== "number") {
+        site.chatThrottleMs = DEFAULT_CHAT_THROTTLE_MS;
+      }
+      if (!Array.isArray(site.moderationLog)) {
+        site.moderationLog = [];
       }
       if (!Array.isArray(site.connections)) {
         site.connections = [];
@@ -1780,6 +1885,32 @@ function closeIdentityClients(identity, code, reason) {
   }
 }
 
+/** Effective slow-mode cooldown for a site (default when site-less or unset). */
+function getChatThrottle(site) {
+  return site ? sanitizeChatThrottle(site.chatThrottleMs) : DEFAULT_CHAT_THROTTLE_MS;
+}
+
+/** A muted visitor stays present but their messages are dropped server-side. */
+function isMuted(site, browserId) {
+  return Boolean(site) && Array.isArray(site.mutedBrowserIds) && site.mutedBrowserIds.includes(browserId);
+}
+
+/** A short, human label for an identity used in the moderation log. */
+function visitorLogLabel(identity) {
+  const name = String(identity?.displayName || "").trim();
+  return name || `Visitor ${identity?.id ?? "?"}`;
+}
+
+/** Record a moderation action, newest first, capped. Caller persists via touchSite. */
+function logModeration(site, action, detail = "") {
+  if (!site) return;
+  if (!Array.isArray(site.moderationLog)) site.moderationLog = [];
+  site.moderationLog.unshift({ at: Date.now(), action, detail });
+  if (site.moderationLog.length > MAX_MODERATION_LOG) {
+    site.moderationLog.length = MAX_MODERATION_LOG;
+  }
+}
+
 function publicSite(site) {
   const config = {
     siteKey: site.siteKey,
@@ -1799,6 +1930,10 @@ function publicSite(site) {
     lastMessageAt: site.lastMessageAt || null,
     createdAt: site.createdAt,
     blockedCount: site.blockedBrowserIds.length,
+    mutedCount: Array.isArray(site.mutedBrowserIds) ? site.mutedBrowserIds.length : 0,
+    blockedWords: Array.isArray(site.blockedWords) ? site.blockedWords : [],
+    chatThrottleMs: typeof site.chatThrottleMs === "number" ? site.chatThrottleMs : DEFAULT_CHAT_THROTTLE_MS,
+    moderationLog: Array.isArray(site.moderationLog) ? site.moderationLog : [],
     supporter: Boolean(site.supporter),
   };
   const extendedConfig = plugins.extend("extendSiteConfig", config, { site: pluginSite(site) });
@@ -1833,10 +1968,14 @@ function getScene(sceneKey, site = null) {
   return scene;
 }
 
-function getSceneStats(scene) {
+function getSceneStats(scene, site = null) {
   const visitors = Array.from(scene.identities.values())
     .filter((identity) => identity.joined)
-    .map((identity) => serializeIdentity(identity, { owner: true, messages: true, clientCount: true }));
+    .map((identity) => {
+      const serialized = serializeIdentity(identity, { owner: true, messages: true, clientCount: true });
+      serialized.muted = isMuted(site, identity.browserId);
+      return serialized;
+    });
 
   return { activeVisitors: visitors.length, visitors };
 }
@@ -2033,7 +2172,7 @@ function handleInit(client, message) {
   client.readingActive = message.readingActive !== false;
 
   if (!identity.joined) {
-    identity.displayName = sanitizeDisplayName(message.displayName);
+    identity.displayName = filterDisplayName(site, sanitizeDisplayName(message.displayName));
     identity.color = sanitizeCharacterColor(message.color);
   }
 
@@ -2065,6 +2204,7 @@ function handleInit(client, message) {
     ...selfFields,
     peers,
     birds: snapshotBirds(scene),
+    chatThrottleMs: getChatThrottle(site),
   });
 
   if (identity.joined) {
@@ -2166,7 +2306,7 @@ function handleAction(client, message) {
 function handleProfile(client, message) {
   if (!client.identity) return;
 
-  client.identity.displayName = sanitizeDisplayName(message.displayName);
+  client.identity.displayName = filterDisplayName(client.site, sanitizeDisplayName(message.displayName));
   client.identity.color = sanitizeCharacterColor(message.color);
   touchIdentityActivity(client.identity);
   // Owners keep their look across resets: persist their own edits too.
@@ -2239,12 +2379,15 @@ function handleSettle(client, message) {
 
 function handleSay(client, message) {
   if (!client.identity) return;
-  if (client.site?.chatDisabled) return;
+  const site = client.site;
+  if (site?.chatDisabled) return;
+  if (isMuted(site, client.identity.browserId)) return;
 
   const now = Date.now();
-  if (now - client.lastChatAt < CHAT_THROTTLE_MS) return;
+  if (now - client.lastChatAt < getChatThrottle(site)) return;
 
-  const text = sanitizeMessage(message.text);
+  let text = sanitizeMessage(message.text);
+  if (site) text = applyWordFilter(text, site.blockedWords);
   if (!text) return;
   client.lastChatAt = now;
 

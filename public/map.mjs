@@ -127,6 +127,7 @@ function buildMap() {
 
   if (sites.length === 0) {
     statusEl.textContent = "No verified TownSquares are public yet.";
+    applyView();
     return;
   }
 
@@ -140,6 +141,8 @@ function buildMap() {
   for (const site of sites) {
     nodeLayer.appendChild(renderSiteNode(site));
   }
+
+  applyView();
 }
 
 function renderSiteNode(site) {
@@ -398,8 +401,14 @@ function resetView() {
     targetWidth = targetHeight * aspect;
   }
 
-  const zoom = zoomToFitBox(targetWidth, targetHeight);
-  const { width: fittedWidth, height: fittedHeight } = visibleSizeAtZoom(zoom);
+  let zoom = zoomToFitBox(targetWidth, targetHeight);
+  let { width: fittedWidth, height: fittedHeight } = visibleSizeAtZoom(zoom);
+  // Sub-1 zoom levels that still show the entire world share one viewBox, so pan and
+  // the first few zoom-in clicks appear to do nothing until zoom passes 1.
+  if (fittedWidth >= worldWidth && fittedHeight >= worldHeight) {
+    zoom = 1;
+    ({ width: fittedWidth, height: fittedHeight } = visibleSizeAtZoom(zoom));
+  }
   view = {
     x: centerX - fittedWidth / 2,
     y: centerY - fittedHeight / 2,
@@ -407,6 +416,23 @@ function resetView() {
   };
   clampView();
   applyView();
+}
+
+function fitInitialView() {
+  if (root.clientWidth <= 0 || root.clientHeight <= 0) return false;
+  resetView();
+  return true;
+}
+
+function scheduleInitialViewFit() {
+  requestAnimationFrame(() => {
+    if (fitInitialView()) return;
+
+    const observer = new ResizeObserver(() => {
+      if (fitInitialView()) observer.disconnect();
+    });
+    observer.observe(root);
+  });
 }
 
 function isPanTarget(target) {
@@ -515,9 +541,7 @@ async function loadMap() {
   }
 
   buildMap();
-  requestAnimationFrame(() => {
-    resetView();
-  });
+  scheduleInitialViewFit();
 }
 
 wireControls();

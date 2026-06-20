@@ -74,6 +74,16 @@
           </div>
         </div>
 
+        <div class="dev-tuning__group" role="group" aria-label="Chat">
+          <span class="dev-tuning__title">Chat</span>
+          <div class="dev-sliders">
+            <label class="dev-slider">
+              <span>Cooldown <em id="chat-throttle-value"></em>ms</span>
+              <input type="range" id="chat-throttle" min="0" max="5000" step="100" />
+            </label>
+          </div>
+        </div>
+
         <div class="dev-tuning__group" role="group" aria-label="Values">
           <div class="dev-tuning__actions">
             <button class="dev-chip" type="button" id="tune-reset">Reset</button>

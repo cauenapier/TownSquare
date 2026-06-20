@@ -184,27 +184,70 @@ export function sayMessage(avatar, message) {
 }
 
 /**
- * Send the local composer's text, then show it immediately on your own figure.
+ * Show "Wait Ns…" above the composer for the remaining cooldown, keeping the
+ * typed text in place. Auto-clears once the cooldown lapses.
  *
  * @param {WidgetContext} ctx
+ * @param {number} remainingMs
+ */
+function showCooldownHint(ctx, remainingMs) {
+  const { hint } = ctx.self.avatar;
+  if (!hint) return;
+  hint.textContent = `Wait ${Math.max(1, Math.ceil(remainingMs / 1000))}s…`;
+  hint.hidden = false;
+  clearTimeout(ctx.cooldownHintTimer);
+  ctx.cooldownHintTimer = setTimeout(() => hideCooldownHint(ctx), remainingMs + 150);
+}
+
+/** @param {WidgetContext} ctx */
+function hideCooldownHint(ctx) {
+  clearTimeout(ctx.cooldownHintTimer);
+  ctx.cooldownHintTimer = null;
+  const { hint } = ctx.self.avatar;
+  if (hint) hint.hidden = true;
+}
+
+/**
+ * Send the local composer's text, then show it immediately on your own figure.
+ *
+ * Slow mode is enforced here too: if the cooldown has not elapsed we keep the
+ * typed text and tell the sender how long to wait, rather than letting the
+ * server silently drop the line (which the sender's local echo would otherwise
+ * hide from them).
+ *
+ * @param {WidgetContext} ctx
+ * @returns {boolean} Whether the line was sent. `false` (e.g. slow-mode block)
+ *   tells the composer to keep its text and stay open.
  */
 export function submitChat(ctx) {
-  if (ctx.quiet) return;
+  if (ctx.quiet) return false;
 
   const { input } = ctx.self.avatar;
-  if (!input) return;
+  if (!input) return false;
 
   const text = input.value.trim();
-  if (!text) return;
+  if (!text) return false;
 
   // Local-only modes (preview/dev simulate) have no server to echo the line
   // back, so they show it directly. Live modes still need an open socket.
   const localOnly = ctx.options.preview === true || ctx.options.simulate === true;
-  if (!localOnly && ctx.socket.readyState !== WebSocket.OPEN) return;
+  if (!localOnly && ctx.socket.readyState !== WebSocket.OPEN) return false;
+
+  // Slow mode is a client-side UX concern, so it applies in local modes too
+  // (it lets the /dev sandbox exercise the "wait" hint without a server).
+  const cooldown = ctx.chatThrottleMs || 0;
+  const now = Date.now();
+  if (cooldown > 0 && ctx.self.lastSayAt && now - ctx.self.lastSayAt < cooldown) {
+    showCooldownHint(ctx, cooldown - (now - ctx.self.lastSayAt));
+    return false;
+  }
 
   if (ctx.socket.readyState === WebSocket.OPEN) {
     ctx.socket.send(JSON.stringify({ type: "say", text }));
   }
-  sayMessage(ctx.self.avatar, { text, at: Date.now() });
+  sayMessage(ctx.self.avatar, { text, at: now });
+  ctx.self.lastSayAt = now;
   input.value = "";
+  hideCooldownHint(ctx);
+  return true;
 }

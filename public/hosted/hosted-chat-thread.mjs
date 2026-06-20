@@ -8,9 +8,9 @@
  *
  * @param {HTMLElement} container
  * @param {Array<{ id: number, displayName?: string, color?: string, messages?: Array<{ text: string, at: number }> }>} visitors
- * @param {{ onKick: (visitorId: number) => void, onBlock: (visitorId: number) => void }} handlers
+ * @param {{ onKick: (visitorId: number) => void, onBlock: (visitorId: number) => void, onMute: (visitorId: number, muted: boolean) => void }} handlers
  */
-export function renderChatThread(container, visitors, { onKick, onBlock }) {
+export function renderChatThread(container, visitors, { onKick, onBlock, onMute }) {
   const entries = [];
   for (const visitor of visitors) {
     const visitorName = String(visitor.displayName || "").trim();
@@ -21,7 +21,7 @@ export function renderChatThread(container, visitors, { onKick, onBlock }) {
   }
   entries.sort((a, b) => a.at - b.at);
 
-  const fingerprint = entries.map((entry) => `${entry.visitor.id}:${entry.at}:${entry.text}`).join("\n");
+  const fingerprint = entries.map((entry) => `${entry.visitor.id}:${entry.visitor.muted ? 1 : 0}:${entry.at}:${entry.text}`).join("\n");
   if (container.dataset.chatFingerprint === fingerprint) return;
   container.dataset.chatFingerprint = fingerprint;
 
@@ -53,6 +53,12 @@ export function renderChatThread(container, visitors, { onKick, onBlock }) {
     time.className = "chat-time";
     time.textContent = formatClock(entry.at);
 
+    const mute = document.createElement("button");
+    mute.type = "button";
+    mute.className = "chat-mod-button";
+    mute.textContent = entry.visitor.muted ? "Unmute" : "Mute";
+    mute.addEventListener("click", () => onMute(entry.visitor.id, Boolean(entry.visitor.muted)));
+
     const kick = document.createElement("button");
     kick.type = "button";
     kick.className = "chat-mod-button";
@@ -65,7 +71,7 @@ export function renderChatThread(container, visitors, { onKick, onBlock }) {
     block.textContent = "Ban";
     block.addEventListener("click", () => onBlock(entry.visitor.id));
 
-    head.append(author, time, kick, block);
+    head.append(author, time, mute, kick, block);
 
     const body = document.createElement("p");
     body.className = "chat-text";

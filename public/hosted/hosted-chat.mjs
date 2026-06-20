@@ -36,6 +36,7 @@ function render(data) {
   renderChatThread(chatThread, scene.visitors, {
     onKick: (visitorId) => session.action("kickVisitor", { visitorId }),
     onBlock: (visitorId) => session.action("blockVisitor", { visitorId }),
+    onMute: (visitorId, muted) => session.action(muted ? "unmuteVisitor" : "muteVisitor", { visitorId }),
   });
 
   if (site.disabled) {

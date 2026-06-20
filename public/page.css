@@ -290,11 +290,7 @@ body {
 }
 
 .dev-host .townsquare {
-  min-height: 420px;
-}
-
-.dev-host .townsquare__stage {
-  height: 360px;
+  --ts-stage-height: 360px;
 }
 
 .walk-page {
@@ -977,6 +973,7 @@ body {
 }
 
 .hosted-form input,
+.hosted-form select,
 .hosted-copy-row input,
 .hosted-panel textarea {
   width: 100%;
@@ -988,6 +985,7 @@ body {
 }
 
 .hosted-form input:not([type="color"]):not([type="hidden"]),
+.hosted-form select,
 .hosted-copy-row input {
   height: 44px;
   padding: 0 12px;
@@ -1311,6 +1309,27 @@ body {
   height: 18px;
   padding: 0;
   cursor: pointer;
+}
+
+/* Read-only feed of recent moderation actions under the Moderation section. */
+.moderation-log {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.moderation-log-entry {
+  display: flex;
+  gap: 8px;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+
+.moderation-log-entry time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .visitor-list {
@@ -2243,8 +2262,8 @@ body {
   .dev-controls {
     align-items: end;
   }
-  .dev-host .townsquare__stage {
-    height: 300px;
+  .dev-host .townsquare {
+    --ts-stage-height: 300px;
   }
   .walk-toolbar {
     align-items: stretch;

@@ -253,6 +253,21 @@ walkingInput.addEventListener("change", () => {
   simulation.setWalking(walkingInput.checked);
 });
 
+// Chat cooldown (slow mode): drive the real `ctx.chatThrottleMs` the widget
+// reads on every send, so the "wait Ns…" hint can be exercised here. In offline
+// mode this is the only source; online, the server's value seeds it via `hello`.
+const throttleInput = document.getElementById("chat-throttle");
+const throttleValue = document.getElementById("chat-throttle-value");
+if (throttleInput instanceof HTMLInputElement) {
+  const syncThrottle = () => {
+    ctx.chatThrottleMs = Number(throttleInput.value);
+    if (throttleValue) throttleValue.textContent = String(ctx.chatThrottleMs);
+  };
+  throttleInput.value = String(ctx.chatThrottleMs);
+  syncThrottle();
+  throttleInput.addEventListener("input", syncThrottle);
+}
+
 // --- Live tuning panel: proximity dials, talk rate, mobile frame -----------
 // Sliders mutate `tuning` in place, so the running widget loop picks changes up
 // on its next frame — no rebuild, no reset. The readout mirrors the current

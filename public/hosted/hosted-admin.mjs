@@ -64,6 +64,12 @@ const clearMessagesButton = document.getElementById("clear-messages");
 const disableSiteButton = document.getElementById("disable-site");
 const visitorList = document.getElementById("visitor-list");
 const ownerList = document.getElementById("owner-list");
+const moderationForm = document.getElementById("moderation-form");
+const blockedWordsInput = document.getElementById("blocked-words");
+const chatThrottleSelect = document.getElementById("chat-throttle");
+const saveModerationButton = document.getElementById("save-moderation");
+const moderationStatusEl = document.getElementById("moderation-status");
+const moderationLog = document.getElementById("moderation-log");
 
 renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(customizationForm);
@@ -93,6 +99,11 @@ let ownerDraft = null;
 let connectionsBusy = false;
 let connectionsSavedMessage = "";
 
+/** Chat-filtering editor (forbidden words + slow mode), poll-guarded like the rest. */
+let moderationTouched = false;
+let moderationBusy = false;
+let moderationSavedMessage = "";
+
 const preview = createCustomizationPreview({
   root: previewRoot,
   readingLabel: () => (currentSite ? `${currentSite.name} preview` : "Admin preview"),
@@ -113,6 +124,7 @@ const setStatus = createStatusSetter(statusEl);
 const setSiteDetailsStatus = createStatusSetter(siteDetailsStatusEl, { toggleHidden: true });
 const setCustomizationStatus = createStatusSetter(customizationStatusEl, { toggleHidden: true });
 const setConnectionsStatus = createStatusSetter(connectionsStatusEl, { toggleHidden: true });
+const setModerationStatus = createStatusSetter(moderationStatusEl, { toggleHidden: true });
 
 const session = createAdminSession({
   redirectPath: "/admin",
@@ -140,6 +152,9 @@ const session = createAdminSession({
     connectionsDraft = [];
     connectionsTouched = false;
     connectionsSavedMessage = "";
+    moderationTouched = false;
+    moderationBusy = false;
+    moderationSavedMessage = "";
     preview.destroy();
   },
 });
@@ -487,6 +502,106 @@ async function saveConnections() {
   updateConnectionsControls();
 }
 
+const MODERATION_LABELS = {
+  kick: "Kicked",
+  block: "Banned",
+  mute: "Muted",
+  unmute: "Unmuted",
+  "chat-off": "Chat disabled",
+  "chat-on": "Chat enabled",
+  "clear-messages": "Cleared messages",
+  "site-off": "Site disabled",
+  "site-on": "Site enabled",
+};
+
+// Mirror the server's word sanitiser so dirty-tracking stays stable after a save.
+function parseBlockedWords(text) {
+  const seen = new Set();
+  const words = [];
+  for (const raw of String(text).split(/[\n,]/)) {
+    const word = raw.trim().toLowerCase();
+    if (!word || seen.has(word)) continue;
+    seen.add(word);
+    words.push(word);
+  }
+  return words;
+}
+
+function serverBlockedWords() {
+  return Array.isArray(currentSite?.blockedWords) ? currentSite.blockedWords : [];
+}
+
+function serverChatThrottle() {
+  return String(currentSite?.chatThrottleMs ?? 1500);
+}
+
+function moderationIsDirty() {
+  if (!currentSite) return false;
+  const wordsDirty = parseBlockedWords(blockedWordsInput.value).join("\n") !== serverBlockedWords().join("\n");
+  return wordsDirty || chatThrottleSelect.value !== serverChatThrottle();
+}
+
+function updateModerationControls() {
+  saveModerationButton.disabled = moderationBusy || !moderationIsDirty();
+  if (moderationBusy) {
+    setModerationStatus("Saving filtering...");
+  } else if (moderationSavedMessage) {
+    setModerationStatus(moderationSavedMessage);
+  } else if (moderationIsDirty()) {
+    setModerationStatus("Unsaved filtering changes.");
+  } else {
+    setModerationStatus("");
+  }
+}
+
+function syncModerationFromServer() {
+  if (!moderationTouched || !moderationIsDirty()) {
+    blockedWordsInput.value = serverBlockedWords().join("\n");
+    chatThrottleSelect.value = serverChatThrottle();
+    moderationTouched = false;
+  }
+  updateModerationControls();
+}
+
+async function saveModeration() {
+  if (!currentSite || moderationBusy || !moderationIsDirty()) return;
+  moderationBusy = true;
+  moderationSavedMessage = "";
+  updateModerationControls();
+
+  const ok = await session.action("updateModeration", {
+    blockedWords: parseBlockedWords(blockedWordsInput.value),
+    chatThrottleMs: Number(chatThrottleSelect.value),
+  });
+
+  moderationBusy = false;
+  if (ok) {
+    moderationTouched = false;
+    moderationSavedMessage = "Filtering saved.";
+  }
+  updateModerationControls();
+}
+
+function renderModerationLog(log) {
+  moderationLog.replaceChildren();
+  const entries = Array.isArray(log) ? log : [];
+  if (entries.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = "No moderation actions yet.";
+    moderationLog.appendChild(empty);
+    return;
+  }
+  for (const entry of entries) {
+    const row = document.createElement("p");
+    row.className = "moderation-log-entry";
+    const label = MODERATION_LABELS[entry.action] || entry.action;
+    const detail = entry.detail ? ` · ${entry.detail}` : "";
+    row.innerHTML = `<time>${escapeHtml(formatTime(entry.at))}</time> <span>${escapeHtml(`${label}${detail}`)}</span>`;
+    moderationLog.appendChild(row);
+  }
+}
+
 // One card in the dedicated "Site owner" section: a persistent name + colour
 // editor saved to the owner's claim, so it survives resets whether or not the
 // owner is currently connected.
@@ -648,6 +763,8 @@ function render(data) {
   disableSiteButton.textContent = currentSite.disabled ? "Enable site" : "Disable site";
   syncCustomizationForm();
   syncConnectionsFromServer();
+  syncModerationFromServer();
+  renderModerationLog(currentSite.moderationLog);
 
   visitorList.replaceChildren();
   if (scene.visitors.length === 0) {
@@ -676,6 +793,11 @@ function render(data) {
     owner.textContent = visitor.isOwner ? "Owner ✓" : "Make owner";
     owner.addEventListener("click", () => session.action("setOwnerVisitor", { visitorId: visitor.id, owner: !visitor.isOwner }));
 
+    const mute = document.createElement("button");
+    mute.type = "button";
+    mute.textContent = visitor.muted ? "Unmute" : "Mute";
+    mute.addEventListener("click", () => session.action(visitor.muted ? "unmuteVisitor" : "muteVisitor", { visitorId: visitor.id }));
+
     const kick = document.createElement("button");
     kick.type = "button";
     kick.textContent = "Kick";
@@ -686,7 +808,7 @@ function render(data) {
     block.textContent = "Block";
     block.addEventListener("click", () => session.action("blockVisitor", { visitorId: visitor.id }));
 
-    row.append(owner, kick, block);
+    row.append(owner, mute, kick, block);
     visitorList.appendChild(row);
   }
 
@@ -746,6 +868,16 @@ resetCustomizationButton.addEventListener("click", () => {
 
 addConnectionButton.addEventListener("click", addConnection);
 saveConnectionsButton.addEventListener("click", () => { void saveConnections(); });
+
+moderationForm.addEventListener("input", () => {
+  moderationSavedMessage = "";
+  moderationTouched = true;
+  updateModerationControls();
+});
+moderationForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void saveModeration();
+});
 
 chatDisabledInput.addEventListener("change", () => session.action("setChatDisabled", { disabled: chatDisabledInput.checked }));
 clearMessagesButton.addEventListener("click", () => session.action("clearMessages"));

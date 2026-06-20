@@ -15,9 +15,10 @@
  * @property {number} x
  * @property {boolean} movingLeft
  * @property {boolean} movingRight
- * @property {number | null} targetX Tap-to-walk destination; null when none.
+ * @property {number | null} targetX Pointer-selected walk destination; null when none.
  * @property {number} lastSentX
  * @property {number} lastSendAt
+ * @property {number} lastSayAt
  * @property {number} lastJumpAt
  * @property {number} lastHighFiveAt
  * @property {string | null} pose
@@ -65,8 +66,10 @@
  * @property {Array<import("../shared/scene-props.mjs").SceneProp>} sceneProps
  * @property {Map<string, import("../shared/scene-props.mjs").SceneProp>} propsById
  * @property {Map<string, import("../shared/bird-perches.mjs").BirdPerch>} birdPerchesById
+ * @property {number} chatThrottleMs Slow-mode cooldown from the server.
  * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
  * @property {ReturnType<typeof setTimeout> | null} typingTimer
+ * @property {ReturnType<typeof setTimeout> | null} [cooldownHintTimer]
  * @property {HTMLElement} app
  * @property {HTMLElement} stage
  * @property {HTMLElement} statusRowEl
@@ -82,6 +85,10 @@
  * @property {number | null} frameHandle
  * @property {(event: KeyboardEvent) => void} onKeyDown
  * @property {(event: KeyboardEvent) => void} onKeyUp
+ * @property {(event: PointerEvent) => void} onStagePointerDown
+ * @property {(event: PointerEvent) => void} onStagePointerMove
+ * @property {(event: PointerEvent) => void} onStagePointerUp
+ * @property {(event: PointerEvent) => void} onStagePointerCancel
  * @property {(event: MouseEvent) => void} onStageClick
  * @property {Map<number, import("./birds.mjs").BirdView>} [birds]
  * @property {HTMLElement} [birdLayer]
