@@ -1885,10 +1885,7 @@ function isOriginAllowedForSite(origin, site) {
   return Boolean(normalized && getAllowedOrigins(site).includes(normalized));
 }
 
-const sitesByKey = loadSites();
-if (sitesMigratedOnLoad) {
-  saveSites();
-}
+let sitesByKey = new Map();
 const scenes = new Map();
 let nextConnectionId = 1;
 
@@ -2429,6 +2426,11 @@ wss.on("close", () => {
 
 async function startServer() {
   await loadSharedModules();
+
+  sitesByKey = loadSites();
+  if (sitesMigratedOnLoad) {
+    saveSites();
+  }
 
   const shared = await import("./public/shared/shared-constants.mjs");
   MIN_X = shared.MIN_X;
