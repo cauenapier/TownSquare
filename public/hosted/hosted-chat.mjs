@@ -19,6 +19,7 @@ const loginStatusEl = document.getElementById("login-status");
 const statusEl = document.getElementById("chat-status");
 const chatHeadingEl = document.getElementById("chat-heading");
 const chatDisabledInput = document.getElementById("chat-disabled");
+const botProtectionInput = document.getElementById("bot-protection");
 const clearMessagesButton = document.getElementById("clear-messages");
 const chatThread = document.getElementById("chat-thread");
 
@@ -32,6 +33,7 @@ function render(data) {
 
   chatHeadingEl.textContent = site.name ? `${site.name} · live conversation` : "Live conversation";
   chatDisabledInput.checked = site.chatDisabled;
+  botProtectionInput.checked = Boolean(site.botProtection);
 
   renderChatThread(chatThread, scene.visitors, {
     onKick: (visitorId) => session.action("kickVisitor", { visitorId }),
@@ -65,6 +67,7 @@ const session = createAdminSession({
 });
 
 chatDisabledInput.addEventListener("change", () => session.action("setChatDisabled", { disabled: chatDisabledInput.checked }));
+botProtectionInput.addEventListener("change", () => session.action("setBotProtection", { enabled: botProtectionInput.checked }));
 clearMessagesButton.addEventListener("click", () => session.action("clearMessages"));
 
 session.start();

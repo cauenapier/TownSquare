@@ -25,6 +25,8 @@ Implemented in `server.js` (admin action handlers near `kickVisitor`):
 - `blockVisitor` — ban persisted by `browserId` (close code 4003)
 - `setOwnerVisitor` — promote / demote owners
 - auto inactive-kick, fixed chat throttle (`CHAT_THROTTLE_MS`), `MAX_MESSAGE_LEN`
+- per-IP/per-site limits for identities, joins, state changes, and chat
+- temporary per-IP/per-site quarantine for repeated synchronized actions across identities
 - Telegram notification on every chat message
 
 We have the hard tools (kick/ban) and a broadcast tool (disable chat). The gaps

@@ -57,9 +57,16 @@
               <input type="checkbox" id="chat-disabled" />
               <span>Disable chat</span>
             </label>
+            <label class="hosted-toggle">
+              <input type="checkbox" id="bot-protection" />
+              <span>Bot protection</span>
+            </label>
           </div>
           <p class="hosted-note">
             Messages are not stored — only each visitor's last few are kept while they are here, so this is a live view rather than a history log.
+          </p>
+          <p class="hosted-note">
+            Bot protection requires each visitor's browser to solve a small proof-of-work before joining. It stops automated scripts while staying invisible to real visitors. Enable it only if you are being hit by bots, as it adds a brief delay when visitors arrive.
           </p>
           <div class="hosted-actions">
             <button type="button" id="clear-messages">Clear recent messages</button>

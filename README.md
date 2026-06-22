@@ -251,6 +251,48 @@ Public modules live in `plugins/`; a hosted bootstrap can register private
 modules through `registerPlugin` before requiring `server.js`. The supported
 hooks and full-stack composition contract are documented in `docs/plugins.md`.
 There is intentionally no remote install or external-extension system.
+### Realtime abuse limits
+
+The server limits concurrent identities, joins, state-changing events, and chat
+per source IP and site. Configure the limits through the `IP_*` variables in
+`.env.example`; `0` disables an individual limit. Rate-limited sockets close
+with code `1008` and reason `rate limited`. `server.js` trusts `X-Real-IP` only
+from a loopback peer, matching the supported local reverse-proxy deployment.
+
+The action quarantine is scoped to one source IP and site. It closes that IP's
+sockets only after multiple identities repeat the same action in synchronized
+rounds; repetition from one identity does not trigger it. Configure the
+detector and quarantine duration through the `IP_SYNC_ACTION_*` and
+`IP_QUARANTINE_MS` variables in `.env.example`.
+
+Two identity-agnostic controls limit distributed abuse that rotates across many
+IPs and sites. `MIN_HUMAN_SAY_MS` drops chat messages sent within that window of
+joining (the scripted enter-say-leave pattern a human cannot reproduce).
+`TELEGRAM_MAX_NOTIFICATIONS_PER_MIN` caps outbound chat notifications per minute
+across all sites so a notification flood cannot form. Both are in `.env.example`.
+
+Site owners can enable **bot protection** per site from the chat admin. When on,
+each visitor's browser must solve a small proof-of-work (`crypto`-grade SHA-256
+in `public/widget/pow.mjs`) before the server accepts their join. A script that
+never runs the widget cannot solve it, and a scripted solver pays CPU per
+visitor, while real visitors see only a brief invisible delay. The server gates
+the join in `allowIdentityInit`/`handleInit` and grades the work with
+`POW_DIFFICULTY_BITS` (sent to the widget in the challenge, so it tunes without a
+widget redeploy). The verifier is pluggable — a hosted challenge (e.g.
+Turnstile) can later replace the proof-of-work behind the same per-site toggle.
+
+For defense before a WebSocket reaches Node, install
+`ops/nginx/townsquare-http-limits.conf` in Nginx's `http` context and include
+`ops/nginx/townsquare-server-limits.conf` in the TownSquare `server` block.
+These limits apply only to `/live`; normal pages and assets are not counted.
+
+The Nginx config also enforces a per-scene join rate (keyed on `$arg_siteKey`,
+zone `townsquare_scene_joins`, default 60 r/m burst 20). This caps how fast any
+one scene can accumulate new connections regardless of how many source IPs are
+involved, which is effective against distributed botnets that rotate IPs.
+
+`MAX_CONNECTIONS` (default 25) caps the total concurrent WebSocket clients per
+scene. Set it via environment variable to override.
 
 ## Deploy updates
 
@@ -334,6 +376,23 @@ Run the websocket smoke test in a second shell while the server is already runni
 npm run smoke
 ```
 
+The IP-limit path is covered by the same real-server smoke runner. Start a
+separate server with the low limits asserted in `assertIpLimits`:
+
+```bash
+PORT=8794 DATA_DIR=/tmp/townsquare-ip-test IP_MAX_IDENTITIES=2 IP_JOIN_LIMIT=2 IP_STATE_EVENT_LIMIT=3 IP_CHAT_EVENT_LIMIT=2 npm start
+```
+
+Then run:
+
+```bash
+TOWNSQUARE_WS_URL=ws://127.0.0.1:8794/live TOWNSQUARE_HTTP_ORIGIN=http://127.0.0.1:8794 DATA_DIR=/tmp/townsquare-ip-test TEST_IP_LIMITS=1 IP_MAX_IDENTITIES=2 IP_JOIN_LIMIT=2 IP_STATE_EVENT_LIMIT=3 IP_CHAT_EVENT_LIMIT=2 npm run smoke
+```
+
+`assertIpActionQuarantine` in `scripts/smoke-test.js` documents the low-limit
+environment used to exercise synchronized-action quarantine against a real
+server.
+
 The smoke test verifies:
 
 - hello/initial peer snapshot
@@ -344,6 +403,7 @@ The smoke test verifies:
 - hosted site isolation and admin token hashing
 - moderation tools (word filter, mute/unmute, slow mode, moderation log)
 - service-admin map validation and persistence
+- per-IP identity, join, state-event, chat, and synchronized-action quarantine limits
 
 To also verify inactive disconnect, restart the server with a short timeout and rerun smoke:
 

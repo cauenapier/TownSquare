@@ -63,6 +63,16 @@ const MAX_ORIGIN_LEN = 240;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
+const IP_MAX_IDENTITIES = readLimit("IP_MAX_IDENTITIES", 2);
+const IP_JOIN_LIMIT = readLimit("IP_JOIN_LIMIT", 30);
+const IP_STATE_EVENT_LIMIT = readLimit("IP_STATE_EVENT_LIMIT", 600);
+const IP_CHAT_EVENT_LIMIT = readLimit("IP_CHAT_EVENT_LIMIT", 20);
+const IP_SYNC_ACTION_ROUNDS = readLimit("IP_SYNC_ACTION_ROUNDS", 3);
+const IP_SYNC_ACTION_WINDOW_MS = readLimit("IP_SYNC_ACTION_WINDOW_MS", 10000);
+const IP_SYNC_ACTION_TOLERANCE_MS = readLimit("IP_SYNC_ACTION_TOLERANCE_MS", 250);
+const IP_QUARANTINE_MS = readLimit("IP_QUARANTINE_MS", 10 * 60 * 1000);
+const IP_JOIN_WINDOW_MS = 60 * 1000;
+const IP_EVENT_WINDOW_MS = 10 * 1000;
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
 const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
@@ -76,6 +86,7 @@ const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 *
 const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS || 60000);
 const HEARTBEAT_INTERVAL_MS = 30000;
 const BIRD_TICK_INTERVAL_MS = 1000;
+const TELEGRAM_API_TIMEOUT_MS = 5000;
 const BIRD_FLEE_RADIUS = 0.07;
 const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
@@ -104,6 +115,11 @@ let randomSpawnX;
 function envFlag(name) {
   const value = String(process.env[name] || "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes";
+}
+
+function readLimit(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
 }
 
 function loadEnvFile(filePath = path.join(__dirname, ".env")) {
@@ -226,17 +242,19 @@ const MESSAGE_HANDLERS = {
   sceneConfig: handleSceneConfig,
   settle: handleSettle,
   say: handleSay,
+  solve: handleSolve,
   typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
-function createClient(connectionId, ws, scene, site, origin = "") {
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown") {
   return {
     connectionId,
     ws,
     scene,
     site,
     origin,
+    ip,
     propsById: scene.propsById,
     identity: null,
     joined: false,
@@ -245,7 +263,51 @@ function createClient(connectionId, ws, scene, site, origin = "") {
     lastActionAt: 0,
     lastChatAt: 0,
     typing: false,
+    challenge: null,
+    powVerified: false,
+    pendingInit: null,
   };
+}
+
+// Count the leading zero bits of a hash buffer, used to grade proof-of-work.
+function leadingZeroBits(buffer) {
+  let bits = 0;
+  for (const byte of buffer) {
+    if (byte === 0) {
+      bits += 8;
+      continue;
+    }
+    bits += Math.clz32(byte) - 24;
+    break;
+  }
+  return bits;
+}
+
+// Issue a fresh per-connection proof-of-work challenge. The salt is random so a
+// solution cannot be precomputed or replayed across connections.
+function issuePowChallenge(client) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  client.challenge = { salt, difficulty: POW_DIFFICULTY_BITS };
+  send(client.ws, { type: "challenge", salt, difficulty: POW_DIFFICULTY_BITS });
+}
+
+function verifyPow(challenge, nonce) {
+  if (!challenge || typeof nonce !== "string" || nonce.length === 0 || nonce.length > 64) return false;
+  const hash = crypto.createHash("sha256").update(`${challenge.salt}:${nonce}`).digest();
+  return leadingZeroBits(hash) >= challenge.difficulty;
+}
+
+function handleSolve(client, message) {
+  if (client.powVerified || !client.challenge) return;
+  if (!verifyPow(client.challenge, message.nonce)) {
+    client.ws.close(1008, "challenge failed");
+    return;
+  }
+  client.powVerified = true;
+  client.challenge = null;
+  const pending = client.pendingInit;
+  client.pendingInit = null;
+  if (pending) handleInit(client, pending);
 }
 
 function syncClientSceneProps(client, message) {
@@ -279,6 +341,7 @@ function createIdentity(id, browserId, x) {
     leaveTimer: null,
     inactiveKick: false,
     lastActivityAt: 0,
+    joinedAt: 0,
     awaySince: null,
     messages: [],
   };
@@ -744,6 +807,55 @@ function getPublicOrigin(req) {
   return normalizeOrigin(`${proto}://${req.headers.host || `${HOST}:${PORT}`}`);
 }
 
+function escapeTelegramMarkdown(text) {
+  return String(text || "").replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
+function buildTelegramMessage(site, identity, text, at) {
+  const siteLabel = site
+    ? `${site.name} (${site.origin})`
+    : "default scene";
+
+  return [
+    "*TownSquare message*",
+    `Site: ${escapeTelegramMarkdown(siteLabel)}`,
+    `Visitor: ${escapeTelegramMarkdown(String(identity.id))}`,
+    `Browser: ${escapeTelegramMarkdown(identity.browserId)}`,
+    `At: ${escapeTelegramMarkdown(new Date(at).toISOString())}`,
+    "",
+    escapeTelegramMarkdown(text),
+  ].join("\n");
+}
+
+async function sendTelegramChatNotification(site, identity, text, at) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TELEGRAM_API_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: buildTelegramMessage(site, identity, text, at),
+        parse_mode: "MarkdownV2",
+        disable_web_page_preview: true,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      console.warn(`Telegram notification failed with ${response.status}`);
+    }
+  } catch (error) {
+    console.warn(`Telegram notification failed: ${error.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function getSceneConfig(site) {
   return sanitizeSceneConfig(site?.sceneConfig || DEFAULT_SITE_SCENE_CONFIG);
 }
@@ -848,9 +960,153 @@ function buildAdminUrl(req, adminToken) {
 const registrationsByIp = new Map();
 const adminAuthFailuresByIp = new Map();
 const serviceAdminAuthFailuresByIp = new Map();
+const activityByIpAndScene = new Map();
 
 function getRequestIp(req) {
-  return req.socket.remoteAddress || "unknown";
+  const remote = req.socket.remoteAddress || "unknown";
+  const fromLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+  const proxyIp = fromLoopback ? String(req.headers["x-real-ip"] || "").trim() : "";
+  return proxyIp && !/[\s,]/.test(proxyIp) ? proxyIp.slice(0, 64) : remote;
+}
+
+function getIpActivity(scene, ip, now = Date.now()) {
+  const key = `${scene.key}\0${ip}`;
+  let activity = activityByIpAndScene.get(key);
+  if (!activity) {
+    activity = { lastSeenAt: now, budgets: new Map() };
+    activityByIpAndScene.set(key, activity);
+  }
+  activity.lastSeenAt = now;
+  return activity;
+}
+
+function consumeIpBudget(client, type, limit, windowMs, now = Date.now()) {
+  if (limit <= 0) return true;
+
+  const activity = getIpActivity(client.scene, client.ip, now);
+  let budget = activity.budgets.get(type);
+  if (!budget || now - budget.startedAt >= windowMs) {
+    budget = { startedAt: now, count: 0 };
+    activity.budgets.set(type, budget);
+  }
+
+  if (budget.count >= limit) return false;
+  budget.count += 1;
+  return true;
+}
+
+function pruneIpActivity(now = Date.now()) {
+  const cutoff = now - Math.max(IP_JOIN_WINDOW_MS, IP_EVENT_WINDOW_MS) * 2;
+  for (const [key, activity] of activityByIpAndScene) {
+    if (activity.lastSeenAt < cutoff && (activity.quarantinedUntil || 0) <= now) {
+      activityByIpAndScene.delete(key);
+    }
+  }
+}
+
+function closeRateLimited(client) {
+  client.ws.close(1008, "rate limited");
+}
+
+function allowIpEvent(client, type, limit) {
+  if (consumeIpBudget(client, type, limit, IP_EVENT_WINDOW_MS)) return true;
+  closeRateLimited(client);
+  return false;
+}
+
+function isIpQuarantined(scene, ip, now = Date.now()) {
+  const activity = activityByIpAndScene.get(`${scene.key}\0${ip}`);
+  return Boolean(activity && activity.quarantinedUntil > now);
+}
+
+function quarantineIp(client, action, rounds, now = Date.now()) {
+  const activity = getIpActivity(client.scene, client.ip, now);
+  activity.quarantinedUntil = now + IP_QUARANTINE_MS;
+  console.warn(JSON.stringify({
+    event: "ip_quarantine",
+    ip: client.ip,
+    scene: client.scene.key,
+    reason: `synchronized ${action}`,
+    rounds,
+    until: new Date(activity.quarantinedUntil).toISOString(),
+  }));
+
+  for (const candidate of client.scene.clients.values()) {
+    if (candidate.ip === client.ip && candidate.ws.readyState === candidate.ws.OPEN) {
+      closeRateLimited(candidate);
+    }
+  }
+}
+
+function allowSynchronizedAction(client, action, now = Date.now()) {
+  if (
+    IP_SYNC_ACTION_ROUNDS <= 0
+    || IP_SYNC_ACTION_WINDOW_MS <= 0
+    || IP_SYNC_ACTION_TOLERANCE_MS <= 0
+    || IP_QUARANTINE_MS <= 0
+  ) return true;
+
+  const activity = getIpActivity(client.scene, client.ip, now);
+  if (activity.quarantinedUntil > now) {
+    closeRateLimited(client);
+    return false;
+  }
+
+  activity.actions ||= new Map();
+  let signal = activity.actions.get(action);
+  if (!signal) {
+    signal = { events: [], rounds: [], lastRoundAt: 0 };
+    activity.actions.set(action, signal);
+  }
+
+  signal.events = signal.events.filter((event) => now - event.at <= IP_SYNC_ACTION_TOLERANCE_MS);
+  const synchronized = signal.events.some((event) => event.identityId !== client.identity.id);
+  signal.events.push({ at: now, identityId: client.identity.id });
+  if (!synchronized || now - signal.lastRoundAt <= IP_SYNC_ACTION_TOLERANCE_MS) return true;
+
+  signal.lastRoundAt = now;
+  signal.rounds = signal.rounds.filter((at) => now - at <= IP_SYNC_ACTION_WINDOW_MS);
+  signal.rounds.push(now);
+  if (signal.rounds.length < IP_SYNC_ACTION_ROUNDS) return true;
+
+  quarantineIp(client, action, signal.rounds.length, now);
+  return false;
+}
+
+function reusableIdentity(scene, message) {
+  const key = sanitizeBrowserId(message.browserId);
+  if (!key) return null;
+  const identity = scene.identityByBrowser.get(key);
+  const secret = sanitizeBrowserSecret(message.browserSecret);
+  return identity && secret && secret === identity.browserSecret ? identity : null;
+}
+
+function countIpIdentities(scene, ip) {
+  const ids = new Set();
+  for (const client of scene.clients.values()) {
+    if (client.joined && client.identity && client.ip === ip) ids.add(client.identity.id);
+  }
+  return ids.size;
+}
+
+function allowIdentityInit(client, message) {
+  if (isIpQuarantined(client.scene, client.ip)) {
+    closeRateLimited(client);
+    return false;
+  }
+
+  const identity = reusableIdentity(client.scene, message);
+  const alreadyCounted = identity && Array.from(identity.clients).some((candidate) => candidate.ip === client.ip);
+  if (!alreadyCounted && IP_MAX_IDENTITIES > 0 && countIpIdentities(client.scene, client.ip) >= IP_MAX_IDENTITIES) {
+    closeRateLimited(client);
+    return false;
+  }
+
+  if ((!identity || !identity.joined) && !consumeIpBudget(client, "join", IP_JOIN_LIMIT, IP_JOIN_WINDOW_MS)) {
+    closeRateLimited(client);
+    return false;
+  }
+  return true;
 }
 
 function recentBucket(map, key, limit) {
@@ -1113,6 +1369,11 @@ const ADMIN_ACTIONS = {
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
     logModeration(site, site.chatDisabled ? "chat-off" : "chat-on");
+    touchSite(site);
+  },
+  setBotProtection(site, scene, body) {
+    site.botProtection = Boolean(body.enabled);
+    logModeration(site, site.botProtection ? "bot-protection-on" : "bot-protection-off");
     touchSite(site);
   },
   updateModeration(site, scene, body) {
@@ -1826,6 +2087,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       connections: sanitizeConnections(connections),
       disabled: false,
       chatDisabled: false,
+      botProtection: false,
       verifiedAt: null,
       lastSeenAt: null,
       messageCount: 0,
@@ -1972,6 +2234,7 @@ function publicSite(site) {
     connections: getConnections(site),
     disabled: site.disabled,
     chatDisabled: site.chatDisabled,
+    botProtection: Boolean(site.botProtection),
     verifiedAt: site.verifiedAt,
     lastSeenAt: site.lastSeenAt,
     messageCount: site.messageCount || 0,
@@ -2210,6 +2473,17 @@ const wss = new WebSocketServer({
 function handleInit(client, message) {
   if (client.joined) return;
 
+  // Per-site bot protection: require a solved proof-of-work before joining. A
+  // raw script that does not run the widget never solves it; a scripted solver
+  // pays CPU per visitor. The init is replayed once the solution arrives.
+  if (client.site && client.site.botProtection && !client.powVerified) {
+    client.pendingInit = message;
+    issuePowChallenge(client);
+    return;
+  }
+
+  if (!allowIdentityInit(client, message)) return;
+
   syncClientSceneProps(client, message);
 
   const nextX = clampPosition(message.x);
@@ -2294,6 +2568,7 @@ function handleInit(client, message) {
   identity.joined = true;
   const joinedAt = Date.now();
   identity.lastActivityAt = joinedAt;
+  identity.joinedAt = joinedAt;
 
   if (site) {
     const now = Date.now();
@@ -2323,6 +2598,7 @@ function handleMove(client, message) {
 
   const now = Date.now();
   if (now - client.lastMoveAt < MOVE_THROTTLE_MS) return;
+  if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.lastMoveAt = now;
   client.identity.x = nextX;
@@ -2348,6 +2624,8 @@ function handleAction(client, message) {
     if (!target || !target.joined || target.id === client.identity.id) return;
     if (Math.abs(target.x - client.identity.x) > HIGH_FIVE_DISTANCE) return;
   }
+  if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
+  if (!allowSynchronizedAction(client, message.action, now)) return;
 
   client.lastActionAt = now;
   clearPose(client.identity);
@@ -2365,8 +2643,13 @@ function handleAction(client, message) {
 function handleProfile(client, message) {
   if (!client.identity) return;
 
-  client.identity.displayName = filterDisplayName(client.site, sanitizeDisplayName(message.displayName));
-  client.identity.color = sanitizeCharacterColor(message.color);
+  const displayName = filterDisplayName(client.site, sanitizeDisplayName(message.displayName));
+  const color = sanitizeCharacterColor(message.color);
+  if (displayName === client.identity.displayName && color === client.identity.color) return;
+  if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
+
+  client.identity.displayName = displayName;
+  client.identity.color = color;
   touchIdentityActivity(client.identity);
   // Owners keep their look across resets: persist their own edits too.
   rememberOwnerProfile(client.site, client.identity);
@@ -2388,6 +2671,7 @@ function handleReading(client, message) {
     && readingUrl === previousReadingUrl
     && readingActive === client.readingActive
   ) return;
+  if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.readingActive = readingActive;
   client.identity.readingLabel = readingLabel;
@@ -2422,6 +2706,7 @@ function handleSettle(client, message) {
 
   const seatX = findAvailableSeatX(client.scene, prop, identity.x, identity.id);
   if (seatX === null) return;
+  if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   identity.x = seatX;
   identity.pose = prop.pose;
@@ -2440,9 +2725,14 @@ function handleSay(client, message) {
   const now = Date.now();
   if (now - client.lastChatAt < getChatThrottle(site)) return;
 
+  // Scripted abuse joins and immediately chats. A human cannot read the widget
+  // and type this fast, so drop messages sent within MIN_HUMAN_SAY_MS of joining.
+  if (MIN_HUMAN_SAY_MS > 0 && client.identity.joinedAt && now - client.identity.joinedAt < MIN_HUMAN_SAY_MS) return;
+
   let text = sanitizeMessage(message.text);
   if (site) text = applyWordFilter(text, site.blockedWords);
   if (!text) return;
+
   client.lastChatAt = now;
 
   const event = pluginContext(client.site, {
@@ -2464,6 +2754,8 @@ function handleSay(client, message) {
     }
   }
 
+  void sendTelegramChatNotification(client.site, client.identity, text, now);
+
   broadcast(
     client.scene,
     {
@@ -2480,10 +2772,12 @@ function handleTyping(client, message) {
   if (!client.identity || typeof message.typing !== "boolean") return;
 
   const wasTyping = Array.from(client.identity.clients).some((candidate) => candidate.typing);
-  client.typing = message.typing;
-  const typing = Array.from(client.identity.clients).some((candidate) => candidate.typing);
+  const typing = message.typing
+    || Array.from(client.identity.clients).some((candidate) => candidate !== client && candidate.typing);
   if (typing === wasTyping) return;
+  if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
+  client.typing = message.typing;
   broadcast(client.scene, { type: "typing", id: client.identity.id, typing });
 }
 
@@ -2508,7 +2802,7 @@ function handleClientMessage(client, raw) {
 
   if (!Object.hasOwn(MESSAGE_HANDLERS, message.type)) return;
 
-  if (message.type !== "init" && !client.joined) return;
+  if (message.type !== "init" && message.type !== "solve" && !client.joined) return;
 
   MESSAGE_HANDLERS[message.type](client, message);
 }
@@ -2547,6 +2841,7 @@ function handleClientClose(client) {
 }
 
 const heartbeatTimer = setInterval(() => {
+  const now = Date.now();
   for (const scene of scenes.values()) {
     for (const client of scene.clients.values()) {
       if (client.ws.readyState !== client.ws.OPEN) continue;
@@ -2560,6 +2855,7 @@ const heartbeatTimer = setInterval(() => {
       client.ws.ping();
     }
   }
+  pruneIpActivity(now);
 }, HEARTBEAT_INTERVAL_MS);
 
 heartbeatTimer.unref?.();
@@ -2601,7 +2897,13 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "");
+  const ip = getRequestIp(req);
+  if (isIpQuarantined(access.scene, ip)) {
+    ws.close(1008, "rate limited");
+    return;
+  }
+
+  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "", ip);
   access.scene.clients.set(client.connectionId, client);
   ws.isAlive = true;
 

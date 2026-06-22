@@ -17,6 +17,7 @@ TownSquare currently has four practical surfaces:
    - accepts WebSocket connections
    - owns ephemeral scene state and prop arbitration
    - routes either the default self-hosted scene or registered hosted site scenes
+   - enforces per-IP/per-site identity and activity budgets, including synchronized-action quarantine, behind a trusted local proxy
    - currently runs as one simple Node process with in-memory scene state
 
 3. **Public site**
