@@ -50,7 +50,7 @@ const DEFAULT_DEV_ORIGINS = new Set([
   `https://127.0.0.1:${PORT}`,
   `https://localhost:${PORT}`,
 ]);
-const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 25);
+const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 100);
 const MAX_BROWSER_ID_LEN = 80;
 const MAX_BROWSER_SECRET_LEN = 64;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
