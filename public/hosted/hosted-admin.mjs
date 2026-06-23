@@ -39,6 +39,7 @@ const siteDetailsForm = document.getElementById("site-details-form");
 const siteOriginInput = document.getElementById("site-origin");
 const siteNameInput = document.getElementById("site-name");
 const siteEmailInput = document.getElementById("site-email");
+const connectionLimitInput = document.getElementById("connection-limit");
 const includeMatchingWwwInput = document.getElementById("include-matching-www");
 const includeMatchingWwwLabel = document.getElementById("include-matching-www-label");
 const includeMatchingWwwNote = document.getElementById("include-matching-www-note");
@@ -165,6 +166,7 @@ function siteDetailsAreDirty() {
     siteOriginInput.value.trim() !== currentSite.origin
     || siteNameInput.value.trim() !== currentSite.name
     || siteEmailInput.value.trim() !== (currentSite.email || "")
+    || Number(connectionLimitInput.value) !== Number(currentSite.connectionLimit || 100)
     || includeMatchingWwwInput.checked !== Boolean(currentSite.includeMatchingWww)
   );
 }
@@ -202,6 +204,7 @@ function syncSiteDetailsFromServer() {
     siteOriginInput.value = currentSite.origin;
     siteNameInput.value = currentSite.name;
     siteEmailInput.value = currentSite.email || "";
+    connectionLimitInput.value = String(currentSite.connectionLimit || 100);
     includeMatchingWwwInput.checked = Boolean(currentSite.includeMatchingWww);
     siteDetailsTouched = false;
   }
@@ -219,6 +222,7 @@ async function saveSiteDetails() {
     origin: siteOriginInput.value,
     name: siteNameInput.value,
     email: siteEmailInput.value,
+    connectionLimit: Number(connectionLimitInput.value),
     includeMatchingWww: includeMatchingWwwInput.checked,
   });
 
@@ -749,7 +753,7 @@ function render(data) {
       <div><dt>Verified</dt><dd>${formatTime(currentSite.verifiedAt, "Not seen yet")}</dd></div>
       <div><dt>Messages</dt><dd>${currentSite.messageCount ?? 0}</dd></div>
       <div><dt>Last message</dt><dd>${formatTime(currentSite.lastMessageAt)}</dd></div>
-      <div><dt>Active visitors</dt><dd>${scene.activeVisitors}</dd></div>
+      <div><dt>Active visitors</dt><dd>${scene.activeVisitors} / ${currentSite.connectionLimit ?? 100}</dd></div>
       <div><dt>Blocked</dt><dd>${currentSite.blockedCount}</dd></div>
     </dl>
   `;

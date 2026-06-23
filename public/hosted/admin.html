@@ -68,6 +68,10 @@
                 <span>Email <small>optional</small></span>
                 <input id="site-email" name="email" type="email" autocomplete="email" maxlength="254" />
               </label>
+              <label>
+                <span>People limit</span>
+                <input id="connection-limit" name="connectionLimit" type="number" min="1" max="1000" step="1" value="100" inputmode="numeric" required />
+              </label>
             </div>
             <label class="hosted-toggle">
               <input type="checkbox" id="include-matching-www" name="includeMatchingWww" />

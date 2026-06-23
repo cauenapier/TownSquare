@@ -394,6 +394,35 @@ async function assertModerationTools() {
   observer.ws.close();
 }
 
+async function assertPerSiteConnectionLimit() {
+  const hosted = await createSite("Connection Limit");
+  const { siteKey, origin } = hosted.site;
+  const { adminToken } = hosted;
+  assert(hosted.site.connectionLimit === 100, "new site did not default to a 100-person limit");
+
+  const limited = await postJson("/api/admin/action", {
+    siteKey,
+    adminToken,
+    action: "updateSiteDetails",
+    origin,
+    name: hosted.site.name,
+    email: hosted.site.email || "",
+    includeMatchingWww: hosted.site.includeMatchingWww,
+    connectionLimit: 1,
+  });
+  assert(limited.response.ok, limited.body.error || "connection-limit update failed");
+  assert(limited.body.site.connectionLimit === 1, "admin did not persist the connection limit");
+
+  const first = await connect({ x: 0.25, browserId: "limit-first", siteKey, origin });
+  const rejected = await connectUntilClose({ x: 0.75, browserId: "limit-second", siteKey, origin });
+  assert(rejected.code === 1013, `expected full close code 1013, got ${rejected.code}`);
+  assert(rejected.reason === "full", `expected full close reason, got ${rejected.reason}`);
+
+  const firstClosed = waitForClose(first.ws);
+  first.ws.close();
+  await firstClosed;
+}
+
 async function loginWithAdminToken(adminToken) {
   const response = await fetch(`${HTTP_ORIGIN}/api/admin/login`, {
     method: "POST",
@@ -1167,6 +1196,7 @@ async function main() {
   await assertMatchingWwwOriginsWork();
   await assertOwnerProfilePersists();
   await assertModerationTools();
+  await assertPerSiteConnectionLimit();
 
   const hostedA = await createSite("Smoke A");
   const hostedB = await createSite("Smoke B");

@@ -1,0 +1,38 @@
+# Staging TownSquare instance.
+#
+# Install on the host as /etc/systemd/system/townsquare-staging.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now townsquare-staging.service
+#
+# Mirrors the production unit's hardening but on a separate port, release root,
+# and data dir so staging never collides with production. deploy-staging.sh flips
+# /opt/townsquare-staging/current and restarts this service.
+
+[Unit]
+Description=TownSquare staging service
+After=network.target
+
+[Service]
+Type=simple
+User=townsquare
+Group=townsquare
+WorkingDirectory=/opt/townsquare-staging/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8789
+Environment=PUBLIC_ORIGIN=https://staging.townsquare.cauenapier.com
+Environment=DATA_DIR=/opt/townsquare-staging/data
+Environment=ENABLE_STAGING_PAGE=1
+# Optional secrets/flags (Telegram, service-admin password, dev tools, etc.).
+EnvironmentFile=-/opt/townsquare-staging/.env
+ExecStart=/usr/bin/node /opt/townsquare-staging/current/server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/townsquare-staging
+
+[Install]
+WantedBy=multi-user.target

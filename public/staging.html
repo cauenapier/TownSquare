@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>TownSquare — staging</title>
+    <link rel="stylesheet" href="/widget.css" />
+    <link rel="stylesheet" href="/page.css" />
+    <style>
+      .staging-banner {
+        width: min(1100px, 100%);
+        margin: 24px auto 0;
+        padding: 12px 16px;
+        border: 1px solid var(--ink, #333);
+        border-radius: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px 12px;
+        font: 500 0.95rem/1.4 system-ui, sans-serif;
+      }
+      .staging-banner__tag {
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .staging-banner__origin {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        opacity: 0.85;
+      }
+      .staging-note {
+        width: min(1100px, 100%);
+        margin: 6px auto 0;
+        font: 400 0.85rem/1.4 system-ui, sans-serif;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body class="dev-page">
+    <main class="dev-shell">
+      <div class="staging-banner" role="status">
+        <span class="staging-banner__tag">Staging</span>
+        <span>Live widget served by this instance, connected to</span>
+        <span class="staging-banner__origin" id="staging-origin"></span>
+      </div>
+      <p class="staging-note">
+        This page mounts the real widget against this server's own
+        <code>/live</code> scene, so what you see is the deployed branch's widget,
+        server, and protocol end to end.
+      </p>
+
+      <section class="townsquare-host" aria-label="TownSquare staging scene">
+        <div id="townsquare-root"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { mountTownSquare } from "/townsquare.mjs";
+
+      const origin = window.location.origin;
+      document.getElementById("staging-origin").textContent = origin;
+
+      mountTownSquare(document.getElementById("townsquare-root"), {
+        // Defaults to window.location.origin; stated here so the page is an
+        // honest copy of a real embed snippet.
+        serverOrigin: origin,
+        socketPath: "/live",
+        theme: "host",
+      });
+    </script>
+  </body>
+</html>

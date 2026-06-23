@@ -38,6 +38,7 @@ const PLAUSIBLE_API_PATH = process.env.PLAUSIBLE_API_PATH === undefined
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const DEV_TOOLS_ENABLED = envFlag("ENABLE_DEV_TOOLS");
+const STAGING_PAGE_ENABLED = envFlag("ENABLE_STAGING_PAGE");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
@@ -50,7 +51,8 @@ const DEFAULT_DEV_ORIGINS = new Set([
   `https://127.0.0.1:${PORT}`,
   `https://localhost:${PORT}`,
 ]);
-const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 100);
+const MAX_SITE_CONNECTION_LIMIT = 1000;
+const DEFAULT_CONNECTION_LIMIT = Math.min(MAX_SITE_CONNECTION_LIMIT, Math.max(1, readLimit("MAX_CONNECTIONS", 100)));
 const MAX_BROWSER_ID_LEN = 80;
 const MAX_BROWSER_SECRET_LEN = 64;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
@@ -400,6 +402,13 @@ function sanitizeChatThrottle(input) {
   return Math.min(Math.round(ms), MAX_CHAT_THROTTLE_MS);
 }
 
+/** Per-site concurrent WebSocket cap, persisted on each site record. */
+function sanitizeConnectionLimit(input) {
+  const limit = Number(input);
+  if (!Number.isFinite(limit) || limit < 1) return DEFAULT_CONNECTION_LIMIT;
+  return Math.min(Math.round(limit), MAX_SITE_CONNECTION_LIMIT);
+}
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -721,6 +730,9 @@ function resolvePublicFile(requestUrl, hostHeader) {
   if (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname)) {
     return null;
   }
+  if (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname)) {
+    return null;
+  }
   const aliases = new Map([
     ["/register", "/hosted/register.html"],
     ["/admin", "/hosted/admin.html"],
@@ -729,6 +741,7 @@ function resolvePublicFile(requestUrl, hostHeader) {
     ["/map", "/map.html"],
     ["/dev", "/dev/dev.html"],
     ["/walk-sandbox", "/dev/walk-sandbox.html"],
+    ["/staging", "/staging.html"],
   ]);
   const pathname = aliases.get(url.pathname) || url.pathname;
   const normalized = path.normalize(pathname).replace(/^\.+/, "");
@@ -745,6 +758,10 @@ function isDevToolsRequest(pathname) {
   return pathname === "/dev"
     || pathname === "/walk-sandbox"
     || pathname.startsWith("/dev/");
+}
+
+function isStagingPageRequest(pathname) {
+  return pathname === "/staging" || pathname === "/staging.html";
 }
 
 function readJsonBody(req, res, callback, maxBytes = 4096) {
@@ -1355,6 +1372,9 @@ const ADMIN_ACTIONS = {
     site.allowedOrigins = originSettings.allowedOrigins;
     site.name = sanitizeSiteName(body.name, site.origin);
     site.email = parsedEmail.email;
+    if (Object.hasOwn(body, "connectionLimit")) {
+      site.connectionLimit = sanitizeConnectionLimit(body.connectionLimit);
+    }
     touchSite(site);
   },
   updateCustomization(site, scene, body) {
@@ -2070,6 +2090,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       ownerProfiles: {},
       blockedWords: [],
       chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
+      connectionLimit: DEFAULT_CONNECTION_LIMIT,
       moderationLog: [],
     },
   };
@@ -2107,6 +2128,16 @@ function loadSites() {
       }
       if (typeof site.chatThrottleMs !== "number") {
         site.chatThrottleMs = DEFAULT_CHAT_THROTTLE_MS;
+      }
+      if (typeof site.connectionLimit !== "number") {
+        site.connectionLimit = DEFAULT_CONNECTION_LIMIT;
+        sitesMigratedOnLoad = true;
+      } else {
+        const nextConnectionLimit = sanitizeConnectionLimit(site.connectionLimit);
+        if (nextConnectionLimit !== site.connectionLimit) {
+          site.connectionLimit = nextConnectionLimit;
+          sitesMigratedOnLoad = true;
+        }
       }
       if (!Array.isArray(site.moderationLog)) {
         site.moderationLog = [];
@@ -2166,6 +2197,10 @@ function getChatThrottle(site) {
   return site ? sanitizeChatThrottle(site.chatThrottleMs) : DEFAULT_CHAT_THROTTLE_MS;
 }
 
+function getConnectionLimit(site) {
+  return site ? sanitizeConnectionLimit(site.connectionLimit) : DEFAULT_CONNECTION_LIMIT;
+}
+
 /** A muted visitor stays present but their messages are dropped server-side. */
 function isMuted(site, browserId) {
   return Boolean(site) && Array.isArray(site.mutedBrowserIds) && site.mutedBrowserIds.includes(browserId);
@@ -2210,6 +2245,7 @@ function publicSite(site) {
     mutedCount: Array.isArray(site.mutedBrowserIds) ? site.mutedBrowserIds.length : 0,
     blockedWords: Array.isArray(site.blockedWords) ? site.blockedWords : [],
     chatThrottleMs: typeof site.chatThrottleMs === "number" ? site.chatThrottleMs : DEFAULT_CHAT_THROTTLE_MS,
+    connectionLimit: getConnectionLimit(site),
     moderationLog: Array.isArray(site.moderationLog) ? site.moderationLog : [],
     supporter: Boolean(site.supporter),
   };
@@ -2288,7 +2324,10 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
 
-  if (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname)) {
+  if (
+    (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname))
+    || (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname))
+  ) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end(req.method === "HEAD" ? undefined : "not found");
     return;
@@ -2813,7 +2852,7 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  if (access.scene.clients.size >= MAX_CONNECTIONS) {
+  if (access.scene.clients.size >= getConnectionLimit(access.site)) {
     ws.close(1013, "full");
     return;
   }

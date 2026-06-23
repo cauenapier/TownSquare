@@ -4,6 +4,7 @@ node_modules/
 # Local deploy config
 .env
 .env.deploy.local
+.env.deploy.staging
 
 # Local hosted-site registry
 .data/

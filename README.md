@@ -31,6 +31,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `public/hosted/` — hosted registration/admin pages and scripts, served at `/register`, `/admin`, `/service-admin`
 - `public/map.html` — public map of verified, enabled TownSquares, served at `/map`
 - `public/dev/` — local dev tooling: `dev.html` (simulation, `/dev`) and `walk-sandbox.html` (`/walk-sandbox`)
+- `public/staging.html` — live widget demo for the staging instance, served at `/staging` (gated by `ENABLE_STAGING_PAGE`)
 - `scripts/smoke-test.js` — automated websocket smoke test
 - `spec.md` — product truth
 - `roadmap.md` — product-facing sequencing
@@ -284,8 +285,9 @@ zone `townsquare_scene_joins`, default 60 r/m burst 20). This caps how fast any
 one scene can accumulate new connections regardless of how many source IPs are
 involved, which is effective against distributed botnets that rotate IPs.
 
-`MAX_CONNECTIONS` (default 25) caps the total concurrent WebSocket clients per
-scene. Set it via environment variable to override.
+Each site has an owner-editable concurrent visitor connection limit in
+`/admin`, defaulting to `100`. `MAX_CONNECTIONS` sets the fallback/default used
+for new and legacy site records.
 
 ## Deploy updates
 
@@ -339,6 +341,34 @@ Remote mode expects a machine with working `ssh` and `scp` access to the server.
 Local mode expects permission to write the deploy root and restart the service, usually via root or sudo.
 
 The checked-in `.env.deploy.example` is generic. Keep real deployment values in `.env.deploy.local` or another uncommitted env file.
+
+### Staging instance
+
+Staging is a second, full copy of the app running a chosen branch on its own
+service, port, and data dir, served at `https://staging.townsquare.cauenapier.com`.
+Because it is a separate origin it stages the branch end to end — server,
+widget, and protocol — at the dedicated `/staging` demo page, which mounts the
+real widget against the staging instance's own `/live` scene.
+
+One-time host setup:
+
+- install `ops/systemd/townsquare-staging.service` (port `8789`, separate
+  `DEPLOY_ROOT=/opt/townsquare-staging` and `DATA_DIR`, `ENABLE_STAGING_PAGE=1`)
+- install `ops/nginx/townsquare-staging.conf` and issue a TLS cert for the subdomain
+- `cp .env.deploy.staging.example .env.deploy.staging` and fill it in
+
+Deploy any branch with the branch as the parameter:
+
+```bash
+scripts/admin/deploy-staging.sh feature/foo     # stages origin/feature/foo
+scripts/admin/deploy-staging.sh                 # defaults to main
+scripts/admin/deploy-staging.sh feature/foo --skip-checks
+```
+
+The ignored `scripts/admin/deploy-staging.sh` helper is a thin wrapper around
+`deploy.sh`: it fetches the branch from `origin`, then deploys `origin/<branch>`
+using `.env.deploy.staging`. The `/staging` page is gated behind
+`ENABLE_STAGING_PAGE`, so it stays off on the production instance.
 
 ## Docker
 
