@@ -549,11 +549,72 @@ async function assertServiceAdminCanManageSites(hostedA, hostedB) {
   );
 }
 
+async function assertMapWorldSizingPolicy() {
+  const {
+    MAP_WORLD_MIN_HEIGHT,
+    MAP_WORLD_MIN_WIDTH,
+    computeMapWorldDimensions,
+    resolveMapWorld,
+    validateMapWorld,
+  } = await import("../public/shared/map-world.mjs");
+
+  const min = computeMapWorldDimensions(0);
+  assert(
+    min.width === MAP_WORLD_MIN_WIDTH && min.height === MAP_WORLD_MIN_HEIGHT,
+    "0 sites should use the minimum map dimensions",
+  );
+
+  const grown = computeMapWorldDimensions(100);
+  assert(
+    grown.width > MAP_WORLD_MIN_WIDTH && grown.height > MAP_WORLD_MIN_HEIGHT,
+    "100 sites should grow the map world",
+  );
+
+  const stored = {
+    width: MAP_WORLD_MIN_WIDTH,
+    height: MAP_WORLD_MIN_HEIGHT,
+    props: [{ type: "tree", x: 900, y: 600 }],
+    water: [],
+  };
+  const resolved = resolveMapWorld(stored, 100);
+  assert(resolved.width >= grown.width, "resolveMapWorld should meet the computed width");
+  assert(resolved.height >= grown.height, "resolveMapWorld should meet the computed height");
+  assert(
+    resolved.props[0].x === 900 && resolved.props[0].y === 600,
+    "resolveMapWorld should keep scenery anchored",
+  );
+
+  const oversized = resolveMapWorld({ ...stored, width: 4000, height: 2800 }, 0);
+  assert(
+    oversized.width === 4000 && oversized.height === 2800,
+    "resolveMapWorld should keep stored dimensions when they are already larger",
+  );
+
+  const valid = validateMapWorld({ ...stored, width: 2000, height: 1400 });
+  assert(valid.ok, "a world within the allowed size range should validate");
+
+  const tooSmall = validateMapWorld({ ...stored, width: 1000, height: MAP_WORLD_MIN_HEIGHT });
+  assert(!tooSmall.ok, "a world below the minimum width should be rejected");
+
+  const tooLarge = validateMapWorld({ ...stored, width: 99999, height: MAP_WORLD_MIN_HEIGHT });
+  assert(!tooLarge.ok, "a world above the maximum width should be rejected");
+}
+
 async function assertServiceAdminCanEditMap() {
   if (!SERVICE_ADMIN_PASSWORD) return;
 
+  const { computeMapWorldDimensions, MAP_WORLD_MIN_WIDTH } = await import("../public/shared/map-world.mjs");
   const publicBefore = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
-  assert(publicBefore.world?.width === 1800, "public map did not include the world");
+  const expected = computeMapWorldDimensions(publicBefore.sites.length);
+  assert(publicBefore.world?.width >= MAP_WORLD_MIN_WIDTH, "public map did not include the world");
+  assert(
+    publicBefore.world?.width >= expected.width,
+    "public map world width is smaller than site count requires",
+  );
+  assert(
+    publicBefore.world?.height >= expected.height,
+    "public map world height is smaller than site count requires",
+  );
   assert(
     publicBefore.sites.every((site) => Number.isFinite(site.messageCount)),
     "public map sites did not include total message counts",
@@ -899,6 +960,7 @@ async function main() {
   }
 
   await assertEmbeddableAssetsAreCrossOriginLoadable();
+  await assertMapWorldSizingPolicy();
   await assertServiceAdminCanEditMap();
 
   const first = await connect({

@@ -3,7 +3,7 @@ import { buildMapEdges } from "./map-connections.mjs";
 import { activityLevel, cityTier, layoutMapSites } from "./map-layout.mjs";
 import { createCityMarker, renderMapEdge, supporterStarSize } from "./map-render.mjs";
 import { renderSceneryLayer } from "./map-scenery.mjs";
-import { MAP_WORLD_HEIGHT, MAP_WORLD_WIDTH, validateMapWorld } from "./shared/map-world.mjs";
+import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH, validateMapWorld } from "./shared/map-world.mjs";
 
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 2.8;
@@ -41,9 +41,9 @@ if (
   throw new Error("Map detail elements not found");
 }
 
-let worldWidth = MAP_WORLD_WIDTH;
-let worldHeight = MAP_WORLD_HEIGHT;
-let mapWorld = { width: MAP_WORLD_WIDTH, height: MAP_WORLD_HEIGHT, props: [], water: [] };
+let worldWidth = MAP_WORLD_MIN_WIDTH;
+let worldHeight = MAP_WORLD_MIN_HEIGHT;
+let mapWorld = { width: MAP_WORLD_MIN_WIDTH, height: MAP_WORLD_MIN_HEIGHT, props: [], water: [] };
 let sites = [];
 let siteByKey = new Map();
 let positionsBySiteKey = new Map();
@@ -515,7 +515,7 @@ function normalizedMapWorld(raw) {
   const result = validateMapWorld(raw);
   return result.ok
     ? result.world
-    : { width: MAP_WORLD_WIDTH, height: MAP_WORLD_HEIGHT, props: [], water: [] };
+    : { width: MAP_WORLD_MIN_WIDTH, height: MAP_WORLD_MIN_HEIGHT, props: [], water: [] };
 }
 
 function applyMapWorld(raw) {

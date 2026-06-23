@@ -58,6 +58,8 @@ That separation is now reflected directly in the repo:
 - `public/lib/` = generic browser helpers shared across pages (`ui-common.mjs`)
 - `public/map*.mjs` = public map rendering and shared deterministic town layout;
   the server persists operator-edited point props and water strokes under `DATA_DIR`.
+  Map world dimensions grow with verified site count (see `public/shared/map-world.mjs`);
+  painted scenery stays anchored while new empty margin expands outward.
 - `server.js` = static + realtime service. Public embed URLs (`/townsquare.mjs`,
   `/widget.css`) are a stable contract; clean routes (`/admin`, `/dev`, …) are
   aliased to their files in `resolvePublicFile`, so files can move without

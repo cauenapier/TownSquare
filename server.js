@@ -190,6 +190,8 @@ let buildSiteCss = () => "";
 /** @type {(prop: import("./public/shared/site-config.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
+/** @type {(storedWorld: object, siteCount: number) => object} */
+let resolveMapWorld = (storedWorld) => storedWorld;
 let mapWorld;
 let normalizeOrigin;
 let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
@@ -1245,12 +1247,34 @@ function publicMapSite(site) {
   };
 }
 
+function countVerifiedMapSites() {
+  let count = 0;
+  for (const site of sitesByKey.values()) {
+    if (site.verifiedAt && !site.disabled) count += 1;
+  }
+  return count;
+}
+
+function resolvedMapWorld() {
+  return resolveMapWorld(mapWorld, countVerifiedMapSites());
+}
+
+function ensureMapWorldGrown(siteCount = countVerifiedMapSites()) {
+  const resolved = resolveMapWorld(mapWorld, siteCount);
+  if (resolved.width <= mapWorld.width && resolved.height <= mapWorld.height) return;
+  saveMapWorld({
+    ...mapWorld,
+    width: resolved.width,
+    height: resolved.height,
+  });
+}
+
 function handleMap(req, res) {
   const sites = Array.from(sitesByKey.values())
     .filter((site) => site.verifiedAt && !site.disabled)
     .map(publicMapSite);
 
-  sendJson(res, 200, { sites, world: mapWorld });
+  sendJson(res, 200, { sites, world: resolvedMapWorld() });
 }
 
 function getPublicStats() {
@@ -1621,7 +1645,7 @@ function handleServiceAdminSites(req, res) {
 function handleServiceAdminMap(req, res) {
   readJsonBody(req, res, (body) => {
     if (!isServiceAdminAuthorized(req, body, res)) return;
-    sendJson(res, 200, { world: mapWorld });
+    sendJson(res, 200, { world: resolvedMapWorld() });
   });
 }
 
@@ -1635,7 +1659,8 @@ function handleServiceAdminMapSave(req, res) {
     }
     try {
       saveMapWorld(result.world);
-      sendJson(res, 200, { world: mapWorld });
+      ensureMapWorldGrown();
+      sendJson(res, 200, { world: resolvedMapWorld() });
     } catch (error) {
       console.warn(`Could not save map world: ${error.message}`);
       sendJson(res, 500, { error: "Could not save the map." });
@@ -2551,6 +2576,7 @@ function handleInit(client, message) {
 
     if (firstVerify || now - lastSavedSeenAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       saveSites();
+      if (firstVerify) ensureMapWorldGrown();
     }
   }
 
@@ -2933,12 +2959,14 @@ async function loadSharedModules() {
   buildSiteCss = siteConfig.buildSiteCss;
   isWithinPropSettleZone = geometry.isWithinPropSettleZone;
   validateMapWorld = mapWorldModule.validateMapWorld;
+  resolveMapWorld = mapWorldModule.resolveMapWorld;
   normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
   buildAllowedOrigins = urlModule.buildAllowedOrigins;
   getMatchingWwwOrigin = urlModule.getMatchingWwwOrigin;
   originUsesMatchingWwwPair = urlModule.originUsesMatchingWwwPair;
   ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
   mapWorld = loadMapWorld();
+  ensureMapWorldGrown();
 
   PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
   BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;

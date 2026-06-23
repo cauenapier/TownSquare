@@ -1,5 +1,7 @@
+import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH } from "./shared/map-world.mjs";
+
 const SITE_LAYOUT = {
-  edgeInset: 150,
+  baseEdgeInset: 150,
   centerPull: 0.10,
   spread: 1.34,
   collisionPadding: 8,
@@ -50,11 +52,18 @@ function buildAgeRanks(sites) {
   return ranks;
 }
 
-function clampPosition(position, width, height) {
-  const inset = SITE_LAYOUT.edgeInset;
+function edgeInset(width, height) {
   return {
-    x: Math.max(inset, Math.min(width - inset, position.x)),
-    y: Math.max(inset, Math.min(height - inset, position.y)),
+    x: Math.round(SITE_LAYOUT.baseEdgeInset * width / MAP_WORLD_MIN_WIDTH),
+    y: Math.round(SITE_LAYOUT.baseEdgeInset * height / MAP_WORLD_MIN_HEIGHT),
+  };
+}
+
+function clampPosition(position, width, height) {
+  const inset = edgeInset(width, height);
+  return {
+    x: Math.max(inset.x, Math.min(width - inset.x, position.x)),
+    y: Math.max(inset.y, Math.min(height - inset.y, position.y)),
   };
 }
 
@@ -63,8 +72,9 @@ function initialPosition(site, ageRank, width, height) {
   const angle = (hash % 6283) / 1000;
   const band = 0.26 + ((hash >>> 8) % 44) / 100;
   const drift = ((hash >>> 20) % 1000) / 1000;
-  const x = 240 + ((hash % 1320) + drift * 120) % 1320;
-  const y = 190 + Math.abs(Math.sin(angle)) * 620 + band * 160;
+  const xSeed = ((hash % 1320) + drift * 120) % 1320;
+  const x = width * (240 + xSeed) / MAP_WORLD_MIN_WIDTH;
+  const y = height * (190 + Math.abs(Math.sin(angle)) * 620 + band * 160) / MAP_WORLD_MIN_HEIGHT;
   const centerX = width / 2;
   const centerY = height / 2;
   const pull = SITE_LAYOUT.centerPull * ageRank;
