@@ -6,7 +6,7 @@ usage() {
 Deploy a TownSquare git ref or tag as a new release.
 
 Usage:
-  scripts/deploy.sh [--local] [--skip-checks] [--promote-main] [--tag <git-tag> | --ref <git-ref>] [--env-file <path>] [--help]
+  scripts/deploy.sh [--local] [--working-tree] [--skip-checks] [--promote-main] [--tag <git-tag> | --ref <git-ref>] [--env-file <path>] [--help]
 
 Environment variables:
   DEPLOY_MODE           Optional. local or remote. Default: remote.
@@ -23,6 +23,10 @@ Environment variables:
 Notes:
 - By default the script will source ./.env.deploy.local if it exists.
 - By default the script deploys the local production tag.
+- Use --working-tree to deploy your current local code as-is (HEAD plus any
+  uncommitted changes to tracked or new files, excluding gitignored paths)
+  instead of a tag or ref. Handy for shipping a quick fix to production without
+  committing first. Cannot be combined with --tag, --ref, or --promote-main.
 - Use --promote-main to fetch origin/main, move the deploy tag to that commit, deploy it, and push the tag to origin.
 - Use --tag for another tag. It resolves only refs/tags/<git-tag>.
 - Remote mode uses ssh/scp, so it should be run from a machine with access to the server.
@@ -34,6 +38,7 @@ EOF
 
 SKIP_CHECKS=0
 PROMOTE_MAIN=0
+WORKING_TREE=0
 REF=""
 REF_SPECIFIED=0
 TAG="production"
@@ -53,6 +58,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --promote-main)
       PROMOTE_MAIN=1
+      shift
+      ;;
+    --working-tree)
+      WORKING_TREE=1
       shift
       ;;
     --ref)
@@ -138,13 +147,18 @@ if [[ "$PROMOTE_MAIN" -eq 1 && "$REF_SPECIFIED" -eq 1 ]]; then
   exit 1
 fi
 
+if [[ "$WORKING_TREE" -eq 1 ]] && [[ "$TAG_SPECIFIED" -eq 1 || "$REF_SPECIFIED" -eq 1 || "$PROMOTE_MAIN" -eq 1 ]]; then
+  echo "--working-tree cannot be combined with --tag, --ref, or --promote-main" >&2
+  exit 1
+fi
+
 if [[ "$PROMOTE_MAIN" -eq 1 ]]; then
   echo "== promote origin/main to tag: $TAG =="
   git fetch origin main
   git tag -f "$TAG" origin/main
 fi
 
-if [[ "$REF_SPECIFIED" -ne 1 ]]; then
+if [[ "$WORKING_TREE" -ne 1 && "$REF_SPECIFIED" -ne 1 ]]; then
   if ! REF="$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}")"; then
     echo "tag not found or does not point to a commit: $TAG" >&2
     exit 1
@@ -173,18 +187,35 @@ if [[ "$SKIP_CHECKS" -ne 1 ]]; then
   npm run check
 fi
 
-SHA="$(git rev-parse --short "$REF")"
+if [[ "$WORKING_TREE" -eq 1 ]]; then
+  SHA="$(git rev-parse --short HEAD)-local"
+else
+  SHA="$(git rev-parse --short "$REF")"
+fi
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
 RELEASE_NAME="${STAMP}-${SHA}"
 ARCHIVE="$(mktemp /tmp/townsquare-deploy.XXXXXX.tgz)"
+WORKING_TREE_INDEX=""
 
 cleanup() {
   rm -f "$ARCHIVE"
+  [[ -n "$WORKING_TREE_INDEX" ]] && rm -f "$WORKING_TREE_INDEX"
 }
 trap cleanup EXIT
 
 echo "== build archive =="
-git archive --format=tar.gz --output="$ARCHIVE" "$REF"
+if [[ "$WORKING_TREE" -eq 1 ]]; then
+  echo "(deploying local working tree, including uncommitted changes)"
+  # Snapshot the working tree into a throwaway index so we archive tracked +
+  # untracked files (minus gitignored paths) exactly as they sit on disk,
+  # without disturbing the real index.
+  WORKING_TREE_INDEX="$(mktemp -u /tmp/townsquare-deploy-index.XXXXXX)"
+  GIT_INDEX_FILE="$WORKING_TREE_INDEX" git add -A
+  WORKING_TREE_REF="$(GIT_INDEX_FILE="$WORKING_TREE_INDEX" git write-tree)"
+  git archive --format=tar.gz --output="$ARCHIVE" "$WORKING_TREE_REF"
+else
+  git archive --format=tar.gz --output="$ARCHIVE" "$REF"
+fi
 
 if [[ "$DEPLOY_MODE" == "local" ]]; then
   echo "== local deploy =="
