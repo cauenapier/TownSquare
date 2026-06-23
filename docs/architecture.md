@@ -31,7 +31,13 @@ TownSquare currently has four practical surfaces:
    - private admin token for moderation/settings, stored as a hash
    - verified owner badge: admin marks a live visitor's browser id into the site's
      `ownerBrowserIds`; the server stamps `isOwner` on that identity (gated by the
-     visitor's `browserSecret`, so it cannot be spoofed) and broadcasts it as a crown
+     visitor's `browserSecret`, so it cannot be spoofed) and broadcasts it as a crown.
+     The crown is anti-spoofed on two fronts: (1) ownership is only mutable through
+     the `setOwnerVisitor`/`updateOwnerProfile` admin actions, which require the
+     site's admin token; and (2) `sanitizeDisplayName` strips the crown emoji and
+     crown-like confusables from every display name, so a visitor cannot fake the
+     badge by typing 👑 in front of their own name. The crown therefore stays a
+     server-granted signal, never a glyph any client can reproduce.
    - service admin password for operator-level site management
    - service-admin world editor for the public network map
    - small JSON site registry

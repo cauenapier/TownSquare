@@ -435,9 +435,26 @@ function filterDisplayName(site, name) {
   return site ? applyWordFilter(name, site.blockedWords) : name;
 }
 
+/**
+ * The verified owner badge is a 👑 the server renders next to a name only when
+ * it has stamped `isOwner` on that identity. A visitor could otherwise fake the
+ * badge by simply typing a crown (or a crown-like confusable) into their own
+ * name. Strip those glyphs from every display name so the crown stays a signal
+ * the server alone can grant. Covers the crown emoji plus the obvious royalty /
+ * chess-king/queen lookalikes; ordinary letters are untouched.
+ */
+const OWNER_BADGE_LOOKALIKES = /[\u{1F451}\u{1F934}\u{1F478}\u{1FAC5}♔♕♚♛]/gu;
+
+function stripOwnerBadgeLookalikes(text) {
+  return text.replace(OWNER_BADGE_LOOKALIKES, "");
+}
+
 function sanitizeDisplayName(displayName) {
   if (typeof displayName !== "string") return "";
-  return displayName.trim().replace(/\s+/g, " ").slice(0, MAX_DISPLAY_NAME_LEN);
+  return stripOwnerBadgeLookalikes(displayName)
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, MAX_DISPLAY_NAME_LEN);
 }
 
 function sanitizeReadingLabel(readingLabel) {
