@@ -50,6 +50,8 @@ const customizationStatusEl = document.getElementById("customization-status");
 const saveCustomizationButton = document.getElementById("save-customization");
 const resetCustomizationButton = document.getElementById("reset-customization");
 const previewRoot = document.getElementById("townsquare-root");
+const previewDock = document.getElementById("preview-dock");
+const previewToggle = document.getElementById("preview-toggle");
 const scenePositionFields = document.getElementById("scene-position-fields");
 const styleOverrideFields = document.getElementById("style-override-fields");
 const snippetEl = document.getElementById("embed-snippet");
@@ -121,6 +123,33 @@ const preview = createCustomizationPreview({
 
 const previewModeButtons = document.querySelectorAll("[data-preview-mode]");
 preview.bindThemeToggle(previewModeButtons);
+
+// The preview docks to the bottom of the viewport; let owners collapse it out of
+// the way. While collapsed we tear the preview down so it isn't animating offscreen.
+let previewCollapsed = false;
+
+function mountPreview(options) {
+  if (previewCollapsed) return;
+  preview.mount(options);
+}
+
+function setPreviewCollapsed(collapsed) {
+  previewCollapsed = collapsed;
+  previewDock?.classList.toggle("is-collapsed", collapsed);
+  if (previewToggle) {
+    previewToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    previewToggle.textContent = collapsed ? "Show" : "Hide";
+  }
+  if (collapsed) {
+    preview.destroy();
+  } else if (currentSite) {
+    preview.mount({ remount: true });
+  }
+}
+
+previewToggle?.addEventListener("click", () => {
+  setPreviewCollapsed(!previewCollapsed);
+});
 
 const setStatus = createStatusSetter(statusEl);
 const setSiteDetailsStatus = createStatusSetter(siteDetailsStatusEl, { toggleHidden: true });
@@ -357,7 +386,7 @@ function syncCustomizationForm({ force = false } = {}) {
   updateCustomizationButtons();
   updateCustomizationStatus();
   if (force || !preview.mounted) {
-    preview.mount({ remount: force });
+    mountPreview({ remount: force });
   }
 }
 
@@ -391,7 +420,7 @@ function onConnectionsEdited() {
   connectionsTouched = true;
   updateConnectionsControls();
   // Reflect signposts in the live preview as the owner edits.
-  preview.mount();
+  mountPreview();
 }
 
 function createConnectionRow(connection, index) {
@@ -478,7 +507,7 @@ function syncConnectionsFromServer() {
   connectionsTouched = false;
   renderConnectionRows();
   updateConnectionsControls();
-  if (preview.mounted) preview.mount();
+  if (preview.mounted) mountPreview();
 }
 
 function addConnection() {
@@ -852,7 +881,7 @@ customizationForm.addEventListener("input", (event) => {
   }
   updateCustomizationButtons();
   updateCustomizationStatus();
-  preview.mount();
+  mountPreview();
   scheduleAutoSave();
 });
 
@@ -868,7 +897,7 @@ resetCustomizationButton.addEventListener("click", () => {
   applyCustomizationToForm(getDefaultCustomization());
   updateCustomizationButtons();
   updateCustomizationStatus();
-  preview.mount({ remount: true });
+  mountPreview({ remount: true });
   scheduleAutoSave();
 });
 

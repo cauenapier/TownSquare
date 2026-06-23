@@ -50,6 +50,7 @@
         </div>
         <p class="hosted-status" id="admin-status" role="status"></p>
 
+        <!-- 1. Site details — identity, allowed origins, capacity. -->
         <section class="hosted-section" aria-labelledby="site-details-title">
           <div class="hosted-section-head">
             <h2 id="site-details-title">Site details</h2>
@@ -83,13 +84,99 @@
             </div>
             <p class="hosted-status" id="site-details-status" role="status" hidden></p>
           </form>
+          <section class="hosted-meta" id="site-meta"></section>
         </section>
 
-        <section class="hosted-meta" id="site-meta"></section>
+        <!-- 2. Site owner — persistent owner identities. -->
+        <section class="hosted-section" id="owner-section">
+          <div class="hosted-section-head">
+            <h2>Site owner</h2>
+          </div>
+          <p class="hosted-note">
+            Owners keep a name, character colour, and badge colour that stick — they survive resets and reconnects. Crown a visitor under Moderation to add an owner, then customise their look here.
+          </p>
+          <div class="owner-list" id="owner-list"></div>
+        </section>
 
+        <!-- 3. Connected towns — neighbouring squares linked at the edges. -->
+        <section class="hosted-section" id="connections-section">
+          <div class="hosted-section-head">
+            <h2>Connected towns</h2>
+          </div>
+          <p class="hosted-note">
+            Link neighbouring TownSquares to the left or right edge of your square. A signpost appears on that side, and visitors can walk over to travel there. Copy the refreshed snippet below after you save.
+          </p>
+          <div class="hosted-connections" id="connections-list"></div>
+          <div class="hosted-actions">
+            <button type="button" id="add-connection">Add a town</button>
+            <button type="button" id="save-connections">Save connections</button>
+          </div>
+          <p class="hosted-status" id="connections-status" role="status" hidden></p>
+        </section>
+
+        <!-- 4. Moderation — chat controls, filtering, owners/visitors. -->
+        <section class="hosted-section" id="moderation-section">
+          <div class="hosted-section-head">
+            <h2>Moderation</h2>
+            <label class="hosted-toggle">
+              <input type="checkbox" id="chat-disabled" />
+              <span>Disable chat</span>
+            </label>
+            <label class="hosted-toggle">
+              <input type="checkbox" id="bot-protection" />
+              <span>Bot protection</span>
+            </label>
+          </div>
+          <p class="hosted-note">
+            Bot protection requires each visitor's browser to solve a small proof-of-work before joining. It stops automated scripts while staying invisible to real visitors. Enable it only if you are being hit by bots, as it adds a brief delay when visitors arrive.
+          </p>
+          <div class="hosted-actions">
+            <button type="button" id="clear-messages">Clear recent messages</button>
+            <button type="button" id="disable-site">Disable site</button>
+          </div>
+
+          <p class="hosted-note">Read the live conversation and moderate it on its own page.</p>
+          <div class="hosted-actions">
+            <a href="/admin/chat" class="hosted-button">Open chat thread →</a>
+          </div>
+
+          <h3 class="hosted-subhead">Chat filtering</h3>
+          <form class="hosted-form" id="moderation-form">
+            <div class="hosted-grid">
+              <label>
+                <span>Filtered words</span>
+                <textarea id="blocked-words" name="blockedWords" rows="3" placeholder="One word per line"></textarea>
+              </label>
+              <label>
+                <span>Slow mode</span>
+                <select id="chat-throttle" name="chatThrottleMs">
+                  <option value="0">Off · no limit</option>
+                  <option value="500">Fast · 0.5s</option>
+                  <option value="1500">Normal · 1.5s</option>
+                  <option value="3000">Slow · 3s</option>
+                  <option value="5000">Slower · 5s</option>
+                  <option value="10000">Slowest · 10s</option>
+                </select>
+              </label>
+            </div>
+            <p class="hosted-note">Filtered words are masked in chat and visitor names — whole-word and case-insensitive. Slow mode is the minimum time between a visitor's messages.</p>
+            <div class="hosted-actions">
+              <button type="submit" id="save-moderation" disabled>Save filtering</button>
+            </div>
+            <p class="hosted-status" id="moderation-status" role="status" hidden></p>
+          </form>
+
+          <h3 class="hosted-subhead">Recent actions</h3>
+          <div class="moderation-log" id="moderation-log"></div>
+
+          <h3 class="hosted-subhead">Visitors</h3>
+          <div class="visitor-list" id="visitor-list"></div>
+        </section>
+
+        <!-- 5. Scene customization — scene props, style, live preview, embed output. -->
         <section class="hosted-section" id="customization-section">
           <div class="hosted-section-head">
-            <h2>Editable customization</h2>
+            <h2>Scene customization</h2>
           </div>
           <p class="hosted-note">
             Change the scene and style here and preview it. Your choices save automatically for this site, and the snippet and CSS below refresh when they change.
@@ -156,20 +243,24 @@
             <p class="hosted-status" id="customization-status" role="status" hidden></p>
           </form>
 
-          <section class="hosted-section hosted-preview-dock" aria-labelledby="preview-title">
+          <section class="hosted-section hosted-preview-dock" id="preview-dock" aria-labelledby="preview-title">
             <div class="hosted-section-head">
               <h2 id="preview-title">Preview</h2>
-              <div class="hosted-preview-modes" role="group" aria-label="Preview theme">
-                <button type="button" class="hosted-preview-mode is-active" data-preview-mode="light" aria-pressed="true">Light</button>
-                <button type="button" class="hosted-preview-mode" data-preview-mode="dark" aria-pressed="false">Dark</button>
+              <div class="hosted-preview-head-controls">
+                <div class="hosted-preview-modes" role="group" aria-label="Preview theme">
+                  <button type="button" class="hosted-preview-mode is-active" data-preview-mode="light" aria-pressed="true">Light</button>
+                  <button type="button" class="hosted-preview-mode" data-preview-mode="dark" aria-pressed="false">Dark</button>
+                </div>
+                <button type="button" class="hosted-preview-toggle" id="preview-toggle" aria-expanded="true" aria-controls="preview-body">Hide</button>
               </div>
             </div>
-            <div class="townsquare-host">
+            <div class="townsquare-host" id="preview-body">
               <div id="townsquare-root"></div>
             </div>
           </section>
         </section>
 
+        <!-- Embed output — snippet + CSS derived from the settings above. -->
         <section class="hosted-section" id="install-section">
           <h2>Embed snippet</h2>
           <p class="hosted-note">Paste this where you want the square to appear.</p>
@@ -186,89 +277,6 @@
           <div class="hosted-actions">
             <button type="button" id="copy-style">Copy CSS</button>
           </div>
-        </section>
-
-        <section class="hosted-section" id="connections-section">
-          <div class="hosted-section-head">
-            <h2>Connected towns</h2>
-          </div>
-          <p class="hosted-note">
-            Link neighbouring TownSquares to the left or right edge of your square. A signpost appears on that side, and visitors can walk over to travel there. Copy the refreshed snippet above after you save.
-          </p>
-          <div class="hosted-connections" id="connections-list"></div>
-          <div class="hosted-actions">
-            <button type="button" id="add-connection">Add a town</button>
-            <button type="button" id="save-connections">Save connections</button>
-          </div>
-          <p class="hosted-status" id="connections-status" role="status" hidden></p>
-        </section>
-
-        <section class="hosted-section" id="owner-section">
-          <div class="hosted-section-head">
-            <h2>Site owner</h2>
-          </div>
-          <p class="hosted-note">
-            Owners keep a name, character colour, and badge colour that stick — they survive resets and reconnects. Crown a visitor under Moderation to add an owner, then customise their look here.
-          </p>
-          <div class="owner-list" id="owner-list"></div>
-        </section>
-
-        <section class="hosted-section" id="moderation-section">
-          <div class="hosted-section-head">
-            <h2>Moderation</h2>
-            <label class="hosted-toggle">
-              <input type="checkbox" id="chat-disabled" />
-              <span>Disable chat</span>
-            </label>
-            <label class="hosted-toggle">
-              <input type="checkbox" id="bot-protection" />
-              <span>Bot protection</span>
-            </label>
-          </div>
-          <p class="hosted-note">
-            Bot protection requires each visitor's browser to solve a small proof-of-work before joining. It stops automated scripts while staying invisible to real visitors. Enable it only if you are being hit by bots, as it adds a brief delay when visitors arrive.
-          </p>
-          <div class="hosted-actions">
-            <button type="button" id="clear-messages">Clear recent messages</button>
-            <button type="button" id="disable-site">Disable site</button>
-          </div>
-
-          <p class="hosted-note">Read the live conversation and moderate it on its own page.</p>
-          <div class="hosted-actions">
-            <a href="/admin/chat" class="hosted-button">Open chat thread →</a>
-          </div>
-
-          <h3 class="hosted-subhead">Chat filtering</h3>
-          <form class="hosted-form" id="moderation-form">
-            <div class="hosted-grid">
-              <label>
-                <span>Filtered words</span>
-                <textarea id="blocked-words" name="blockedWords" rows="3" placeholder="One word per line"></textarea>
-              </label>
-              <label>
-                <span>Slow mode</span>
-                <select id="chat-throttle" name="chatThrottleMs">
-                  <option value="0">Off · no limit</option>
-                  <option value="500">Fast · 0.5s</option>
-                  <option value="1500">Normal · 1.5s</option>
-                  <option value="3000">Slow · 3s</option>
-                  <option value="5000">Slower · 5s</option>
-                  <option value="10000">Slowest · 10s</option>
-                </select>
-              </label>
-            </div>
-            <p class="hosted-note">Filtered words are masked in chat and visitor names — whole-word and case-insensitive. Slow mode is the minimum time between a visitor's messages.</p>
-            <div class="hosted-actions">
-              <button type="submit" id="save-moderation" disabled>Save filtering</button>
-            </div>
-            <p class="hosted-status" id="moderation-status" role="status" hidden></p>
-          </form>
-
-          <h3 class="hosted-subhead">Recent actions</h3>
-          <div class="moderation-log" id="moderation-log"></div>
-
-          <h3 class="hosted-subhead">Visitors</h3>
-          <div class="visitor-list" id="visitor-list"></div>
         </section>
       </section>
     </main>
