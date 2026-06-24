@@ -53,6 +53,8 @@ function kick(state, playerX, speed) {
 function createSoccerBallPlugin() {
   return {
     name: FRAME_KEY,
+    label: "Soccer ball",
+    description: "A shared ball visitors kick around by running into it.",
     widgetModule: "/widget/plugins/soccer-ball.mjs",
 
     sceneEntity: {

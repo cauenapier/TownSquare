@@ -1514,6 +1514,16 @@ const ADMIN_ACTIONS = {
     site.pluginsEnabled[name] = Boolean(body.enabled);
     logModeration(site, body.enabled ? "plugin-on" : "plugin-off", name);
     touchSite(site);
+
+    // Reconcile the live scene so scene-entity add-ons (e.g. the ball) gain or
+    // drop their per-scene state as soon as the toggle flips, mirroring how a
+    // customization change takes effect. An empty scene is dropped and rebuilt
+    // fresh on the next join.
+    if (scene.clients.size === 0) {
+      scenes.delete(site.siteKey);
+    } else {
+      rebuildSceneProps(scene, site);
+    }
   },
   disableSite(site, scene, body) {
     site.disabled = Boolean(body.disabled);
