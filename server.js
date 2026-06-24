@@ -263,15 +263,14 @@ const MESSAGE_HANDLERS = {
   typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,pageUrl:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
-function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown", pageUrl = "") {
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown") {
   return {
     connectionId,
     ws,
     scene,
     site,
     origin,
-    pageUrl,
     ip,
     propsById: scene.propsById,
     identity: null,
@@ -2489,22 +2488,28 @@ function isOriginAllowedForSite(origin, site) {
 }
 
 /**
- * The full page URL a widget loaded from, derived from the upgrade Referer.
- * Returns origin + pathname only (query and hash are dropped so we never
- * persist tokens or other sensitive params), and only when the origin is one
- * the site allows. Anything malformed or off-origin yields "".
+ * Remember the page a site's widget was last seen on. The source is the
+ * visitor's reading URL, which the widget defaults to `window.location.href`
+ * and which the server has already validated against the site's allowed
+ * origins (browsers do not send a Referer on the WebSocket upgrade, so the
+ * reading URL is how the host page reaches us). Stored as origin + pathname
+ * only, so query strings and hashes are never persisted. Returns true when the
+ * stored value changed.
  */
-function sanitizePageUrl(referer, site) {
-  if (!referer) return "";
+function rememberSiteLastSeenUrl(site, readingUrl) {
+  if (!site || !readingUrl) return false;
   let url;
   try {
-    url = new URL(String(referer));
+    url = new URL(readingUrl);
   } catch {
-    return "";
+    return false;
   }
-  if (!["http:", "https:"].includes(url.protocol)) return "";
-  if (!isOriginAllowedForSite(url.origin, site)) return "";
-  return `${normalizeOrigin(url.origin)}${url.pathname}`.slice(0, MAX_PAGE_URL_LEN);
+  const origin = normalizeOrigin(url.origin);
+  if (!origin) return false;
+  const pageUrl = `${origin}${url.pathname}`.slice(0, MAX_PAGE_URL_LEN);
+  if (pageUrl === site.lastSeenUrl) return false;
+  site.lastSeenUrl = pageUrl;
+  return true;
 }
 
 let sitesByKey = new Map();
@@ -2769,8 +2774,7 @@ function handleInit(client, message) {
     site.lastSeenAt = now;
     site.verifiedAt = site.verifiedAt || now;
 
-    const urlChanged = client.pageUrl && client.pageUrl !== site.lastSeenUrl;
-    if (urlChanged) site.lastSeenUrl = client.pageUrl;
+    const urlChanged = rememberSiteLastSeenUrl(site, identity.readingUrl);
 
     if (firstVerify || urlChanged || now - lastSavedSeenAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       saveSites();
@@ -2872,6 +2876,7 @@ function handleReading(client, message) {
   client.readingActive = readingActive;
   client.identity.readingLabel = readingLabel;
   client.identity.readingUrl = readingUrl;
+  if (client.site && rememberSiteLastSeenUrl(client.site, readingUrl)) saveSites();
   refreshIdentityReadingActive(client.identity);
   const now = Date.now();
   if (client.identity.readingActive && !previousReadingActive) {
@@ -3098,8 +3103,7 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  const pageUrl = sanitizePageUrl(req.headers.referer, access.site);
-  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "", ip, pageUrl);
+  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "", ip);
   access.scene.clients.set(client.connectionId, client);
   ws.isAlive = true;
 
