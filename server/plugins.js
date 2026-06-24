@@ -5,12 +5,14 @@ const HOOKS = new Set([
   "onVisitorJoin",
   "onMessage",
   "onSocketMessage",
+  "onSceneMove",
   "extendVisitor",
   "extendSiteConfig",
   "extendAdminPanel",
   "extendMapData",
   "extendWidgetConfig",
 ]);
+const SCENE_ENTITY_FNS = ["create", "tick", "snapshot"];
 const MODULE_PATH_RE = /^\/[A-Za-z0-9_./-]+\.mjs$/;
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ACTION_RE = /^[A-Za-z][A-Za-z0-9]*$/;
@@ -50,6 +52,17 @@ class PluginManager {
       for (const [action, handler] of Object.entries(plugin.adminActions)) {
         if (!ACTION_RE.test(action) || typeof handler !== "function") {
           throw new TypeError(`Invalid admin action: ${name}.${action}`);
+        }
+      }
+    }
+    if (plugin.sceneEntity !== undefined) {
+      const entity = plugin.sceneEntity;
+      if (!entity || typeof entity !== "object" || Array.isArray(entity)) {
+        throw new TypeError("sceneEntity must be an object");
+      }
+      for (const fn of SCENE_ENTITY_FNS) {
+        if (entity[fn] !== undefined && typeof entity[fn] !== "function") {
+          throw new TypeError(`sceneEntity.${fn} must be a function`);
         }
       }
     }
@@ -160,6 +173,101 @@ class PluginManager {
     } catch (error) {
       this.report(plugin.name, `adminActions.${action}`, error);
       return { found: true, error: "Plugin action failed." };
+    }
+  }
+
+  hasSceneEntities() {
+    return this.plugins.some((plugin) => plugin.sceneEntity);
+  }
+
+  /**
+   * Seed per-scene state for every enabled scene-entity plugin. Existing state
+   * is preserved across rebuilds so a customization change does not reset a
+   * live entity; only newly enabled plugins are created and disabled ones drop.
+   */
+  createSceneEntityState(context, existing = {}) {
+    const state = {};
+
+    for (const plugin of this.plugins) {
+      const entity = plugin.sceneEntity;
+      if (!entity) continue;
+      const pluginContext = this.contextFor(plugin, context);
+      if (!this.isEnabled(plugin, pluginContext)) continue;
+
+      if (existing && Object.prototype.hasOwnProperty.call(existing, plugin.name)) {
+        state[plugin.name] = existing[plugin.name];
+        continue;
+      }
+      if (typeof entity.create !== "function") continue;
+      try {
+        const value = entity.create(pluginContext);
+        if (value !== undefined) state[plugin.name] = value;
+      } catch (error) {
+        this.report(plugin.name, "sceneEntity.create", error);
+      }
+    }
+
+    return state;
+  }
+
+  snapshotSceneEntities(stateByPlugin, context) {
+    const snapshot = {};
+
+    for (const plugin of this.plugins) {
+      const entity = plugin.sceneEntity;
+      if (!entity) continue;
+      const pluginContext = this.contextFor(plugin, context);
+      if (!this.isEnabled(plugin, pluginContext)) continue;
+      const state = stateByPlugin?.[plugin.name];
+      if (state === undefined) continue;
+      try {
+        const value = typeof entity.snapshot === "function"
+          ? entity.snapshot({ ...pluginContext, state })
+          : state;
+        if (value !== undefined) snapshot[plugin.name] = value;
+      } catch (error) {
+        this.report(plugin.name, "sceneEntity.snapshot", error);
+      }
+    }
+
+    return snapshot;
+  }
+
+  tickSceneEntities(stateByPlugin, context, emitFrame) {
+    for (const plugin of this.plugins) {
+      const entity = plugin.sceneEntity;
+      if (!entity || typeof entity.tick !== "function") continue;
+      const pluginContext = this.contextFor(plugin, context);
+      if (!this.isEnabled(plugin, pluginContext)) continue;
+      const state = stateByPlugin?.[plugin.name];
+      if (state === undefined) continue;
+      try {
+        entity.tick({
+          ...pluginContext,
+          state,
+          emit: (frame) => emitFrame(plugin.name, frame),
+        });
+      } catch (error) {
+        this.report(plugin.name, "sceneEntity.tick", error);
+      }
+    }
+  }
+
+  runSceneMove(stateByPlugin, context, emitFrame) {
+    for (const plugin of this.plugins) {
+      if (typeof plugin.onSceneMove !== "function") continue;
+      const pluginContext = this.contextFor(plugin, context);
+      if (!this.isEnabled(plugin, pluginContext)) continue;
+      const state = stateByPlugin?.[plugin.name];
+      try {
+        plugin.onSceneMove({
+          ...pluginContext,
+          state,
+          emit: (frame) => emitFrame(plugin.name, frame),
+        });
+      } catch (error) {
+        this.report(plugin.name, "onSceneMove", error);
+      }
     }
   }
 

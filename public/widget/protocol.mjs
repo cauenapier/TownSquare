@@ -163,6 +163,7 @@ export function wireSocket(ctx) {
           }
         }
         syncBirdsFromHello(ctx, message.birds);
+        ctx.widgetPlugins?.applyEntities(message.pluginEntities);
         updateStatus(ctx);
         return;
       }
@@ -170,6 +171,11 @@ export function wireSocket(ctx) {
       // Owner changed slow mode mid-session: keep the local cooldown in sync.
       if (message.type === "chatThrottle") {
         if (typeof message.ms === "number") ctx.chatThrottleMs = message.ms;
+        return;
+      }
+
+      if (message.type === "plugin") {
+        ctx.widgetPlugins?.applyEntity(message.plugin, message);
         return;
       }
 
