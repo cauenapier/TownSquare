@@ -75,6 +75,68 @@ test("visitor extensions are namespaced and browser modules respect enablement",
   assert.deepEqual(manager.browserModules("widget", context({ supporter: false }, {})), []);
 });
 
+test("labelled plugins stay off until a site enables them", () => {
+  const manager = new PluginManager();
+  const calls = [];
+  manager.register({
+    name: "telegram",
+    label: "Telegram notifications",
+    description: "Forward chat messages to Telegram.",
+    onMessage: () => calls.push("telegram"),
+    adminModule: "/pro/telegram/admin.mjs",
+  });
+
+  assert.deepEqual(manager.toggleable(), [
+    { name: "telegram", label: "Telegram notifications", description: "Forward chat messages to Telegram." },
+  ]);
+
+  // Off by default and whenever the site has not opted in.
+  manager.run("onMessage", () => ({ enabled: false }));
+  manager.run("onMessage", () => ({}));
+  assert.deepEqual(calls, []);
+  assert.deepEqual(manager.browserModules("admin", () => ({ enabled: false })), []);
+
+  // Active only once the site switches it on.
+  manager.run("onMessage", () => ({ enabled: true }));
+  assert.deepEqual(calls, ["telegram"]);
+  assert.deepEqual(manager.browserModules("admin", () => ({ enabled: true })), [
+    { name: "telegram", module: "/pro/telegram/admin.mjs" },
+  ]);
+});
+
+test("toggleable plugins are filtered to entitled sites", () => {
+  const manager = new PluginManager();
+  const calls = [];
+  manager.register({
+    name: "owner-figure",
+    label: "Owner figure",
+    isEnabled: ({ site }) => site?.pro === true,
+    onMessage: () => calls.push("owner-figure"),
+  });
+
+  // Listed everywhere when no context is given; hidden where the site lacks the
+  // entitlement, even if its toggle is on.
+  assert.deepEqual(manager.toggleable().map((plugin) => plugin.name), ["owner-figure"]);
+  assert.deepEqual(manager.toggleable(() => ({ site: { pro: false }, enabled: true })), []);
+  assert.deepEqual(
+    manager.toggleable(() => ({ site: { pro: true } })).map((plugin) => plugin.name),
+    ["owner-figure"],
+  );
+
+  // A pro site still has to switch it on for it to actually run.
+  manager.run("onMessage", () => ({ site: { pro: true }, enabled: false }));
+  manager.run("onMessage", () => ({ site: { pro: false }, enabled: true }));
+  assert.deepEqual(calls, []);
+  manager.run("onMessage", () => ({ site: { pro: true }, enabled: true }));
+  assert.deepEqual(calls, ["owner-figure"]);
+});
+
+test("plugin metadata must be non-empty strings", () => {
+  const manager = new PluginManager();
+  assert.throws(() => manager.register({ name: "a", label: "" }), /label must be a non-empty string/);
+  assert.throws(() => manager.register({ name: "b", description: 5 }), /description must be a non-empty string/);
+});
+
 test("plugin admin actions receive only their scoped context", () => {
   const manager = new PluginManager();
   let saved = null;

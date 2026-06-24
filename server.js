@@ -1310,8 +1310,10 @@ function sendAdminSite(req, res, site, adminToken) {
 }
 
 function extendAdminPanel(panel, site) {
+  const sitePlugins = describeSitePlugins(site);
+  const withPlugins = sitePlugins.length > 0 ? { ...panel, plugins: sitePlugins } : panel;
   const pluginModules = plugins.browserModules("admin", pluginContext(site));
-  const corePanel = pluginModules.length > 0 ? { ...panel, pluginModules } : panel;
+  const corePanel = pluginModules.length > 0 ? { ...withPlugins, pluginModules } : withPlugins;
   const extended = plugins.extend("extendAdminPanel", corePanel, pluginContext(site));
   return isPlainObject(extended) ? extended : corePanel;
 }
@@ -1501,6 +1503,16 @@ const ADMIN_ACTIONS = {
       identity.messages = [];
     }
     logModeration(site, "clear-messages");
+    touchSite(site);
+  },
+  setPluginEnabled(site, scene, body) {
+    const name = String(body.name || "");
+    if (!plugins.toggleable(pluginContext(site)).some((plugin) => plugin.name === name)) {
+      return { error: "Unknown plugin." };
+    }
+    if (!isPlainObject(site.pluginsEnabled)) site.pluginsEnabled = {};
+    site.pluginsEnabled[name] = Boolean(body.enabled);
+    logModeration(site, body.enabled ? "plugin-on" : "plugin-off", name);
     touchSite(site);
   },
   disableSite(site, scene, body) {
@@ -2154,6 +2166,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       connectionLimit: DEFAULT_CONNECTION_LIMIT,
       moderationLog: [],
       plugins: {},
+      pluginsEnabled: {},
     },
   };
 }
@@ -2209,6 +2222,9 @@ function loadSites() {
       }
       if (ensurePluginData(site)) {
         sitesMigratedOnLoad = true;
+      }
+      if (!isPlainObject(site.pluginsEnabled)) {
+        site.pluginsEnabled = {};
       }
       const nextAllowedOrigins = getAllowedOrigins(site);
       if (JSON.stringify(nextAllowedOrigins) !== JSON.stringify(site.allowedOrigins || [])) {
@@ -2399,11 +2415,25 @@ function pluginVisitor(identity) {
   });
 }
 
+function isPluginEnabledForSite(site, pluginName) {
+  // Toggleable add-ons are off until a site owner switches them on, so anything
+  // not explicitly true stays inactive.
+  return Boolean(site && isPlainObject(site.pluginsEnabled) && site.pluginsEnabled[pluginName] === true);
+}
+
+function describeSitePlugins(site) {
+  return plugins.toggleable(pluginContext(site)).map((plugin) => ({
+    ...plugin,
+    enabled: isPluginEnabledForSite(site, plugin.name),
+  }));
+}
+
 function pluginContext(site, values = {}) {
   return (pluginName) => Object.freeze({
     ...values,
     site: pluginSite(site),
     data: getPluginData(site, pluginName),
+    enabled: isPluginEnabledForSite(site, pluginName),
   });
 }
 

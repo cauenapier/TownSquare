@@ -58,6 +58,34 @@ module.exports = {
 module descriptors for a site. Current site context includes `siteKey`, `name`,
 `origin`, and `supporter`.
 
+## Site-owner activation toggle
+
+Declaring a `label` (and optional `description`) opts a plugin into the
+per-site activation switch shown in the admin **Add-ons** tab:
+
+```js
+module.exports = {
+  name: "telegram-notifications",
+  label: "Telegram notifications",
+  description: "Forward chat messages to a Telegram chat.",
+  // ...hooks, adminModule, etc.
+};
+```
+
+Labelled plugins are **off by default** and only run for sites whose owner has
+switched them on; the enablement state persists under `site.pluginsEnabled` and
+is surfaced to `isEnabled` as `context.enabled`. Unlabelled plugins keep running
+globally as before.
+
+A plugin's own `isEnabled` layers on top of the owner's choice as an
+*entitlement* gate. The toggle is only offered to a site when its `isEnabled`
+passes, and the plugin runs only when both the entitlement holds **and** the
+owner has switched it on. For example, `owner-figure` keeps
+`isEnabled: ({ site }) => site?.pro === true`, so its switch appears only on Pro
+sites and activates only once that owner turns it on. The same toggle framework
+covers core and Pro plugins alike — a Pro plugin opts in purely by adding a
+`label`; no toggle code lives in the Pro repo.
+
 ## Plugin storage and admin actions
 
 Each site persists plugin data under `site.plugins[pluginName]`. Admin action

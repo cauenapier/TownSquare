@@ -45,6 +45,14 @@ class PluginManager {
         throw new TypeError(`${key} must be a same-origin .mjs path`);
       }
     }
+    // A plugin opts into the site-owner activation toggle by declaring a label.
+    // Labelled plugins stay off until a site explicitly enables them; unlabelled
+    // ones keep running globally as before.
+    for (const key of ["label", "description"]) {
+      if (plugin[key] !== undefined && (typeof plugin[key] !== "string" || !plugin[key].trim())) {
+        throw new TypeError(`${key} must be a non-empty string`);
+      }
+    }
     if (plugin.adminActions !== undefined) {
       if (!plugin.adminActions || typeof plugin.adminActions !== "object" || Array.isArray(plugin.adminActions)) {
         throw new TypeError("adminActions must be an object");
@@ -275,7 +283,30 @@ class PluginManager {
     return typeof context === "function" ? context(plugin.name) : context;
   }
 
+  // Labelled, site-toggleable add-ons. Pass a context factory to keep only the
+  // ones a site is actually entitled to (those whose own isEnabled passes), so
+  // owners never see a switch that cannot do anything on their tier.
+  toggleable(contextFactory = null) {
+    return this.plugins
+      .filter((plugin) => plugin.label)
+      .filter((plugin) => !contextFactory || this.isAvailable(plugin, this.contextFor(plugin, contextFactory)))
+      .map((plugin) => ({
+        name: plugin.name,
+        label: plugin.label,
+        description: plugin.description || "",
+      }));
+  }
+
   isEnabled(plugin, context) {
+    // Site-toggleable add-ons (those with a label) only run where the site has
+    // switched them on; context.enabled carries that per-site decision.
+    if (plugin.label && (!context || context.enabled !== true)) return false;
+    return this.isAvailable(plugin, context);
+  }
+
+  // The plugin's own entitlement/availability gate, independent of the owner's
+  // on/off choice — this is what decides whether a toggle is offered at all.
+  isAvailable(plugin, context) {
     if (typeof plugin.isEnabled !== "function") return true;
     try {
       return plugin.isEnabled(context) !== false;

@@ -76,6 +76,7 @@ const saveModerationButton = document.getElementById("save-moderation");
 const moderationStatusEl = document.getElementById("moderation-status");
 const moderationLog = document.getElementById("moderation-log");
 const pluginPanels = document.getElementById("plugin-panels");
+const pluginToggles = document.getElementById("plugin-toggles");
 
 renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(customizationForm);
@@ -809,6 +810,35 @@ function renderOwners(owners) {
   owners.forEach((owner, index) => ownerList.appendChild(buildOwnerRow(owner, index)));
 }
 
+function renderPluginToggles(list) {
+  pluginToggles.replaceChildren();
+  const items = Array.isArray(list) ? list : [];
+  if (items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = "No plugins are available for your site yet.";
+    pluginToggles.appendChild(empty);
+    return;
+  }
+
+  for (const plugin of items) {
+    const row = document.createElement("div");
+    row.className = "hosted-section";
+    row.innerHTML = `
+      <label class="hosted-toggle">
+        <input type="checkbox" ${plugin.enabled ? "checked" : ""} />
+        <span>${escapeHtml(plugin.label)}</span>
+      </label>
+      ${plugin.description ? `<p class="hosted-note">${escapeHtml(plugin.description)}</p>` : ""}
+    `;
+    const input = row.querySelector("input");
+    input.addEventListener("change", () => {
+      session.action("setPluginEnabled", { name: plugin.name, enabled: input.checked });
+    });
+    pluginToggles.appendChild(row);
+  }
+}
+
 function render(data) {
   currentSite = data.site;
   const scene = data.scene;
@@ -842,6 +872,7 @@ function render(data) {
   syncConnectionsFromServer();
   syncModerationFromServer();
   renderModerationLog(currentSite.moderationLog);
+  renderPluginToggles(data.plugins);
   adminPlugins.render(data);
 
   visitorList.replaceChildren();
