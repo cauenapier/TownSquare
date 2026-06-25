@@ -234,7 +234,7 @@ export function bindStyleColorFields(form) {
   }
 }
 
-function syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault }) {
+function syncStyleColorControlUI({ control, valueInput, picker, clearButton }) {
   const transparent = isTransparentStyleValue(valueInput.value);
   const swatch = control.querySelector(".hosted-color-swatch");
 

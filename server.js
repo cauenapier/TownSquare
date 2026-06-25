@@ -137,8 +137,6 @@ const BIRD_FIRST_SPAWN_MS = Number(process.env.BIRD_FIRST_SPAWN_MS || 500);
 // Wire-protocol limits and the character palette, shared with the widget.
 // Populated from public/shared/shared-constants.mjs in startServer (the server is
 // CommonJS, so the shared ES module is loaded via dynamic import).
-let MIN_X;
-let MAX_X;
 let MAX_MESSAGE_LEN;
 let MAX_DISPLAY_NAME_LEN;
 let MAX_READING_LABEL_LEN;
@@ -231,7 +229,6 @@ let mapWorld;
 let normalizeOrigin;
 let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
 let getMatchingWwwOrigin = () => null;
-let originUsesMatchingWwwPair = () => false;
 
 function parseAllowedOrigins(value) {
   return new Set(
@@ -3111,8 +3108,6 @@ async function startServer() {
   }
 
   const shared = await import("./public/shared/shared-constants.mjs");
-  MIN_X = shared.MIN_X;
-  MAX_X = shared.MAX_X;
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
   MAX_DISPLAY_NAME_LEN = shared.DISPLAY_NAME_MAX;
   MAX_READING_LABEL_LEN = shared.READING_LABEL_MAX;
@@ -3171,7 +3166,6 @@ async function loadSharedModules() {
   normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
   buildAllowedOrigins = urlModule.buildAllowedOrigins;
   getMatchingWwwOrigin = urlModule.getMatchingWwwOrigin;
-  originUsesMatchingWwwPair = urlModule.originUsesMatchingWwwPair;
   ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
   mapWorld = loadMapWorld();
   ensureMapWorldGrown();
