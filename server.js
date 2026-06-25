@@ -204,18 +204,18 @@ function parseHttpOrigin(value) {
 let PROPS_BY_ID = new Map();
 /** @type {Array<import("./public/shared/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
-let DEFAULT_SITE_SCENE_CONFIG = { benches: 2, trees: 1, lamps: 1, birds: 3 };
-let DEFAULT_SITE_STYLE = {
-  light: { scene: "#e4e2dd", page: "#efede9", surface: "#fdf8f4", ink: "#2a2926", accent: "#c8641f", other: "#26241f", ground: "rgba(42, 41, 38, 0.16)" },
-  dark: { scene: "#242521", page: "#181917", surface: "#24231f", ink: "#f2eee6", accent: "#df8a43", other: "#ddd7cc", ground: "rgba(242, 238, 230, 0.18)" },
-};
-let sanitizeSceneConfig = (config) => ({ ...DEFAULT_SITE_SCENE_CONFIG, ...(config || {}) });
-let sanitizeConnections = (connections) => (Array.isArray(connections) ? connections : []);
-let sanitizeSiteStyle = (style) => (style && (style.light || style.dark) ? style : { ...DEFAULT_SITE_STYLE, light: { ...DEFAULT_SITE_STYLE.light, ...(style || {}) } });
-let buildSceneProps = () => [];
-let buildBirdPerches = () => [];
-let buildSiteCss = () => "";
-/** @type {(prop: import("./public/shared/site-config.mjs").SceneProp, x: number) => boolean} */
+// Assigned synchronously from site-config-core.mjs once loadSharedModules()
+// resolves — before server.listen(), so requests never see them unset. (No
+// stub re-implementations: those were a second, divergent source of truth.)
+let DEFAULT_SITE_SCENE_CONFIG;
+let DEFAULT_SITE_STYLE;
+let sanitizeSceneConfig;
+let sanitizeConnections;
+let sanitizeSiteStyle;
+let buildSceneProps;
+let buildBirdPerches;
+let buildSiteCss;
+/** @type {(prop: import("./public/shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 /** @type {(storedWorld: object, siteCount: number) => object} */
@@ -3296,7 +3296,7 @@ async function startServer() {
 
 async function loadSharedModules() {
   const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule] = await Promise.all([
-    import("./public/shared/site-config.mjs"),
+    import("./public/shared/site-config-core.mjs"),
     import("./public/shared/scene-props.mjs"),
     import("./public/shared/bird-perches.mjs"),
     import("./public/shared/scene-prop-geometry.mjs"),
