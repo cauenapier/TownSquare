@@ -8,6 +8,13 @@ const { plugins } = require("./server/plugins");
 const { registerPublicPlugins } = require("./plugins");
 const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
 const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
+const {
+  clampPosition,
+  sanitizeBrowserId,
+  sanitizeBrowserSecret,
+  sanitizeBlockedWords,
+  parseOptionalEmail,
+} = require("./server/sanitize");
 
 // Browser admin sessions: a valid token login mints one of these and the id is
 // returned in an HttpOnly cookie, so the raw token is not persisted in JS.
@@ -72,15 +79,11 @@ const DEFAULT_DEV_ORIGINS = new Set([
 ]);
 const MAX_SITE_CONNECTION_LIMIT = 1000;
 const DEFAULT_CONNECTION_LIMIT = Math.min(MAX_SITE_CONNECTION_LIMIT, Math.max(1, readLimit("MAX_CONNECTIONS", 100)));
-const MAX_BROWSER_ID_LEN = 80;
-const MAX_BROWSER_SECRET_LEN = 64;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
 const MAX_READING_URL_LEN = 240;
 const MAX_SITE_NAME_LEN = 80;
-const MAX_EMAIL_LEN = 254;
 const MAX_ORIGIN_LEN = 240;
 const MAX_PAGE_URL_LEN = 512;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const IP_MAX_IDENTITIES = readLimit("IP_MAX_IDENTITIES", 2);
@@ -98,8 +101,6 @@ const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
 const DEFAULT_CHAT_THROTTLE_MS = 500;
 const MAX_CHAT_THROTTLE_MS = 30000;
-const MAX_BLOCKED_WORDS = 60;
-const MAX_BLOCKED_WORD_LEN = 40;
 const MAX_MODERATION_LOG = 50;
 const RECONNECT_GRACE_MS = 1500;
 const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 * 60 * 1000);
@@ -376,41 +377,9 @@ function createIdentity(id, browserId, x) {
   };
 }
 
-function clampPosition(x) {
-  if (typeof x !== "number" || Number.isNaN(x)) return null;
-  if (x < 0 || x > 1) return null;
-  return x;
-}
-
-function sanitizeBrowserId(browserId) {
-  if (typeof browserId !== "string") return "";
-  return browserId.slice(0, MAX_BROWSER_ID_LEN).replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-function sanitizeBrowserSecret(browserSecret) {
-  if (typeof browserSecret !== "string") return "";
-  return browserSecret.slice(0, MAX_BROWSER_SECRET_LEN).replace(/[^a-f0-9]/gi, "");
-}
-
 function sanitizeMessage(text) {
   if (typeof text !== "string") return "";
   return text.trim().slice(0, MAX_MESSAGE_LEN);
-}
-
-/** A site's forbidden-word list: trimmed, lowercased, de-duped, capped. */
-function sanitizeBlockedWords(input) {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set();
-  const words = [];
-  for (const raw of input) {
-    if (typeof raw !== "string") continue;
-    const word = raw.trim().toLowerCase().slice(0, MAX_BLOCKED_WORD_LEN);
-    if (!word || seen.has(word)) continue;
-    seen.add(word);
-    words.push(word);
-    if (words.length >= MAX_BLOCKED_WORDS) break;
-  }
-  return words;
 }
 
 /** Per-site slow-mode cooldown, clamped to a sane range; falls back to default. */
@@ -606,13 +575,6 @@ function sanitizeSiteName(name, origin) {
   } catch {
     return "Untitled site";
   }
-}
-
-function parseOptionalEmail(email) {
-  const clean = typeof email === "string" ? email.trim().slice(0, MAX_EMAIL_LEN) : "";
-  if (!clean) return { ok: true, email: null };
-  if (!EMAIL_RE.test(clean)) return { ok: false, email: null };
-  return { ok: true, email: clean };
 }
 
 function getContentType(filePath) {
