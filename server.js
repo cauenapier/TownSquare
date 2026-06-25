@@ -29,6 +29,17 @@ try {
   console.error("Plugin registration failed; continuing without plugins", error);
 }
 
+// Optional plugin injection: TOWNSQUARE_EXTRA_PLUGINS is a comma/space-separated
+// list of module paths that self-register via registerPlugin on require. Used by
+// the plugin smoke test and by private plugin bundles loaded at deploy time.
+for (const entry of String(process.env.TOWNSQUARE_EXTRA_PLUGINS || "").split(/[,\s]+/).filter(Boolean)) {
+  try {
+    require(path.resolve(entry));
+  } catch (error) {
+    console.error(`Failed to load extra plugin '${entry}'`, error);
+  }
+}
+
 /**
  * Tiny demo server for the first playable TownSquare slice.
  *

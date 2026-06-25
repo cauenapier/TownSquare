@@ -27,3 +27,6 @@ jobs:
 
       - name: Smoke test (spawns its own server)
         run: npm run smoke
+
+      - name: Plugin smoke test (spawns its own server)
+        run: npm run smoke:plugins

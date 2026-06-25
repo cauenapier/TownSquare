@@ -152,3 +152,7 @@ are logged and otherwise fail open so core self-hosted behavior continues.
 
 The real contract fixture is `server/fixtures/feature-plugin.js`; its API and
 WebSocket client is `scripts/plugin-smoke-test.js` (`npm run smoke:plugins`).
+That smoke test spawns its own server and injects the fixture via
+`TOWNSQUARE_EXTRA_PLUGINS` — a comma/space-separated list of module paths the
+server `require`s at boot, each self-registering with `registerPlugin`. Use the
+same variable to load private/extra plugin bundles in a deploy.

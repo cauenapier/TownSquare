@@ -12,7 +12,7 @@ Status legend: 🔴 not started · 🟡 in progress · ✅ done · ⏭️ deferr
 | # | Item | Location | Status |
 |---|------|----------|--------|
 | T1 | One unguarded throw kills every connection — no `try/catch` around request dispatch / `handleClientMessage`, no `process.on('uncaughtException'/'unhandledRejection')`, no SIGTERM drain | `server.js:2536`, `server.js:3091` | ✅ |
-| T2 | No CI; security-sensitive core (router, registration, admin-token hashing/auth, WS identity/presence, IP limits) has zero unit tests. `node --test` covers only the plugin manager | no `.github/`; `server.js` | 🟡 |
+| T2 | No CI; security-sensitive core (router, registration, admin-token hashing/auth, WS identity/presence, IP limits) has zero unit tests. `node --test` covers only the plugin manager | no `.github/`; `server.js` | ✅ |
 | T3 | Synchronous full-registry `saveSites()` (`fs.writeFileSync` of entire sites array) on the WS/admin hot path blocks the event loop | `server.js:2255-2270` | ✅ |
 | T4 | Admin token transported in URL (`?adminToken=`/`#adminToken=`) and persisted to `localStorage` for 30 days | `hosted/hosted-admin-session.mjs:55-67`, `hosted-common.mjs:162-195` | ✅ |
 | T5 | Plugin registration runs at module top-level with no `try/catch` — one malformed plugin crashes boot (crash-loop under `Restart=always`) | `server.js:11`, `server/plugins.js:25-68` | ✅ |
@@ -46,7 +46,7 @@ Status legend: 🔴 not started · 🟡 in progress · ✅ done · ⏭️ deferr
 | # | Item | Location | Status |
 |---|------|----------|--------|
 | H12 | Dockerfile omits `server/` and `plugins/` (required by `server.js:6-8`) → `MODULE_NOT_FOUND`. No `HEALTHCHECK` despite `/healthz` | `Dockerfile:8-9` | 🔴 |
-| H13 | Orphaned plugin smoke-test fixture — nothing loads `server/fixtures/feature-plugin.js`; `npm run smoke:plugins` can't pass on clean checkout | `scripts/plugin-smoke-test.js`, `server/fixtures/feature-plugin.js` | 🔴 |
+| H13 | Orphaned plugin smoke-test fixture — nothing loads `server/fixtures/feature-plugin.js`; `npm run smoke:plugins` can't pass on clean checkout | `scripts/plugin-smoke-test.js`, `server/fixtures/feature-plugin.js` | ✅ |
 
 ## Cross-cutting themes
 | # | Item | Location | Status |
@@ -75,5 +75,7 @@ safe — then T5/T4 (boot-crash + auth), T3, then the structural splits (H1, H4)
 | 2026-06-25 | T5 ✅ | Per-plugin registration isolation in `plugins/index.js` (one bad plugin is logged and skipped, not fatal) + defense-in-depth try/catch around the top-level `registerPublicPlugins()` call. |
 | 2026-06-25 | T2 🟡 | Added `.github/workflows/ci.yml` running `npm ci` + `npm run check` + `npm test` on push/PR (closes the "no CI" gap). Extracted admin-token helpers into `server/auth-tokens.js` with 7 unit tests. **Remaining:** extract more pure helpers (input sanitizers, origin/config validation, identity) from `server.js` into testable modules; make `scripts/smoke-test.js` self-contained (it currently needs an already-running server + specific env, and fails identically on `main`). |
 | 2026-06-25 | T4 ✅ | Replaced token-in-body/`localStorage` admin auth with HttpOnly session cookies. New `server/admin-sessions.js` (in-memory, expiry + capacity bounded, clock/RNG-injectable, 9 unit tests). `/api/admin/login` mints an `HttpOnly; SameSite=Strict; Path=/api/admin` cookie (12h, or 30d with remember-me); `/api/admin/site` + `/api/admin/action` authenticate via cookie (token still accepted as one-time bootstrap, which upgrades to a cookie). Added `/api/admin/logout`; sessions are revoked on token-reset and site-delete. Client (`hosted-admin-session.mjs`) no longer persists the raw token — only the non-secret siteKey. Verified end-to-end: cookie-only auth, cross-site rejection, expiry, logout + reset revocation. |
+| 2026-06-25 | T2 ✅ | Finished: extracted pure input sanitizers into `server/sanitize.js` (5 unit tests). Made both smoke tests self-contained — they now spawn their own server on an OS-assigned free port with an isolated temp data dir (fixing the long-standing "tests the wrong server on :8787" problem), and run in CI. Added `TOWNSQUARE_EXTRA_PLUGINS` plugin-injection hook so the plugin smoke test loads the `test-feature` fixture (resolves **H13**). Total unit tests now 30 (was 10); full pipeline (`check` + `test` + `smoke` + `smoke:plugins`) green. |
+| 2026-06-25 | H13 ✅ | Plugin smoke fixture is now loadable via `TOWNSQUARE_EXTRA_PLUGINS`; `npm run smoke:plugins` passes on a clean checkout and gates in CI. Documented in `docs/plugins.md`. |
 
 **Validation:** `npm run check` clean, `npm test` 10/10 pass, server boots and `/healthz` ok, SIGTERM exits cleanly. Full `scripts/smoke-test.js` reaches a pre-existing env-coupled failure (401 on a WS-auth subtest) that reproduces identically on `main` — not introduced by these changes.
