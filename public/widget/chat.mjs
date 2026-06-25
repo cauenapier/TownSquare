@@ -16,6 +16,7 @@ import {
   MAX_RECENT_MESSAGES_EXPANDED,
 } from "./constants.mjs";
 import { createBubble, createTrayRow } from "./dom.mjs";
+import { MSG } from "../shared/protocol.mjs";
 
 /**
  * @typedef {import("./dom.mjs").AvatarView} AvatarView
@@ -45,7 +46,7 @@ export function setLocalTyping(ctx, typing) {
   if (ctx.self.typing === typing) return;
   ctx.self.typing = typing;
   if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
-    ctx.socket.send(JSON.stringify({ type: "typing", typing }));
+    ctx.socket.send(JSON.stringify({ type: MSG.TYPING, typing }));
   }
 }
 
@@ -243,7 +244,7 @@ export function submitChat(ctx) {
   }
 
   if (ctx.socket.readyState === WebSocket.OPEN) {
-    ctx.socket.send(JSON.stringify({ type: "say", text }));
+    ctx.socket.send(JSON.stringify({ type: MSG.SAY, text }));
   }
   sayMessage(ctx.self.avatar, { text, at: now });
   ctx.self.lastSayAt = now;

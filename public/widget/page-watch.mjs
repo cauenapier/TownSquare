@@ -7,6 +7,7 @@
 
 import { setAvatarProfile } from "./dom.mjs";
 import { readCurrentPage } from "./utils.mjs";
+import { MSG } from "../shared/protocol.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -45,7 +46,7 @@ export function watchCurrentPage(ctx) {
     ctx.self.readingActive = readingActive;
     setAvatarProfile(ctx.self.avatar, ctx.self);
     if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
-      ctx.socket.send(JSON.stringify({ type: "reading", ...nextPage, readingActive }));
+      ctx.socket.send(JSON.stringify({ type: MSG.READING, ...nextPage, readingActive }));
     }
   };
 

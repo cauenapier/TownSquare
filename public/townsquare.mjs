@@ -12,6 +12,7 @@ import { initClouds, destroyClouds } from "./widget/clouds.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
 import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
+import { MSG } from "./shared/protocol.mjs";
 import {
   createAvatar,
   renderAvatar,
@@ -263,7 +264,7 @@ export function mountTownSquare(root, options = {}) {
           ctx.self.displayName = saved.displayName;
           ctx.self.color = saved.color;
           if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
-            ctx.socket.send(JSON.stringify({ type: "profile", ...saved }));
+            ctx.socket.send(JSON.stringify({ type: MSG.PROFILE, ...saved }));
           }
         },
         onSubmitChat: () => submitChat(ctx),
@@ -398,7 +399,7 @@ export function mountTownSquare(root, options = {}) {
         refreshScene(ctx, sceneConfig);
         const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
         if (!preview && !siteKey && ctx.socket.readyState === WebSocket.OPEN) {
-          ctx.socket.send(JSON.stringify({ type: "sceneConfig", sceneConfig }));
+          ctx.socket.send(JSON.stringify({ type: MSG.SCENE_CONFIG, sceneConfig }));
         }
       }
       if (style) {

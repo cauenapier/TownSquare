@@ -16,6 +16,7 @@ import {
 } from "./presence.mjs";
 import { getBrowserSecret, saveBrowserSecret } from "./utils.mjs";
 import { solveChallenge } from "./pow.mjs";
+import { MSG, GESTURE, BIRD_ACTION } from "../shared/protocol.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -99,7 +100,7 @@ export function wireSocket(ctx) {
     socket.addEventListener("open", () => {
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
       const init = {
-        type: "init",
+        type: MSG.INIT,
         browserId,
         browserSecret: getBrowserSecret(),
         x: self.x,
@@ -112,7 +113,7 @@ export function wireSocket(ctx) {
       socket.send(JSON.stringify(init));
       const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
       if (!siteKey && ctx.options.scene) {
-        socket.send(JSON.stringify({ type: "sceneConfig", sceneConfig: ctx.options.scene }));
+        socket.send(JSON.stringify({ type: MSG.SCENE_CONFIG, sceneConfig: ctx.options.scene }));
       }
     });
 
@@ -136,17 +137,17 @@ export function wireSocket(ctx) {
 
       // Per-site bot protection: solve the proof-of-work, then the server
       // replays our init and proceeds to the normal hello.
-      if (message.type === "challenge") {
+      if (message.type === MSG.CHALLENGE) {
         if (typeof message.salt !== "string" || typeof message.difficulty !== "number") return;
         solveChallenge({ salt: message.salt, difficulty: message.difficulty }).then((nonce) => {
           if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "solve", nonce }));
+            socket.send(JSON.stringify({ type: MSG.SOLVE, nonce }));
           }
         });
         return;
       }
 
-      if (message.type === "hello") {
+      if (message.type === MSG.HELLO) {
         self.id = message.id;
         saveBrowserSecret(message.browserSecret);
         ctx.widgetPlugins?.setModules(message.pluginModules || ctx.options.pluginModules || []);
@@ -168,35 +169,35 @@ export function wireSocket(ctx) {
       }
 
       // Owner changed slow mode mid-session: keep the local cooldown in sync.
-      if (message.type === "chatThrottle") {
+      if (message.type === MSG.CHAT_THROTTLE) {
         if (typeof message.ms === "number") ctx.chatThrottleMs = message.ms;
         return;
       }
 
-      if (message.type === "bird") {
-        if (message.action === "spawn") {
+      if (message.type === MSG.BIRD) {
+        if (message.action === BIRD_ACTION.SPAWN) {
           applyBirdSpawn(ctx, message);
-        } else if (message.action === "flee") {
+        } else if (message.action === BIRD_ACTION.FLEE) {
           applyBirdFlee(ctx, message);
         }
         return;
       }
 
-      if (message.type === "join") {
+      if (message.type === MSG.JOIN) {
         if (!isSolo(ctx)) {
           applyPeerState(ctx, message.peer);
         }
         return;
       }
 
-      if (message.type === "leave") {
+      if (message.type === MSG.LEAVE) {
         if (!isSolo(ctx)) {
           removePeer(ctx, message.id);
         }
         return;
       }
 
-      if (message.type === "move") {
+      if (message.type === MSG.MOVE) {
         if (message.id === self.id) {
           const hadPose = Boolean(self.pose);
           applySelfState(ctx, message);
@@ -215,19 +216,19 @@ export function wireSocket(ctx) {
         return;
       }
 
-      if (message.type === "action") {
+      if (message.type === MSG.ACTION) {
         if (message.id !== self.id && isSolo(ctx)) return;
-        if (message.action === "jump") {
+        if (message.action === GESTURE.JUMP) {
           applyJump(ctx, message.id);
-        } else if (message.action === "raise-hand") {
+        } else if (message.action === GESTURE.RAISE_HAND) {
           applyRaiseHand(ctx, message.id);
-        } else if (message.action === "high-five") {
+        } else if (message.action === GESTURE.HIGH_FIVE) {
           applyHighFive(ctx, message.id, message.targetId);
         }
         return;
       }
 
-      if (message.type === "say") {
+      if (message.type === MSG.SAY) {
         if (message.id === self.id) {
           if (ctx.quiet) {
             recordMessage(self.avatar, { text: message.text, at: message.at });
@@ -250,25 +251,29 @@ export function wireSocket(ctx) {
         return;
       }
 
-      if (message.type === "typing") {
+      if (message.type === MSG.TYPING) {
         if (message.id === self.id || isSolo(ctx)) return;
         const peer = peers.get(message.id);
         peer?.avatar.el.classList.toggle("townsquare-avatar--typing", message.typing === true);
         return;
       }
 
-      if (message.type === "profile") {
+      if (message.type === MSG.PROFILE) {
         if (message.id === self.id || !isSolo(ctx)) {
           applyProfileState(ctx, message);
         }
         return;
       }
 
-      if (message.type === "reading") {
+      if (message.type === MSG.READING) {
         if (message.id === self.id || !isSolo(ctx)) {
           applyReadingState(ctx, message);
         }
+        return;
       }
+
+      // Unknown type: surface it rather than dropping the frame silently.
+      console.warn("[townsquare] ignoring unknown message type:", message.type);
     });
 
     socket.addEventListener("close", (event) => {

@@ -206,6 +206,11 @@ function parseHttpOrigin(value) {
 let PROPS_BY_ID = new Map();
 /** @type {Array<import("./public/shared/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
+// Shared realtime protocol vocabulary, assigned from protocol.mjs in
+// loadSharedModules() before the server starts listening.
+let MSG;
+let GESTURE;
+let BIRD_ACTION;
 // Assigned synchronously from site-config-core.mjs once loadSharedModules()
 // resolves — before server.listen(), so requests never see them unset. (No
 // stub re-implementations: those were a second, divergent source of truth.)
@@ -321,7 +326,7 @@ function leadingZeroBits(buffer) {
 function issuePowChallenge(client) {
   const salt = crypto.randomBytes(16).toString("hex");
   client.challenge = { salt, difficulty: POW_DIFFICULTY_BITS };
-  send(client.ws, { type: "challenge", salt, difficulty: POW_DIFFICULTY_BITS });
+  send(client.ws, { type: MSG.CHALLENGE, salt, difficulty: POW_DIFFICULTY_BITS });
 }
 
 function verifyPow(challenge, nonce) {
@@ -1324,7 +1329,7 @@ const ADMIN_ACTIONS = {
     touchSite(site);
     // Push the new cooldown to connected widgets so their "wait" hint stays in
     // sync — otherwise a visitor keeps the old limit until they reconnect.
-    broadcast(scene, { type: "chatThrottle", ms: getChatThrottle(site) });
+    broadcast(scene, { type: MSG.CHAT_THROTTLE, ms: getChatThrottle(site) });
   },
   kickVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -1383,7 +1388,7 @@ const ADMIN_ACTIONS = {
       delete site.ownerProfiles[identity.browserId];
     }
     touchSite(site);
-    broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+    broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
   },
   updateOwnerProfile(site, scene, body) {
     // Keyed by the opaque owner handle so the dedicated admin section can edit
@@ -1403,7 +1408,7 @@ const ADMIN_ACTIONS = {
     const identity = scene.identityByBrowser.get(browserId);
     if (identity) {
       applyOwnerProfile(site, identity);
-      broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+      broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
     }
   },
   clearMessages(site, scene) {
@@ -1496,7 +1501,7 @@ function handleAdminAction(req, res) {
         touchSite(site);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
-          broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+          broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
         }
       }
       const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
@@ -1816,7 +1821,7 @@ function broadcastReading(scene, identity, options = {}) {
     readingActive = identity.readingActive,
   } = options;
   broadcast(scene, {
-    type: "reading",
+    type: MSG.READING,
     id: identity.id,
     readingLabel,
     readingUrl,
@@ -1826,7 +1831,7 @@ function broadcastReading(scene, identity, options = {}) {
 
 function emitIdentityState(identity, options = {}) {
   broadcast(identity.scene, {
-    type: "move",
+    type: MSG.MOVE,
     ...serializeIdentity(identity, { reading: true }),
   }, { exceptConnectionId: options.exceptConnectionId ?? null });
 }
@@ -1927,7 +1932,7 @@ function pickFreeBirdPerch(scene) {
 }
 
 function broadcastBird(scene, message, options = {}) {
-  broadcast(scene, { type: "bird", ...message }, options);
+  broadcast(scene, { type: MSG.BIRD, ...message }, options);
 }
 
 function fleeBird(scene, bird, playerX) {
@@ -1935,7 +1940,7 @@ function fleeBird(scene, bird, playerX) {
 
   const dir = playerX < bird.x ? 1 : -1;
   broadcastBird(scene, {
-    action: "flee",
+    action: BIRD_ACTION.FLEE,
     id: bird.id,
     x: bird.x,
     dir,
@@ -1969,7 +1974,7 @@ function spawnBird(scene) {
 
   const from = perch.x < 0.5 ? "left" : "right";
   broadcastBird(scene, {
-    action: "spawn",
+    action: BIRD_ACTION.SPAWN,
     id: bird.id,
     perchId: bird.perchId,
     x: bird.x,
@@ -2480,7 +2485,7 @@ function finalizeDisconnect(identity) {
   removeIdentity(identity.scene, identity);
 
   if (hadJoined) {
-    broadcast(identity.scene, { type: "leave", id: identity.id });
+    broadcast(identity.scene, { type: MSG.LEAVE, id: identity.id });
   }
 }
 
@@ -2685,7 +2690,7 @@ function handleInit(client, message) {
   const { id, ...selfFields } = self;
 
   send(client.ws, {
-    type: "hello",
+    type: MSG.HELLO,
     id,
     browserSecret: identity.browserSecret,
     ...selfFields,
@@ -2708,7 +2713,7 @@ function handleInit(client, message) {
     if (identity.isOwner && site) {
       broadcast(
         scene,
-        { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) },
+        { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) },
         { exceptConnectionId: client.connectionId },
       );
     }
@@ -2736,7 +2741,7 @@ function handleInit(client, message) {
     }
   }
 
-  broadcast(scene, { type: "join", peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
+  broadcast(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
   syncIdentityAwayState(identity, joinedAt);
   plugins.run("onVisitorJoin", pluginContext(site, {
     visitor: pluginVisitor(identity),
@@ -2772,7 +2777,7 @@ function handleAction(client, message) {
 
   let targetId = null;
   let target = null;
-  if (message.action === "high-five") {
+  if (message.action === GESTURE.HIGH_FIVE) {
     targetId = Number(message.targetId);
     target = Number.isInteger(targetId) ? client.scene.identities.get(targetId) : null;
     if (!target || !target.joined || target.id === client.identity.id) return;
@@ -2786,7 +2791,7 @@ function handleAction(client, message) {
   if (target) clearPose(target);
   touchIdentityActivity(client.identity, now);
   const action = {
-    type: "action",
+    type: MSG.ACTION,
     id: client.identity.id,
     action: message.action,
   };
@@ -2808,7 +2813,7 @@ function handleProfile(client, message) {
   // Owners keep their look across resets: persist their own edits too.
   rememberOwnerProfile(client.site, client.identity);
 
-  broadcast(client.scene, { type: "profile", ...serializeIdentity(client.identity, { owner: true, badge: true }) });
+  broadcast(client.scene, { type: MSG.PROFILE, ...serializeIdentity(client.identity, { owner: true, badge: true }) });
 }
 
 function handleReading(client, message) {
@@ -2919,7 +2924,7 @@ function handleSay(client, message) {
   broadcast(
     client.scene,
     {
-      type: "say",
+      type: MSG.SAY,
       id: client.identity.id,
       text,
       at: now,
@@ -2938,7 +2943,7 @@ function handleTyping(client, message) {
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.typing = message.typing;
-  broadcast(client.scene, { type: "typing", id: client.identity.id, typing });
+  broadcast(client.scene, { type: MSG.TYPING, id: client.identity.id, typing });
 }
 
 function handleClientMessage(client, raw) {
@@ -2962,7 +2967,7 @@ function handleClientMessage(client, raw) {
 
   if (!Object.hasOwn(MESSAGE_HANDLERS, message.type)) return;
 
-  if (message.type !== "init" && message.type !== "solve" && !client.joined) return;
+  if (message.type !== MSG.INIT && message.type !== MSG.SOLVE && !client.joined) return;
 
   try {
     MESSAGE_HANDLERS[message.type](client, message);
@@ -2988,7 +2993,7 @@ function handleClientClose(client) {
   client.identity = null;
   client.readingActive = false;
   if (wasTyping && !Array.from(identity.clients).some((candidate) => candidate.typing)) {
-    broadcast(identity.scene, { type: "typing", id: identity.id, typing: false });
+    broadcast(identity.scene, { type: MSG.TYPING, id: identity.id, typing: false });
   }
 
   if (identity.clients.size > 0) {
@@ -3132,14 +3137,25 @@ async function startServer() {
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule] = await Promise.all([
+  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
     import("./public/shared/site-config-core.mjs"),
     import("./public/shared/scene-props.mjs"),
     import("./public/shared/bird-perches.mjs"),
     import("./public/shared/scene-prop-geometry.mjs"),
     import("./public/shared/map-world.mjs"),
     import("./public/shared/url.mjs"),
+    import("./public/shared/protocol.mjs"),
   ]);
+
+  MSG = protocol.MSG;
+  GESTURE = protocol.GESTURE;
+  BIRD_ACTION = protocol.BIRD_ACTION;
+  // Fail loudly at boot if a handler key drifts from the shared vocabulary.
+  for (const type of Object.keys(MESSAGE_HANDLERS)) {
+    if (!Object.values(MSG).includes(type)) {
+      throw new Error(`MESSAGE_HANDLERS has unknown message type "${type}" (not in shared protocol)`);
+    }
+  }
 
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
   DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
