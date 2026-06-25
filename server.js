@@ -109,6 +109,9 @@ const IP_SYNC_ACTION_ROUNDS = readLimit("IP_SYNC_ACTION_ROUNDS", 3);
 const IP_SYNC_ACTION_WINDOW_MS = readLimit("IP_SYNC_ACTION_WINDOW_MS", 10000);
 const IP_SYNC_ACTION_TOLERANCE_MS = readLimit("IP_SYNC_ACTION_TOLERANCE_MS", 250);
 const IP_QUARANTINE_MS = readLimit("IP_QUARANTINE_MS", 10 * 60 * 1000);
+// Hard cap on the per-(scene, IP) activity map so a flood of distinct keys
+// (including spoofed x-real-ip behind a proxy) can't grow it without bound.
+const MAX_IP_ACTIVITY_ENTRIES = readLimit("MAX_IP_ACTIVITY_ENTRIES", 50000);
 const IP_JOIN_WINDOW_MS = 60 * 1000;
 const IP_EVENT_WINDOW_MS = 10 * 1000;
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
@@ -846,11 +849,37 @@ function getIpActivity(scene, ip, now = Date.now()) {
   const key = `${scene.key}\0${ip}`;
   let activity = activityByIpAndScene.get(key);
   if (!activity) {
+    if (activityByIpAndScene.size >= MAX_IP_ACTIVITY_ENTRIES) {
+      enforceIpActivityCap(now);
+    }
     activity = { lastSeenAt: now, budgets: new Map() };
     activityByIpAndScene.set(key, activity);
   }
   activity.lastSeenAt = now;
   return activity;
+}
+
+// Bound activityByIpAndScene so a flood of distinct (scene, spoofed-IP) keys —
+// including quarantined ones, which pruneIpActivity deliberately keeps — can't
+// grow it without limit. Drop stale entries first, then, if still at the cap,
+// evict the least-recently-seen entries (preferring un-quarantined ones) down
+// to 90% in a single batch so this stays amortized cheap per insert.
+function enforceIpActivityCap(now = Date.now()) {
+  pruneIpActivity(now);
+  const target = Math.floor(MAX_IP_ACTIVITY_ENTRIES * 0.9);
+  if (activityByIpAndScene.size <= target) return;
+
+  const byAge = Array.from(activityByIpAndScene.entries())
+    .sort((a, b) => a[1].lastSeenAt - b[1].lastSeenAt);
+  for (const [key, activity] of byAge) {
+    if (activityByIpAndScene.size <= target) break;
+    if ((activity.quarantinedUntil || 0) > now) continue;
+    activityByIpAndScene.delete(key);
+  }
+  for (const [key] of byAge) {
+    if (activityByIpAndScene.size <= target) break;
+    activityByIpAndScene.delete(key);
+  }
 }
 
 function consumeIpBudget(client, type, limit, windowMs, now = Date.now()) {
