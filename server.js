@@ -10,6 +10,7 @@ const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require(
 const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
 const { createPlausibleProxy } = require("./server/plausible");
 const { createStaticFiles } = require("./server/static-files");
+const { makeBucketStore } = require("./server/rate-limit");
 const {
   clampPosition,
   sanitizeBrowserId,
@@ -828,9 +829,9 @@ function resolveAdminRequest(req, body) {
   return null;
 }
 
-const registrationsByIp = new Map();
-const adminAuthFailuresByIp = new Map();
-const serviceAdminAuthFailuresByIp = new Map();
+const registrationsByIp = makeBucketStore();
+const adminAuthFailuresByIp = makeBucketStore();
+const serviceAdminAuthFailuresByIp = makeBucketStore();
 const activityByIpAndScene = new Map();
 
 function getRequestIp(req) {
@@ -980,46 +981,20 @@ function allowIdentityInit(client, message) {
   return true;
 }
 
-function recentBucket(map, key, limit) {
-  if (limit <= 0) return [];
-
-  const now = Date.now();
-  const cutoff = now - 60 * 60 * 1000;
-
-  if (map.size > 1000) {
-    for (const [bucketKey, timestamps] of map) {
-      if (timestamps.every((at) => at <= cutoff)) map.delete(bucketKey);
-    }
-  }
-
-  const recent = (map.get(key) || []).filter((at) => at > cutoff);
-  map.set(key, recent);
-  return recent;
-}
-
 function isRegistrationAllowed(ip) {
-  if (REGISTRATIONS_PER_HOUR <= 0) return true;
-
-  const recent = recentBucket(registrationsByIp, ip, REGISTRATIONS_PER_HOUR);
-
-  if (recent.length >= REGISTRATIONS_PER_HOUR) return false;
-
-  recent.push(Date.now());
-  return true;
+  return registrationsByIp.take(ip, REGISTRATIONS_PER_HOUR);
 }
 
-function isAuthAttemptAllowed(map, ip) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return true;
-  return recentBucket(map, ip, AUTH_FAILURES_PER_HOUR).length < AUTH_FAILURES_PER_HOUR;
+function isAuthAttemptAllowed(store, ip) {
+  return store.under(ip, AUTH_FAILURES_PER_HOUR);
 }
 
-function recordAuthFailure(map, ip) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return;
-  recentBucket(map, ip, AUTH_FAILURES_PER_HOUR).push(Date.now());
+function recordAuthFailure(store, ip) {
+  store.record(ip, AUTH_FAILURES_PER_HOUR);
 }
 
-function clearAuthFailures(map, ip) {
-  map.delete(ip);
+function clearAuthFailures(store, ip) {
+  store.clear(ip);
 }
 
 function sendAuthThrottled(res) {
@@ -1028,14 +1003,10 @@ function sendAuthThrottled(res) {
 
 // Per-IP hourly budget for the first-party Plausible event relay, so it can't
 // be abused to amplify traffic at the upstream using this server's address.
-const plausibleEventsByIp = new Map();
+const plausibleEventsByIp = makeBucketStore();
 const PLAUSIBLE_EVENTS_PER_HOUR = readLimit("PLAUSIBLE_EVENTS_PER_HOUR", 600);
 function isPlausibleEventAllowed(ip) {
-  if (PLAUSIBLE_EVENTS_PER_HOUR <= 0) return true;
-  const recent = recentBucket(plausibleEventsByIp, ip, PLAUSIBLE_EVENTS_PER_HOUR);
-  if (recent.length >= PLAUSIBLE_EVENTS_PER_HOUR) return false;
-  recent.push(Date.now());
-  return true;
+  return plausibleEventsByIp.take(ip, PLAUSIBLE_EVENTS_PER_HOUR);
 }
 
 const plausible = createPlausibleProxy({
