@@ -6,6 +6,7 @@ const { WebSocketServer } = require("ws");
 const { ensurePluginData, getPluginData, setPluginData } = require("./server/plugin-data");
 const { plugins } = require("./server/plugins");
 const { registerPublicPlugins } = require("./plugins");
+const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
 
 loadEnvFile();
 // Defense-in-depth: registration is already isolated per-plugin, but never let
@@ -607,35 +608,6 @@ function parseOptionalEmail(email) {
   if (!clean) return { ok: true, email: null };
   if (!EMAIL_RE.test(clean)) return { ok: false, email: null };
   return { ok: true, email: clean };
-}
-
-function createToken(prefix, bytes = 18) {
-  return `${prefix}_${crypto.randomBytes(bytes).toString("base64url")}`;
-}
-
-function hashAdminToken(adminToken, salt = crypto.randomBytes(16).toString("base64url")) {
-  const digest = crypto.createHash("sha256").update(`${salt}:${adminToken}`).digest("base64url");
-  return `sha256:${salt}:${digest}`;
-}
-
-function tokensMatch(expected, provided) {
-  const a = Buffer.from(String(expected || ""));
-  const b = Buffer.from(String(provided || ""));
-  if (a.length === 0 || a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-function adminTokenMatches(site, adminToken) {
-  const token = typeof adminToken === "string" ? adminToken.trim() : "";
-  if (!site || !token) return false;
-
-  if (site.adminTokenHash) {
-    const [algorithm, salt] = String(site.adminTokenHash).split(":");
-    if (algorithm !== "sha256" || !salt) return false;
-    return tokensMatch(site.adminTokenHash, hashAdminToken(token, salt));
-  }
-
-  return tokensMatch(site.adminToken, token);
 }
 
 function getContentType(filePath) {
