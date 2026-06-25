@@ -37,7 +37,7 @@ Status legend: 🔴 not started · 🟡 in progress · ✅ done · ⏭️ deferr
 ### Security
 | # | Item | Location | Status |
 |---|------|----------|--------|
-| H8 | Path-traversal guard uses fragile `startsWith(PUBLIC_DIR)` (sibling `publicEVIL` passes) | `server.js:770-782` | 🔴 |
+| H8 | Path-traversal guard uses fragile `startsWith(PUBLIC_DIR)` (sibling `publicEVIL` passes) | `server.js:770-782` | ✅ |
 | H9 | Unauthenticated Plausible event proxy with attacker-influenced `x-forwarded-for`; no rate limit on `/api/event` | `server.js:728-749` | 🔴 |
 | H10 | `innerHTML` XSS footguns on admin data + `<a href>` built from server data; `escapeHtml` doesn't strip `javascript:`. No CSP / `X-Frame-Options` on admin pages | `hosted/hosted-admin.mjs:677,693,827,848,855,894` | 🔴 |
 | H11 | Identity secret mismatch silently forks an ephemeral identity instead of rejecting — bypasses IP identity caps, orphans identities | `server.js:1930-1946` | 🔴 |
@@ -45,7 +45,7 @@ Status legend: 🔴 not started · 🟡 in progress · ✅ done · ⏭️ deferr
 ### Infra
 | # | Item | Location | Status |
 |---|------|----------|--------|
-| H12 | Dockerfile omits `server/` and `plugins/` (required by `server.js:6-8`) → `MODULE_NOT_FOUND`. No `HEALTHCHECK` despite `/healthz` | `Dockerfile:8-9` | 🔴 |
+| H12 | Dockerfile omits `server/` and `plugins/` (required by `server.js:6-8`) → `MODULE_NOT_FOUND`. No `HEALTHCHECK` despite `/healthz` | `Dockerfile:8-9` | ✅ |
 | H13 | Orphaned plugin smoke-test fixture — nothing loads `server/fixtures/feature-plugin.js`; `npm run smoke:plugins` can't pass on clean checkout | `scripts/plugin-smoke-test.js`, `server/fixtures/feature-plugin.js` | ✅ |
 
 ## Cross-cutting themes
@@ -77,6 +77,8 @@ safe — then T5/T4 (boot-crash + auth), T3, then the structural splits (H1, H4)
 | 2026-06-25 | T4 ✅ | Replaced token-in-body/`localStorage` admin auth with HttpOnly session cookies. New `server/admin-sessions.js` (in-memory, expiry + capacity bounded, clock/RNG-injectable, 9 unit tests). `/api/admin/login` mints an `HttpOnly; SameSite=Strict; Path=/api/admin` cookie (12h, or 30d with remember-me); `/api/admin/site` + `/api/admin/action` authenticate via cookie (token still accepted as one-time bootstrap, which upgrades to a cookie). Added `/api/admin/logout`; sessions are revoked on token-reset and site-delete. Client (`hosted-admin-session.mjs`) no longer persists the raw token — only the non-secret siteKey. Verified end-to-end: cookie-only auth, cross-site rejection, expiry, logout + reset revocation. |
 | 2026-06-25 | T2 ✅ | Finished: extracted pure input sanitizers into `server/sanitize.js` (5 unit tests). Made both smoke tests self-contained — they now spawn their own server on an OS-assigned free port with an isolated temp data dir (fixing the long-standing "tests the wrong server on :8787" problem), and run in CI. Added `TOWNSQUARE_EXTRA_PLUGINS` plugin-injection hook so the plugin smoke test loads the `test-feature` fixture (resolves **H13**). Total unit tests now 30 (was 10); full pipeline (`check` + `test` + `smoke` + `smoke:plugins`) green. |
 | 2026-06-25 | H13 ✅ | Plugin smoke fixture is now loadable via `TOWNSQUARE_EXTRA_PLUGINS`; `npm run smoke:plugins` passes on a clean checkout and gates in CI. Documented in `docs/plugins.md`. |
+| 2026-06-25 | H8 ✅ | Replaced the unsafe `startsWith(PUBLIC_DIR)` static-file guard with `isInsideRoot()` (exact match or `root + path.sep` prefix), so a sibling dir sharing the prefix can't escape the root. Verified: assets still 200, `../` and encoded `%2e%2e` traversal return 404, smoke passes. |
+| 2026-06-25 | H12 ✅ | Dockerfile now `COPY`s `server/` and `plugins/` (previously → `MODULE_NOT_FOUND` at startup) and adds a `HEALTHCHECK` hitting `/healthz`. |
 | 2026-06-25 | H4 + H6 ✅ | Split `site-config.mjs` (1048 lines) into `site-config-core.mjs` (557 lines, pure/Node-safe — constants, defaults, sanitizers, scene-prop + CSS builders) and `site-config.mjs` (524 lines, browser-only form/render DOM helpers that import the pure helpers from core and `export *` it for backward compat). Server now imports the pure **core** instead of the DOM-coupled file, and the divergent boot-time stub sanitizers (`server.js`) are **deleted** — single source of truth (resolves H6). Validated: Node links both modules (every named import resolves), all 9 browser importers' names resolve, pure functions spot-checked, server boots, unit + both smoke tests pass. DOM function bodies were moved verbatim (sed-extracted), not retyped. |
 
 **Validation:** `npm run check` clean, `npm test` 10/10 pass, server boots and `/healthz` ok, SIGTERM exits cleanly. Full `scripts/smoke-test.js` reaches a pre-existing env-coupled failure (401 on a WS-auth subtest) that reproduces identically on `main` — not introduced by these changes.

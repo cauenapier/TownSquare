@@ -729,13 +729,20 @@ function resolvePublicFile(requestUrl, hostHeader) {
   // optional plugin assets overlay. Each must stay inside its own root.
   const candidates = [];
   const corePath = path.join(PUBLIC_DIR, normalized);
-  if (corePath.startsWith(PUBLIC_DIR)) candidates.push(corePath);
+  if (isInsideRoot(corePath, PUBLIC_DIR)) candidates.push(corePath);
   if (PLUGIN_ASSETS_DIR) {
     const pluginPath = path.join(PLUGIN_ASSETS_DIR, normalized);
-    if (pluginPath.startsWith(PLUGIN_ASSETS_DIR)) candidates.push(pluginPath);
+    if (isInsideRoot(pluginPath, PLUGIN_ASSETS_DIR)) candidates.push(pluginPath);
   }
 
   return candidates.length > 0 ? candidates : null;
+}
+
+// True only if `candidate` is `root` itself or a descendant of it. A bare
+// `startsWith(root)` is unsafe: a sibling like `${root}-evil` shares the prefix
+// but is outside the directory, so require the path separator boundary.
+function isInsideRoot(candidate, root) {
+  return candidate === root || candidate.startsWith(root + path.sep);
 }
 
 function isDevToolsRequest(pathname) {
