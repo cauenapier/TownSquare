@@ -7,6 +7,11 @@ const { ensurePluginData, getPluginData, setPluginData } = require("./server/plu
 const { plugins } = require("./server/plugins");
 const { registerPublicPlugins } = require("./plugins");
 const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
+const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
+
+// Browser admin sessions: a valid token login mints one of these and the id is
+// returned in an HttpOnly cookie, so the raw token is not persisted in JS.
+const adminSessions = createAdminSessionStore();
 
 loadEnvFile();
 // Defense-in-depth: registration is already isolated per-plugin, but never let
@@ -798,8 +803,11 @@ function readJsonBody(req, res, callback, maxBytes = 4096) {
   });
 }
 
-function sendJson(res, status, body) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+function sendJson(res, status, body, extraHeaders = null) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    ...(extraHeaders || {}),
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -938,6 +946,79 @@ function buildAdminUrl(req, adminToken) {
   const url = new URL("/admin", `${serverOrigin}/`);
   url.hash = new URLSearchParams({ adminToken }).toString();
   return url.toString();
+}
+
+// Cookies are only marked Secure over https, otherwise the browser would drop
+// them on plain-http local dev.
+function requestIsSecure(req) {
+  return getPublicOrigin(req).startsWith("https://");
+}
+
+function buildSessionCookie(id, maxAgeMs, secure) {
+  const attrs = [
+    `${adminSessions.cookieName}=${id}`,
+    "HttpOnly",
+    "SameSite=Strict",
+    "Path=/api/admin",
+    `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+}
+
+function clearSessionCookie(secure) {
+  const attrs = [
+    `${adminSessions.cookieName}=`,
+    "HttpOnly",
+    "SameSite=Strict",
+    "Path=/api/admin",
+    "Max-Age=0",
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+}
+
+function readSessionFromCookie(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  return adminSessions.get(cookies[adminSessions.cookieName]);
+}
+
+/**
+ * Authenticate an admin request, preferring an HttpOnly session cookie over the
+ * bootstrap token in the body. On a successful token bootstrap a fresh session
+ * is minted and a Set-Cookie header is returned so the raw token is not needed
+ * (nor resent) again.
+ *
+ * @returns {{ site: any, tokenPresented: boolean, setCookie: string|null }|null}
+ */
+function resolveAdminRequest(req, body) {
+  const requestedKey = String(body.siteKey || "");
+  const token = String(body.adminToken || "").trim();
+
+  // 1) Existing session cookie. The cookie's site must match an explicitly
+  //    requested siteKey so a session can't be aimed at another site.
+  const session = readSessionFromCookie(req);
+  if (session) {
+    const site = sitesByKey.get(session.siteKey);
+    if (site && (!requestedKey || requestedKey === session.siteKey)) {
+      return { site, tokenPresented: token.length > 0, setCookie: null };
+    }
+  }
+
+  // 2) Bootstrap token in the body. Mint a session cookie on success.
+  if (token) {
+    const site = getAdminSiteByCredentials(requestedKey, token);
+    if (site) {
+      const created = adminSessions.create(site.siteKey, { remember: Boolean(body.rememberMe) });
+      return {
+        site,
+        tokenPresented: true,
+        setCookie: buildSessionCookie(created.id, created.maxAgeMs, requestIsSecure(req)),
+      };
+    }
+  }
+
+  return null;
 }
 
 const registrationsByIp = new Map();
@@ -1267,7 +1348,7 @@ function saveMapWorld(nextWorld) {
   mapWorld = nextWorld;
 }
 
-function sendAdminSite(req, res, site, adminToken) {
+function sendAdminSite(req, res, site, adminToken, setCookie = null) {
   if (!site) {
     sendJson(res, 403, { error: "Invalid site key or admin token." });
     return;
@@ -1276,13 +1357,15 @@ function sendAdminSite(req, res, site, adminToken) {
   const scene = getScene(site.siteKey, site);
   const panel = {
     site: publicSite(site),
-    adminUrl: buildAdminUrl(req, adminToken),
+    // The recovery link embeds the raw token, so only surface it on a request
+    // that actually presented it (login/bootstrap), never on cookie-auth polls.
+    ...(adminToken ? { adminUrl: buildAdminUrl(req, adminToken) } : {}),
     embedSnippet: buildEmbedSnippet(req, site),
     styleSnippet: buildStyleSnippet(site),
     scene: getSceneStats(scene, site),
     owners: getOwners(site, scene),
   };
-  sendJson(res, 200, extendAdminPanel(panel, site));
+  sendJson(res, 200, extendAdminPanel(panel, site), setCookie ? { "set-cookie": setCookie } : null);
 }
 
 function extendAdminPanel(panel, site) {
@@ -1302,14 +1385,18 @@ function handlePostAdminSite(req, res) {
       return;
     }
 
-    const adminToken = String(body.adminToken || "").trim();
-    const site = getAdminSiteByCredentials(String(body.siteKey || ""), adminToken);
-    if (!site) {
-      recordAuthFailure(adminAuthFailuresByIp, ip);
-    } else {
-      clearAuthFailures(adminAuthFailuresByIp, ip);
+    const presentedToken = String(body.adminToken || "").trim();
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      // Only count a token brute-force attempt; an expired/absent cookie alone
+      // is a benign re-auth, not a failed credential guess.
+      if (presentedToken) recordAuthFailure(adminAuthFailuresByIp, ip);
+      sendAdminSite(req, res, null, presentedToken);
+      return;
     }
-    sendAdminSite(req, res, site, adminToken);
+
+    if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
+    sendAdminSite(req, res, resolved.site, presentedToken, resolved.setCookie);
   });
 }
 
@@ -1330,11 +1417,21 @@ function handleAdminLogin(req, res) {
     }
 
     clearAuthFailures(adminAuthFailuresByIp, ip);
+    // Mint a session so subsequent admin requests authenticate via the HttpOnly
+    // cookie and never need to resend the raw token.
+    const created = adminSessions.create(site.siteKey, { remember: Boolean(body.rememberMe) });
     sendJson(res, 200, {
       site: publicSite(site),
       adminUrl: buildAdminUrl(req, adminToken),
-    });
+    }, { "set-cookie": buildSessionCookie(created.id, created.maxAgeMs, requestIsSecure(req)) });
   });
+}
+
+function handleAdminLogout(req, res) {
+  const cookies = parseCookies(req.headers.cookie);
+  const sessionId = cookies[adminSessions.cookieName];
+  if (sessionId) adminSessions.destroy(sessionId);
+  sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookie(requestIsSecure(req)) });
 }
 
 const ADMIN_ACTIONS = {
@@ -1511,14 +1608,19 @@ function handleAdminAction(req, res) {
       return;
     }
 
-    const site = getAdminSiteByCredentials(String(body.siteKey || ""), String(body.adminToken || ""));
-    if (!site) {
-      recordAuthFailure(adminAuthFailuresByIp, ip);
+    const presentedToken = String(body.adminToken || "").trim();
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      if (presentedToken) recordAuthFailure(adminAuthFailuresByIp, ip);
       sendJson(res, 403, { error: "Invalid site key or admin token." });
       return;
     }
+    if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
 
-    clearAuthFailures(adminAuthFailuresByIp, ip);
+    const site = resolved.site;
+    // Carry the upgrade cookie (if any) on whichever response this handler sends.
+    const cookieHeader = resolved.setCookie ? { "set-cookie": resolved.setCookie } : null;
+    const respond = (status, payload) => sendJson(res, status, payload, cookieHeader);
     const action = String(body.action || "");
     const pluginName = String(body.plugin || "");
     const scene = getScene(site.siteKey, site);
@@ -1544,7 +1646,7 @@ function handleAdminAction(req, res) {
         isPlainObject(body.input) ? body.input : {},
       );
       if (!invoked.found) {
-        sendJson(res, 400, { error: "Unknown plugin action." });
+        respond(400, { error: "Unknown plugin action." });
         return;
       }
       if (invoked.error || invoked.result?.error) {
@@ -1552,7 +1654,7 @@ function handleAdminAction(req, res) {
           if (hadPluginData) site.plugins[pluginName] = previousPluginData;
           else delete site.plugins[pluginName];
         }
-        sendJson(res, 400, { error: invoked.error || invoked.result.error });
+        respond(400, { error: invoked.error || invoked.result.error });
         return;
       }
       if (changed) {
@@ -1563,22 +1665,22 @@ function handleAdminAction(req, res) {
         }
       }
       const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
-      sendJson(res, 200, extendAdminPanel(panel, site));
+      respond(200, extendAdminPanel(panel, site));
       return;
     }
 
     if (!Object.hasOwn(ADMIN_ACTIONS, action)) {
-      sendJson(res, 400, { error: "Unknown action." });
+      respond(400, { error: "Unknown action." });
       return;
     }
 
     const actionResult = ADMIN_ACTIONS[action](site, scene, body);
     if (actionResult?.error) {
-      sendJson(res, 400, actionResult);
+      respond(400, actionResult);
       return;
     }
     const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
-    sendJson(res, 200, extendAdminPanel(panel, site));
+    respond(200, extendAdminPanel(panel, site));
   });
 }
 
@@ -1681,6 +1783,8 @@ const SERVICE_ADMIN_ACTIONS = {
   resetAdminToken(req, site) {
     const adminToken = createToken("admin", 24);
     site.adminTokenHash = hashAdminToken(adminToken);
+    // Existing admin sessions were authorized by the old token; revoke them.
+    adminSessions.destroyForSite(site.siteKey);
     touchSite(site);
     return {
       site: serviceAdminSite(site),
@@ -1713,6 +1817,7 @@ const SERVICE_ADMIN_ACTIONS = {
   },
   deleteSite(req, site) {
     closeSiteScene(site.siteKey, 4003, "site deleted");
+    adminSessions.destroyForSite(site.siteKey);
     sitesByKey.delete(site.siteKey);
     saveSites();
     return { deletedSiteKey: site.siteKey };
@@ -2600,6 +2705,11 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/admin/login") {
     handleAdminLogin(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/logout") {
+    handleAdminLogout(req, res);
     return;
   }
 

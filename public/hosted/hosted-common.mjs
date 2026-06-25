@@ -43,6 +43,7 @@ export async function postJson(path, payload) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
+      credentials: "same-origin",
     });
     const body = await response.json();
     return { ok: response.ok, status: response.status, body };
