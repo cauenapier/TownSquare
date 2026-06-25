@@ -1548,6 +1548,11 @@ function closeSiteScene(siteKey, code, reason) {
   const scene = scenes.get(siteKey);
   if (!scene) return;
 
+  // Cancel pending reconnect-grace disconnects so their timers don't fire
+  // against this scene after it's been removed.
+  for (const identity of scene.identities.values()) {
+    clearLeaveTimer(identity);
+  }
   for (const client of Array.from(scene.clients.values())) {
     client.ws.close(code, reason);
   }
@@ -2426,11 +2431,15 @@ let nextConnectionId = 1;
 
 function finalizeDisconnect(identity) {
   if (identity.clients.size > 0) return;
+  const scene = identity.scene;
+  // The scene may have been torn down (site disabled/deleted) during the
+  // reconnect-grace window; if so there's nothing left to remove or notify.
+  if (!scene || scenes.get(scene.key) !== scene) return;
   const hadJoined = identity.joined;
-  removeIdentity(identity.scene, identity);
+  removeIdentity(scene, identity);
 
   if (hadJoined) {
-    broadcast(identity.scene, { type: MSG.LEAVE, id: identity.id });
+    broadcast(scene, { type: MSG.LEAVE, id: identity.id });
   }
 }
 
