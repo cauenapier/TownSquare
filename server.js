@@ -11,6 +11,7 @@ const { createAdminSessionStore, parseCookies } = require("./server/admin-sessio
 const { createPlausibleProxy } = require("./server/plausible");
 const { createStaticFiles } = require("./server/static-files");
 const { makeBucketStore } = require("./server/rate-limit");
+const { createSitesWriter } = require("./server/sites-store");
 const {
   clampPosition,
   sanitizeBrowserId,
@@ -2143,49 +2144,25 @@ function loadSites() {
   }
 }
 
-// Coalesce the high-frequency metadata writes (profile edits, owner toggles,
-// lastSeen) so a busy site doesn't trigger a full-registry rewrite — which
-// blocks the event loop and stalls every live WebSocket — on each mutation.
-const SITES_SAVE_DEBOUNCE_MS = 1000;
-let sitesSaveTimer = null;
+// Persistence lives in server/sites-store.js; it reads the current registry at
+// write time and coalesces the high-frequency metadata writes (profile edits,
+// owner toggles, lastSeen) so a busy site doesn't block the event loop.
+const sitesWriter = createSitesWriter({
+  dataDir: DATA_DIR,
+  sitesFile: SITES_FILE,
+  getSites: () => Array.from(sitesByKey.values()),
+});
 
 function saveSites() {
-  // A full durable write supersedes any pending debounced one.
-  if (sitesSaveTimer) {
-    clearTimeout(sitesSaveTimer);
-    sitesSaveTimer = null;
-  }
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const sites = Array.from(sitesByKey.values());
-  // Atomic write: serialize to a temp file in the same directory, then rename
-  // over SITES_FILE. rename(2) is atomic on the same filesystem, so a crash or
-  // disk-full mid-write leaves the previous valid sites.json intact (it holds
-  // every site's adminTokenHash, and there is no admin-link recovery).
-  const tmpFile = `${SITES_FILE}.tmp`;
-  fs.writeFileSync(tmpFile, `${JSON.stringify({ sites }, null, 2)}\n`);
-  fs.renameSync(tmpFile, SITES_FILE);
+  sitesWriter.saveNow();
 }
 
-// Schedule a debounced full-registry write. Used for hot-path mutations where
-// losing up to SITES_SAVE_DEBOUNCE_MS of freshness on a crash is acceptable.
 function scheduleSitesSave() {
-  if (sitesSaveTimer) return;
-  sitesSaveTimer = setTimeout(() => {
-    sitesSaveTimer = null;
-    try {
-      saveSites();
-    } catch (error) {
-      console.error("Error saving sites", error);
-    }
-  }, SITES_SAVE_DEBOUNCE_MS);
-  sitesSaveTimer.unref?.();
+  sitesWriter.scheduleSave();
 }
 
-// Flush any pending debounced write immediately (called on graceful shutdown).
 function flushSites() {
-  if (sitesSaveTimer) {
-    saveSites();
-  }
+  sitesWriter.flush();
 }
 
 function touchSite(site) {
