@@ -8,7 +8,13 @@ const { plugins } = require("./server/plugins");
 const { registerPublicPlugins } = require("./plugins");
 
 loadEnvFile();
-registerPublicPlugins();
+// Defense-in-depth: registration is already isolated per-plugin, but never let
+// a registration failure prevent the server process from starting.
+try {
+  registerPublicPlugins();
+} catch (error) {
+  console.error("Plugin registration failed; continuing without plugins", error);
+}
 
 /**
  * Tiny demo server for the first playable TownSquare slice.
@@ -2252,7 +2258,18 @@ function loadSites() {
   }
 }
 
+// Coalesce the high-frequency metadata writes (profile edits, owner toggles,
+// lastSeen) so a busy site doesn't trigger a full-registry rewrite — which
+// blocks the event loop and stalls every live WebSocket — on each mutation.
+const SITES_SAVE_DEBOUNCE_MS = 1000;
+let sitesSaveTimer = null;
+
 function saveSites() {
+  // A full durable write supersedes any pending debounced one.
+  if (sitesSaveTimer) {
+    clearTimeout(sitesSaveTimer);
+    sitesSaveTimer = null;
+  }
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const sites = Array.from(sitesByKey.values());
   // Atomic write: serialize to a temp file in the same directory, then rename
@@ -2264,9 +2281,31 @@ function saveSites() {
   fs.renameSync(tmpFile, SITES_FILE);
 }
 
+// Schedule a debounced full-registry write. Used for hot-path mutations where
+// losing up to SITES_SAVE_DEBOUNCE_MS of freshness on a crash is acceptable.
+function scheduleSitesSave() {
+  if (sitesSaveTimer) return;
+  sitesSaveTimer = setTimeout(() => {
+    sitesSaveTimer = null;
+    try {
+      saveSites();
+    } catch (error) {
+      console.error("Error saving sites", error);
+    }
+  }, SITES_SAVE_DEBOUNCE_MS);
+  sitesSaveTimer.unref?.();
+}
+
+// Flush any pending debounced write immediately (called on graceful shutdown).
+function flushSites() {
+  if (sitesSaveTimer) {
+    saveSites();
+  }
+}
+
 function touchSite(site) {
   site.updatedAt = Date.now();
-  saveSites();
+  scheduleSitesSave();
 }
 
 // Visitor connection clicks are high-frequency, so we mirror the lastSeen save
@@ -2533,7 +2572,7 @@ function finalizeDisconnect(identity) {
   }
 }
 
-const server = http.createServer((req, res) => {
+function handleHttpRequest(req, res) {
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
     res.end("ok");
@@ -2639,6 +2678,22 @@ const server = http.createServer((req, res) => {
   }
 
   serveStaticCandidate(candidates, 0, res);
+}
+
+// Wraps the request dispatcher so a single unhandled throw cannot crash the
+// process (and with it every live WebSocket connection across every site).
+const server = http.createServer((req, res) => {
+  try {
+    handleHttpRequest(req, res);
+  } catch (error) {
+    console.error("Unhandled error handling request", req.method, req.url, error);
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end(req.method === "HEAD" ? undefined : "server error");
+    } else {
+      res.end();
+    }
+  }
 });
 
 // Tries each candidate file path in order, falling back to the next on a
@@ -3017,7 +3072,18 @@ function handleClientMessage(client, raw) {
 
   if (message.type !== "init" && message.type !== "solve" && !client.joined) return;
 
-  MESSAGE_HANDLERS[message.type](client, message);
+  try {
+    MESSAGE_HANDLERS[message.type](client, message);
+  } catch (error) {
+    // Isolate a faulty handler to this one connection rather than letting the
+    // throw bubble up and take down every other live socket.
+    console.error("Error handling client message", message.type, error);
+    try {
+      client.ws.close(1011, "internal error");
+    } catch {
+      // socket already closing/closed
+    }
+  }
 }
 
 function handleClientClose(client) {
@@ -3161,6 +3227,13 @@ async function startServer() {
   OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
   randomSpawnX = shared.randomSpawnX;
 
+  // A failure to bind the port is fatal and must not be swallowed by the
+  // uncaughtException guard below — exit so the supervisor can restart.
+  server.on("error", (error) => {
+    console.error(`TownSquare server error: ${error.message}`);
+    process.exit(1);
+  });
+
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
   });
@@ -3198,6 +3271,46 @@ async function loadSharedModules() {
   PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
   BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;
 }
+
+// Last-resort guards: log and keep running rather than letting an unexpected
+// throw/rejection from a non-request code path take down every live connection.
+// A request- or message-scoped error is already caught closer to its source.
+process.on("uncaughtException", (error) => {
+  console.error("uncaughtException", error);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection", reason);
+});
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}, shutting down`);
+
+  // Flush any pending registry write so a debounced save is not lost.
+  try {
+    flushSites();
+  } catch (error) {
+    console.error("Error flushing sites on shutdown", error);
+  }
+
+  // Stop accepting new sockets, then close the open ones cleanly.
+  for (const ws of wss.clients) {
+    try {
+      ws.close(1001, "server shutting down");
+    } catch {
+      // already closing
+    }
+  }
+  wss.close();
+  server.close(() => process.exit(0));
+
+  // Don't hang forever if a socket refuses to close.
+  setTimeout(() => process.exit(0), 5000).unref?.();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 startServer().catch((error) => {
   console.error(`Failed to start TownSquare server: ${error.message}`);
