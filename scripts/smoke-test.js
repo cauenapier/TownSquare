@@ -1,14 +1,98 @@
 const fs = require("fs");
+const os = require("os");
+const net = require("net");
 const path = require("path");
+const { spawn } = require("child_process");
 const WebSocket = require("ws");
 
-const SERVER_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
-const HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
-const SITES_FILE = path.join(DATA_DIR, "sites.json");
-const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
-const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
+// These are `let` so the self-contained harness (startManagedServer) can point
+// them at a server it spawns on a free port. When TOWNSQUARE_HTTP_ORIGIN is set,
+// they keep their external-server defaults and the harness is skipped.
+let SERVER_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
+let HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
+let DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
+let SITES_FILE = path.join(DATA_DIR, "sites.json");
+let MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
+let SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
+
+// Ask the OS for an unused TCP port so concurrent runs don't collide (and so we
+// never accidentally talk to an unrelated server bound to a fixed port).
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForHealth(origin, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${origin}/healthz`);
+      if (res.ok) return;
+    } catch {
+      // server not up yet
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("managed server did not become healthy in time");
+}
+
+// Spawn our own server on a free port with an isolated data dir, point the
+// module globals at it, and return a cleanup function. This makes
+// `node scripts/smoke-test.js` self-contained and CI-runnable.
+async function startManagedServer() {
+  const port = await findFreePort();
+  const host = "127.0.0.1";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "townsquare-smoke-"));
+  const password = SERVICE_ADMIN_PASSWORD || "smoke-service-admin";
+  const httpOrigin = `http://${host}:${port}`;
+
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+    env: {
+      ...process.env,
+      HOST: host,
+      PORT: String(port),
+      DATA_DIR: dataDir,
+      SERVICE_ADMIN_PASSWORD: password,
+      ALLOWED_ORIGINS: httpOrigin,
+      // The functional chat assertions send a message moments after joining;
+      // disable the anti-bot "typed too fast after joining" guard so it doesn't
+      // drop them (its behavior has dedicated TEST_IP_* coverage instead).
+      MIN_HUMAN_SAY_MS: "0",
+    },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+
+  SERVER_URL = `ws://${host}:${port}/live`;
+  HTTP_ORIGIN = httpOrigin;
+  DATA_DIR = dataDir;
+  SITES_FILE = path.join(dataDir, "sites.json");
+  MAP_WORLD_FILE = path.join(dataDir, "map-world.json");
+  SERVICE_ADMIN_PASSWORD = password;
+
+  try {
+    await waitForHealth(httpOrigin);
+  } catch (error) {
+    child.kill("SIGKILL");
+    throw error;
+  }
+
+  return () => {
+    child.kill("SIGTERM");
+    try {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+  };
+}
 
 function siteSocketUrl(siteKey) {
   if (!siteKey) return SERVER_URL;
@@ -1326,7 +1410,19 @@ async function main() {
   first.ws.close();
 }
 
-main().catch((error) => {
+async function run() {
+  // If an external server origin is provided, test against it (legacy behavior).
+  // Otherwise spawn and manage our own so the script is self-contained.
+  const external = Boolean(process.env.TOWNSQUARE_HTTP_ORIGIN);
+  const cleanup = external ? null : await startManagedServer();
+  try {
+    await main();
+  } finally {
+    cleanup?.();
+  }
+}
+
+run().catch((error) => {
   console.error(error.stack || `Smoke test failed: ${error.message}`);
   process.exit(1);
 });
