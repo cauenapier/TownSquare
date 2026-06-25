@@ -2275,6 +2275,13 @@ function touchSite(site) {
 // for traffic analytics.
 let lastConnectionClicksSaveAt = 0;
 
+// lastSeenUrl is refreshed on every navigation across every connected visitor.
+// Throttle the full sites.json rewrite the same way lastSeenAt is throttled so a
+// busy (or hostile) client can't amplify reading updates into one disk write each.
+// The in-memory value is updated immediately, so admin views stay current; we only
+// risk losing up to a minute of freshness on a crash.
+let lastSeenUrlSaveAt = 0;
+
 /**
  * Record one visitor click on a configured neighbouring-town link. The reported
  * destination must match one of the source site's sanitized connections, so the
@@ -2876,7 +2883,13 @@ function handleReading(client, message) {
   client.readingActive = readingActive;
   client.identity.readingLabel = readingLabel;
   client.identity.readingUrl = readingUrl;
-  if (client.site && rememberSiteLastSeenUrl(client.site, readingUrl)) saveSites();
+  if (client.site && rememberSiteLastSeenUrl(client.site, readingUrl)) {
+    const nowSave = Date.now();
+    if (nowSave - lastSeenUrlSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+      lastSeenUrlSaveAt = nowSave;
+      saveSites();
+    }
+  }
   refreshIdentityReadingActive(client.identity);
   const now = Date.now();
   if (client.identity.readingActive && !previousReadingActive) {
