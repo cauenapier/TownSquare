@@ -41,6 +41,14 @@ function getContentType(filePath) {
   return MIME_TYPES[path.extname(filePath)] || "application/octet-stream";
 }
 
+// Admin/registration pages handle credentials and untrusted site data, so they
+// get a strict-ish CSP (no inline script, no framing, no <base>/object) on top
+// of X-Frame-Options. All their scripts are external modules, so script-src
+// 'self' is safe; img/style/connect stay unrestricted so the live preview's
+// assets and websocket keep working.
+const SECURED_HTML = new Set(["admin.html", "service-admin.html", "chat.html", "register.html"]);
+const ADMIN_CSP = "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
 function getStaticHeaders(filePath) {
   const headers = {
     "cache-control": "no-store",
@@ -49,6 +57,12 @@ function getStaticHeaders(filePath) {
 
   if ([".css", ".mjs"].includes(path.extname(filePath))) {
     headers["access-control-allow-origin"] = "*";
+  }
+
+  if (SECURED_HTML.has(path.basename(filePath))) {
+    headers["content-security-policy"] = ADMIN_CSP;
+    headers["x-frame-options"] = "DENY";
+    headers["referrer-policy"] = "no-referrer";
   }
 
   return headers;
