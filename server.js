@@ -9,6 +9,7 @@ const { registerPublicPlugins } = require("./plugins");
 const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
 const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
 const { createPlausibleProxy } = require("./server/plausible");
+const { createStaticFiles } = require("./server/static-files");
 const {
   clampPosition,
   sanitizeBrowserId,
@@ -226,16 +227,6 @@ let normalizeOrigin;
 let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
 let getMatchingWwwOrigin = () => null;
 let originUsesMatchingWwwPair = () => false;
-
-const MIME_TYPES = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-};
 
 function parseAllowedOrigins(value) {
   return new Set(
@@ -587,74 +578,6 @@ function sanitizeSiteName(name, origin) {
   } catch {
     return "Untitled site";
   }
-}
-
-function getContentType(filePath) {
-  return MIME_TYPES[path.extname(filePath)] || "application/octet-stream";
-}
-
-function getStaticHeaders(filePath) {
-  const headers = {
-    "cache-control": "no-store",
-    "content-type": getContentType(filePath),
-  };
-
-  if ([".css", ".mjs"].includes(path.extname(filePath))) {
-    headers["access-control-allow-origin"] = "*";
-  }
-
-  return headers;
-}
-
-function resolvePublicFile(requestUrl, hostHeader) {
-  const url = new URL(requestUrl, `http://${hostHeader}`);
-  if (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname)) {
-    return null;
-  }
-  if (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname)) {
-    return null;
-  }
-  const aliases = new Map([
-    ["/register", "/hosted/register.html"],
-    ["/admin", "/hosted/admin.html"],
-    ["/admin/chat", "/hosted/chat.html"],
-    ["/service-admin", "/hosted/service-admin.html"],
-    ["/map", "/map.html"],
-    ["/dev", "/dev/dev.html"],
-    ["/walk-sandbox", "/dev/walk-sandbox.html"],
-    ["/staging", "/staging.html"],
-  ]);
-  const pathname = aliases.get(url.pathname) || url.pathname;
-  const normalized = path.normalize(pathname).replace(/^\.+/, "");
-
-  // Candidate files are tried in order: the core public dir first, then the
-  // optional plugin assets overlay. Each must stay inside its own root.
-  const candidates = [];
-  const corePath = path.join(PUBLIC_DIR, normalized);
-  if (isInsideRoot(corePath, PUBLIC_DIR)) candidates.push(corePath);
-  if (PLUGIN_ASSETS_DIR) {
-    const pluginPath = path.join(PLUGIN_ASSETS_DIR, normalized);
-    if (isInsideRoot(pluginPath, PLUGIN_ASSETS_DIR)) candidates.push(pluginPath);
-  }
-
-  return candidates.length > 0 ? candidates : null;
-}
-
-// True only if `candidate` is `root` itself or a descendant of it. A bare
-// `startsWith(root)` is unsafe: a sibling like `${root}-evil` shares the prefix
-// but is outside the directory, so require the path separator boundary.
-function isInsideRoot(candidate, root) {
-  return candidate === root || candidate.startsWith(root + path.sep);
-}
-
-function isDevToolsRequest(pathname) {
-  return pathname === "/dev"
-    || pathname === "/walk-sandbox"
-    || pathname.startsWith("/dev/");
-}
-
-function isStagingPageRequest(pathname) {
-  return pathname === "/staging" || pathname === "/staging.html";
 }
 
 function readJsonBody(req, res, callback, maxBytes = 4096) {
@@ -1120,6 +1043,15 @@ const plausible = createPlausibleProxy({
   apiPath: PLAUSIBLE_API_PATH,
   getRequestIp,
   isEventAllowed: isPlausibleEventAllowed,
+});
+
+const staticFiles = createStaticFiles({
+  publicDir: PUBLIC_DIR,
+  pluginAssetsDir: PLUGIN_ASSETS_DIR,
+  devToolsEnabled: DEV_TOOLS_ENABLED,
+  stagingPageEnabled: STAGING_PAGE_ENABLED,
+  shouldInjectHtml: (filePath) => plausible.shouldInject(filePath),
+  injectHtml: (html) => plausible.injectIntoHtml(html),
 });
 
 function handleRegisterSite(req, res) {
@@ -2562,8 +2494,8 @@ function handleHttpRequest(req, res) {
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
 
   if (
-    (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname))
-    || (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname))
+    (!DEV_TOOLS_ENABLED && staticFiles.isDevToolsRequest(url.pathname))
+    || (!STAGING_PAGE_ENABLED && staticFiles.isStagingPageRequest(url.pathname))
   ) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end(req.method === "HEAD" ? undefined : "not found");
@@ -2654,7 +2586,7 @@ function handleHttpRequest(req, res) {
     }
   }
 
-  const candidates = resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
+  const candidates = staticFiles.resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
 
   if (!candidates) {
     res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
@@ -2662,7 +2594,7 @@ function handleHttpRequest(req, res) {
     return;
   }
 
-  serveStaticCandidate(candidates, 0, res);
+  staticFiles.serveCandidate(candidates, 0, res);
 }
 
 // Wraps the request dispatcher so a single unhandled throw cannot crash the
@@ -2683,31 +2615,6 @@ const server = http.createServer((req, res) => {
 
 // Tries each candidate file path in order, falling back to the next on a
 // missing file so the plugin assets overlay can back the core public dir.
-function serveStaticCandidate(candidates, index, res) {
-  const filePath = candidates[index];
-  fs.readFile(filePath, (error, data) => {
-    if (error) {
-      if (error.code === "ENOENT" && index + 1 < candidates.length) {
-        serveStaticCandidate(candidates, index + 1, res);
-        return;
-      }
-      const status = error.code === "ENOENT" ? 404 : 500;
-      const body = status === 404 ? "not found" : "server error";
-      res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
-      res.end(body);
-      return;
-    }
-
-    let body = data;
-    if (path.extname(filePath) === ".html" && plausible.shouldInject(filePath)) {
-      body = Buffer.from(plausible.injectIntoHtml(data.toString("utf8")), "utf8");
-    }
-
-    res.writeHead(200, getStaticHeaders(filePath));
-    res.end(body);
-  });
-}
-
 const wss = new WebSocketServer({
   server,
   path: "/live",
