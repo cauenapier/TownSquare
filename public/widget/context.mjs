@@ -100,6 +100,7 @@
  * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]
  * @property {{ overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void, trigger: HTMLButtonElement | null } | null} [connectionsModal]
  * @property {"left"|"right"|null} [nearSide] Edge whose signpost the avatar can currently activate.
+ * @property {{ board: import("../shared/site-config.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: { overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void, trigger: HTMLButtonElement | null } | null } | null} [messageBoard]
  */
 
 export {};

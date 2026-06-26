@@ -43,9 +43,9 @@ export function createCustomizationPreview({ root, readConfig, readingLabel }) {
     mount({ remount = false } = {}) {
       if (!(root instanceof HTMLElement)) return;
 
-      const { scene, style, connections = [] } = readConfig(mode);
+      const { scene, style, connections = [], messageBoard } = readConfig(mode);
       if (handle && !remount) {
-        handle.updateConfig({ scene, style, connections });
+        handle.updateConfig({ scene, style, connections, messageBoard });
         return;
       }
 
@@ -55,6 +55,7 @@ export function createCustomizationPreview({ root, readConfig, readingLabel }) {
         scene,
         style,
         connections,
+        messageBoard,
         theme: mode,
         preview: true,
         readingLabel: resolveReadingLabel(),

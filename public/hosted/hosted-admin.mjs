@@ -10,15 +10,18 @@ import {
   CONNECTION_LABEL_MAX,
   CONNECTION_SIDES,
   CONNECTION_URL_MAX,
+  DEFAULT_MESSAGE_BOARD,
   DEFAULT_SCENE_CONFIG,
   DEFAULT_SITE_STYLE,
   isSceneCountInputName,
   MAX_CONNECTIONS_PER_SIDE,
+  MESSAGE_BOARD_VARIANTS,
   readSceneConfigFromForm,
   readStyleConfigFromForm,
   renderScenePositionFields,
   renderStyleOverrideFields,
   sanitizeConnections,
+  sanitizeMessageBoard,
   sanitizeSceneConfig,
   sanitizeSiteStyle,
 } from "../shared/site-config.mjs";
@@ -55,6 +58,12 @@ const previewDock = document.getElementById("preview-dock");
 const previewToggle = document.getElementById("preview-toggle");
 const scenePositionFields = document.getElementById("scene-position-fields");
 const styleOverrideFields = document.getElementById("style-override-fields");
+const boardTitleInput = document.getElementById("board-title");
+const boardBodyInput = document.getElementById("board-body");
+const boardVariantSelect = document.getElementById("board-variant");
+const boardAccentInput = document.getElementById("board-accent");
+const boardAccentDefaultInput = document.getElementById("board-accent-default");
+const boardXInput = document.getElementById("board-x");
 const snippetEl = document.getElementById("embed-snippet");
 const styleSnippetEl = document.getElementById("style-snippet");
 const copyButton = document.getElementById("copy-snippet");
@@ -120,6 +129,7 @@ const preview = createCustomizationPreview({
       scene: customization.sceneConfig,
       style: customization.styleConfig[mode],
       connections: sanitizeConnections(connectionsDraft),
+      messageBoard: customization.messageBoard,
     };
   },
 });
@@ -316,6 +326,7 @@ function getCurrentCustomization() {
   return {
     sceneConfig: sanitizeSceneConfig(currentSite?.sceneConfig || {}),
     styleConfig: sanitizeSiteStyle(currentSite?.styleConfig || {}),
+    messageBoard: sanitizeMessageBoard(currentSite?.messageBoard || {}),
   };
 }
 
@@ -323,18 +334,45 @@ function getDefaultCustomization() {
   return {
     sceneConfig: sanitizeSceneConfig(DEFAULT_SCENE_CONFIG),
     styleConfig: sanitizeSiteStyle(DEFAULT_SITE_STYLE),
+    messageBoard: sanitizeMessageBoard(DEFAULT_MESSAGE_BOARD),
   };
+}
+
+function applyMessageBoardToForm(board) {
+  const next = sanitizeMessageBoard(board);
+  boardTitleInput.value = next.title;
+  boardBodyInput.value = next.body;
+  boardVariantSelect.value = MESSAGE_BOARD_VARIANTS.includes(next.variant) ? next.variant : MESSAGE_BOARD_VARIANTS[0];
+  const usesDefault = !next.accent;
+  boardAccentDefaultInput.checked = usesDefault;
+  boardAccentInput.disabled = usesDefault;
+  // A real hex accent drives the picker; "transparent"/inherit leave it at its default.
+  if (/^#[0-9a-f]{6}$/i.test(next.accent)) boardAccentInput.value = next.accent;
+  boardXInput.value = String(Math.round(next.x * 100));
+}
+
+function readMessageBoardFromForm() {
+  const usesDefault = boardAccentDefaultInput.checked;
+  return sanitizeMessageBoard({
+    title: boardTitleInput.value,
+    body: boardBodyInput.value,
+    variant: boardVariantSelect.value,
+    accent: usesDefault ? "" : boardAccentInput.value,
+    x: Number(boardXInput.value) / 100,
+  });
 }
 
 function applyCustomizationToForm(customization) {
   applyConfigToForm(customizationForm, { ...customization.sceneConfig, ...customization.styleConfig });
   syncScenePositionInputs(customization.sceneConfig);
+  applyMessageBoardToForm(customization.messageBoard);
 }
 
 function readCustomizationFromForm() {
   return {
     sceneConfig: sanitizeSceneConfig(readSceneConfigFromForm(customizationForm)),
     styleConfig: sanitizeSiteStyle(readStyleConfigFromForm(customizationForm)),
+    messageBoard: readMessageBoardFromForm(),
   };
 }
 
@@ -342,6 +380,7 @@ function serializeCustomization(customization) {
   return JSON.stringify({
     sceneConfig: sanitizeSceneConfig(customization?.sceneConfig || {}),
     styleConfig: sanitizeSiteStyle(customization?.styleConfig || {}),
+    messageBoard: sanitizeMessageBoard(customization?.messageBoard || {}),
   });
 }
 
@@ -963,6 +1002,9 @@ customizationForm.addEventListener("input", (event) => {
   customizationTouched = true;
   if (isSceneCountInputName(event.target?.name || "")) {
     syncScenePositionInputs(readSceneConfigFromForm(customizationForm));
+  }
+  if (event.target === boardAccentDefaultInput) {
+    boardAccentInput.disabled = boardAccentDefaultInput.checked;
   }
   updateCustomizationButtons();
   updateCustomizationStatus();

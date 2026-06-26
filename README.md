@@ -183,7 +183,7 @@ The admin page can:
 
 - show install/seen status
 - show active visitors
-- customize the scene (bench/tree/lamp/bird counts and placement) and colors, with a live preview (see [Customization](#customization))
+- customize the scene (bench/tree/lamp/bird counts and placement), colors, and a clickable message board, with a live preview (see [Customization](#customization))
 - mark an active visitor as the verified site owner (and unmark them)
 - kick or block active visitors
 - disable chat
@@ -227,6 +227,13 @@ live preview:
   block (`buildSiteCss`) the owner copies into their own stylesheet. The admin/register
   pages generate this **Customization CSS** block from the swatch choices. Re-copy it
   after changing colors.
+- **Message board** — an optional single prop carrying a note for visitors. The owner
+  sets a title, body, board art variant, accent, and position; clicking the board opens
+  a modal with the message. Saved per site in `messageBoard` and delivered to live
+  embeds over the socket by `siteKey` (in the `hello` payload, with edits broadcast as a
+  `messageBoard` message), so changes take effect immediately without re-pasting the
+  snippet. Visitors see a "!" badge until they open the current message (read-state is
+  kept per site in `localStorage`).
 
 The CSS sets these tokens, scoped to `#townsquare-root` for light, explicit dark, and
 `prefers-color-scheme` dark: `--scene` (background), `--page` (ground), `--surface`

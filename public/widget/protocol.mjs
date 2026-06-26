@@ -15,12 +15,26 @@ import {
   updateStatus,
 } from "./presence.mjs";
 import { getBrowserSecret, saveBrowserSecret } from "./utils.mjs";
+import { setupMessageBoard } from "./message-board.mjs";
 import { solveChallenge } from "./pow.mjs";
 import { MSG, GESTURE, BIRD_ACTION } from "../shared/protocol.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
  */
+
+/**
+ * Apply an owner message board pushed by the server (hosted sites). Replaces any
+ * board the widget mounted with, so admin edits take effect live without the
+ * owner re-pasting the embed snippet. A disabled board tears the prop down.
+ *
+ * @param {WidgetContext} ctx
+ * @param {import("../shared/site-config.mjs").MessageBoard} board
+ */
+function applyServerMessageBoard(ctx, board) {
+  ctx.options = { ...ctx.options, messageBoard: board };
+  setupMessageBoard(ctx);
+}
 
 function isSolo(ctx) {
   return ctx.options.solo === true;
@@ -164,6 +178,12 @@ export function wireSocket(ctx) {
           }
         }
         syncBirdsFromHello(ctx, message.birds);
+        // Hosted sites deliver the owner's message board over the socket so edits
+        // apply live; only act when the server actually sent one (self-hosted
+        // embeds keep whatever board they mounted with).
+        if (message.messageBoard !== undefined) {
+          applyServerMessageBoard(ctx, message.messageBoard);
+        }
         updateStatus(ctx);
         return;
       }
@@ -171,6 +191,14 @@ export function wireSocket(ctx) {
       // Owner changed slow mode mid-session: keep the local cooldown in sync.
       if (message.type === MSG.CHAT_THROTTLE) {
         if (typeof message.ms === "number") ctx.chatThrottleMs = message.ms;
+        return;
+      }
+
+      // Owner edited the message board mid-session: re-render it in place.
+      if (message.type === MSG.MESSAGE_BOARD) {
+        if (message.messageBoard !== undefined) {
+          applyServerMessageBoard(ctx, message.messageBoard);
+        }
         return;
       }
 

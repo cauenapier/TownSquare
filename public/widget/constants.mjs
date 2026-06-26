@@ -25,6 +25,8 @@ export const OWNER_SETUP_HASH = "townsquare-owner";
 export const BROWSER_ID_KEY = "townsquare-browser-id";
 export const BROWSER_SECRET_KEY = "townsquare-browser-secret";
 export const PROFILE_STORAGE_KEY = "townsquare-profile";
+/** Prefix for the per-site "last read message board message" marker. */
+export const MESSAGE_BOARD_READ_KEY = "townsquare-msgboard-read";
 export const PROP_SETTLE_MS = 700;
 /** Most bubbles kept visible in a figure's ghost stack (live + lingering ghosts). */
 export const GHOST_STACK_MAX = 4;

@@ -224,6 +224,7 @@ let DEFAULT_SITE_SCENE_CONFIG;
 let DEFAULT_SITE_STYLE;
 let sanitizeSceneConfig;
 let sanitizeConnections;
+let sanitizeMessageBoard;
 let sanitizeSiteStyle;
 let buildSceneProps;
 let buildBirdPerches;
@@ -674,6 +675,10 @@ function getConnections(site) {
   return sanitizeConnections(site?.connections || []);
 }
 
+function getMessageBoard(site) {
+  return sanitizeMessageBoard(site?.messageBoard || {});
+}
+
 function getSceneProps(site) {
   return site ? buildSceneProps(getSceneConfig(site)) : Array.from(PROPS_BY_ID.values());
 }
@@ -730,6 +735,8 @@ function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
   const connections = getConnections(site);
   const pluginModules = plugins.browserModules("widget", pluginContext(site));
+  // The message board is delivered live over the socket (see the hello payload),
+  // not baked here, so owners never re-paste the snippet after editing it.
   const coreConfig = {
     serverOrigin,
     siteKey: site.siteKey,
@@ -1087,6 +1094,7 @@ function handleRegisterSite(req, res) {
       sceneConfig: body.sceneConfig,
       styleConfig: body.styleConfig,
       connections: body.connections,
+      messageBoard: body.messageBoard,
     });
     sitesByKey.set(site.siteKey, site);
     saveSites();
@@ -1298,6 +1306,7 @@ const ADMIN_ACTIONS = {
   updateCustomization(site, scene, body) {
     site.sceneConfig = sanitizeSceneConfig(body.sceneConfig);
     site.styleConfig = sanitizeSiteStyle(body.styleConfig);
+    site.messageBoard = sanitizeMessageBoard(body.messageBoard);
     touchSite(site);
 
     if (scene.clients.size === 0) {
@@ -1306,6 +1315,8 @@ const ADMIN_ACTIONS = {
     }
 
     rebuildSceneProps(scene, site);
+    // Push the edited board to everyone currently in the square so it updates live.
+    broadcast(scene, { type: "messageBoard", messageBoard: getMessageBoard(site) });
   },
   updateConnections(site, scene, body) {
     site.connections = sanitizeConnections(body.connections);
@@ -2051,7 +2062,7 @@ function rebuildSceneProps(scene, site) {
   }
 }
 
-function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, styleConfig, connections }) {
+function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, styleConfig, connections, messageBoard }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -2066,6 +2077,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       sceneConfig: sanitizeSceneConfig(sceneConfig),
       styleConfig: sanitizeSiteStyle(styleConfig),
       connections: sanitizeConnections(connections),
+      messageBoard: sanitizeMessageBoard(messageBoard),
       disabled: false,
       chatDisabled: false,
       botProtection: false,
@@ -2140,6 +2152,10 @@ function loadSites() {
       }
       if (!Array.isArray(site.connections)) {
         site.connections = [];
+      }
+      if (!isPlainObject(site.messageBoard)) {
+        site.messageBoard = sanitizeMessageBoard({});
+        sitesMigratedOnLoad = true;
       }
       if (ensurePluginData(site)) {
         sitesMigratedOnLoad = true;
@@ -2310,6 +2326,7 @@ function publicSite(site) {
     sceneConfig: getSceneConfig(site),
     styleConfig: getStyleConfig(site),
     connections: getConnections(site),
+    messageBoard: getMessageBoard(site),
     disabled: site.disabled,
     chatDisabled: site.chatDisabled,
     botProtection: Boolean(site.botProtection),
@@ -2683,6 +2700,9 @@ function handleInit(client, message) {
     birds: snapshotBirds(scene),
     chatThrottleMs: getChatThrottle(site),
     pluginModules: plugins.browserModules("widget", pluginContext(site)),
+    // Hosted sites carry the owner's message board over the socket so admin edits
+    // apply live without re-pasting the embed snippet.
+    ...(site ? { messageBoard: getMessageBoard(site) } : {}),
   });
 
   if (identity.joined) {
@@ -3150,6 +3170,7 @@ async function loadSharedModules() {
   DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
   sanitizeSceneConfig = siteConfig.sanitizeSceneConfig;
   sanitizeConnections = siteConfig.sanitizeConnections;
+  sanitizeMessageBoard = siteConfig.sanitizeMessageBoard;
   sanitizeSiteStyle = siteConfig.sanitizeSiteStyle;
   buildSceneProps = siteConfig.buildSceneProps;
   buildBirdPerches = siteConfig.buildBirdPerches;

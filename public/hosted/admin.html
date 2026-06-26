@@ -258,6 +258,43 @@
               <div id="style-override-fields"></div>
             </section>
 
+            <section aria-labelledby="message-board-title">
+              <div class="hosted-section-head">
+                <h2 id="message-board-title">Message board</h2>
+              </div>
+              <p class="hosted-note">Leave a note visitors can read by clicking the board. The board only appears once it has a title or message.</p>
+              <label>
+                <span>Title</span>
+                <input id="board-title" name="board-title" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Welcome!" />
+              </label>
+              <label>
+                <span>Message</span>
+                <textarea id="board-body" name="board-body" rows="4" maxlength="1000" placeholder="Write something for your visitors…"></textarea>
+              </label>
+              <div class="hosted-grid">
+                <label>
+                  <span>Board style</span>
+                  <select id="board-variant" name="board-variant">
+                    <option value="corkboard">Corkboard</option>
+                    <option value="chalkboard">Chalkboard</option>
+                    <option value="sign">Sign</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Accent color</span>
+                  <input id="board-accent" name="board-accent" type="color" value="#c8641f" disabled />
+                </label>
+                <label>
+                  <span>Position <small>% from left</small></span>
+                  <input id="board-x" name="board-x" type="number" min="0" max="100" step="1" value="50" inputmode="numeric" />
+                </label>
+              </div>
+              <label class="hosted-toggle">
+                <input id="board-accent-default" name="board-accent-default" type="checkbox" checked />
+                <span>Use theme accent color</span>
+              </label>
+            </section>
+
             <div class="hosted-actions">
               <button type="submit" id="save-customization">Save customization</button>
               <button type="button" id="reset-customization">Reset form</button>

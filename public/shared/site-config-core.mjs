@@ -75,6 +75,13 @@ export const CONNECTION_URL_MAX = 200;
 /** Most towns one signpost (one side) can point at — keeps the modal uncluttered. */
 export const MAX_CONNECTIONS_PER_SIDE = 4;
 
+/** Board art the owner can pick for their message board prop. */
+export const MESSAGE_BOARD_VARIANTS = Object.freeze(["corkboard", "chalkboard", "sign"]);
+/** Longest a message-board title may be before it is trimmed. */
+export const MESSAGE_BOARD_TITLE_MAX = 80;
+/** Longest a message-board body may be before it is trimmed. */
+export const MESSAGE_BOARD_BODY_MAX = 1000;
+
 /** Muted prop/bird/tree tone; kept in sync with `--prop-ink` in public/tokens.css. */
 export const PROP_INK_MIX = "color-mix(in oklab, var(--text) 58%, var(--muted) 42%)";
 
@@ -158,6 +165,19 @@ const TREE_SVG = `
   </svg>
 `;
 
+// A standing notice board: two legs and a framed panel. The `--<variant>` class
+// fills the panel differently in CSS; the line-art frame is shared.
+const MESSAGE_BOARD_SVG = `
+  <svg viewBox="0 0 44 60" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <line x1="13" y1="40" x2="9" y2="59"></line>
+    <line x1="31" y1="40" x2="35" y2="59"></line>
+    <rect class="panel" x="4" y="3" width="36" height="34"></rect>
+    <line class="note" x1="11" y1="13" x2="33" y2="13"></line>
+    <line class="note" x1="11" y1="20" x2="33" y2="20"></line>
+    <line class="note" x1="11" y1="27" x2="26" y2="27"></line>
+  </svg>
+`;
+
 /** Stage width the pixel art sizes below were authored against. */
 export const REFERENCE_STAGE_WIDTH = 743;
 
@@ -166,6 +186,7 @@ const PROP_PX = Object.freeze({
   bench: { width: 52, height: 18 },
   lamp: { width: 20, height: 56 },
   tree: { width: 56, height: 76 },
+  "message-board": { width: 44, height: 60 },
 });
 
 /**
@@ -282,6 +303,30 @@ function createTree(index, x) {
     faceAway: true,
     shadeRadius: 0.045,
     svg: TREE_SVG,
+  };
+}
+
+/**
+ * Build the render-ready message-board prop from a sanitized board config, or
+ * `null` when the board is disabled. Shaped like a {@link SceneProp} so the
+ * widget renderer can place it on the stage, but kept out of {@link buildSceneProps}
+ * because it is a single optional object rather than a count-based scene field.
+ *
+ * @param {ReturnType<typeof sanitizeMessageBoard>} board
+ * @returns {(SceneProp & { variant: string, accent: string }) | null}
+ */
+export function createMessageBoardProp(board) {
+  if (!board || !board.enabled) return null;
+  const { width, height } = PROP_PX["message-board"];
+  return {
+    id: "message-board",
+    kind: "message-board",
+    x: board.x,
+    width,
+    height,
+    variant: board.variant,
+    accent: board.accent,
+    svg: MESSAGE_BOARD_SVG,
   };
 }
 
@@ -404,6 +449,57 @@ export function connectionsBySide(input = []) {
     grouped[connection.side].push(connection);
   }
   return grouped;
+}
+
+/**
+ * @typedef {Object} MessageBoard
+ * @property {boolean} enabled Whether the board is shown (true once it has text).
+ * @property {number} x Normalized stage position (0 left … 1 right).
+ * @property {string} variant One of {@link MESSAGE_BOARD_VARIANTS}.
+ * @property {string} accent Owner accent color, or "" to inherit the palette.
+ * @property {string} title Heading shown in the board modal.
+ * @property {string} body Message text shown in the board modal.
+ */
+
+/** A disabled, blank board — the default for sites that never set one up. */
+export const DEFAULT_MESSAGE_BOARD = Object.freeze({
+  enabled: false,
+  x: 0.5,
+  variant: MESSAGE_BOARD_VARIANTS[0],
+  accent: "",
+  title: "",
+  body: "",
+});
+
+/**
+ * Normalize an owner's message-board config. Always returns a complete object;
+ * `enabled` is true only when there is a non-empty title or body so an empty
+ * board never renders. Mirrors the validation used by scene positions and the
+ * style palette (clamped x, allow-listed variant, color-safe accent).
+ *
+ * @param {unknown} input
+ * @returns {MessageBoard}
+ */
+export function sanitizeMessageBoard(input = {}) {
+  const base = isPlainObject(input) ? input : {};
+
+  const x = roundPosition(clampNumber(base.x, 0, 1, DEFAULT_MESSAGE_BOARD.x));
+  const variant = MESSAGE_BOARD_VARIANTS.includes(base.variant)
+    ? base.variant
+    : DEFAULT_MESSAGE_BOARD.variant;
+
+  const rawAccent = typeof base.accent === "string" ? base.accent.trim() : "";
+  let accent = "";
+  if (isTransparentStyleValue(rawAccent)) {
+    accent = STYLE_TRANSPARENT;
+  } else if (rawAccent && rawAccent.length <= 64 && SAFE_COLOR_RE.test(rawAccent)) {
+    accent = rawAccent;
+  }
+
+  const title = (typeof base.title === "string" ? base.title.trim() : "").slice(0, MESSAGE_BOARD_TITLE_MAX);
+  const body = (typeof base.body === "string" ? base.body.trim() : "").slice(0, MESSAGE_BOARD_BODY_MAX);
+
+  return { enabled: Boolean(title || body), x, variant, accent, title, body };
 }
 
 export function isTransparentStyleValue(value) {
