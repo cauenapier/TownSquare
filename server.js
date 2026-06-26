@@ -94,6 +94,9 @@ const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 *
 const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS || 60000);
 const HEARTBEAT_INTERVAL_MS = 30000;
 const BIRD_TICK_INTERVAL_MS = 1000;
+// Fast tick that advances scene-entity plugins (e.g. a kickable ball). Kept
+// short for smooth motion; the manager only ticks scenes with live clients.
+const ENTITY_TICK_INTERVAL_MS = 50;
 // Minimum delay between a visitor joining and their first chat message. A human
 // cannot read the widget and type within this window, so faster messages are the
 // scripted enter-say-leave pattern and are dropped. 0 disables the check.
@@ -1512,6 +1515,16 @@ const ADMIN_ACTIONS = {
     site.pluginsEnabled[name] = Boolean(body.enabled);
     logModeration(site, body.enabled ? "plugin-on" : "plugin-off", name);
     touchSite(site);
+
+    // Reconcile the live scene so scene-entity add-ons (e.g. the ball) gain or
+    // drop their per-scene state as soon as the toggle flips, mirroring how a
+    // customization change takes effect. An empty scene is dropped and rebuilt
+    // fresh on the next join.
+    if (scene.clients.size === 0) {
+      scenes.delete(site.siteKey);
+    } else {
+      rebuildSceneProps(scene, site);
+    }
   },
   disableSite(site, scene, body) {
     site.disabled = Boolean(body.disabled);
@@ -2087,6 +2100,8 @@ function createScene(key, site = null) {
     birds: new Map(),
     nextBirdId: 1,
     nextSpawnAt: now + BIRD_FIRST_SPAWN_MS,
+    // Per-scene state owned by scene-entity plugins, namespaced by plugin name.
+    plugins: plugins.createSceneEntityState(pluginContext(site)),
   };
 }
 
@@ -2107,6 +2122,9 @@ function rebuildSceneProps(scene, site) {
   scene.propsById = propsById;
   scene.birdPerches = getSceneBirdPerches(site);
   scene.maxBirds = config.birds;
+  // Reconcile scene-entity state with the site's current plugin set, preserving
+  // live entity state for plugins that stay enabled across the change.
+  scene.plugins = plugins.createSceneEntityState(pluginContext(site), scene.plugins);
 
   // Hosted clients arbitrate settle requests against the scene's prop map.
   for (const client of scene.clients.values()) {
@@ -2746,6 +2764,7 @@ function handleInit(client, message) {
     birds: snapshotBirds(scene),
     chatThrottleMs: getChatThrottle(site),
     pluginModules: plugins.browserModules("widget", pluginContext(site)),
+    pluginEntities: plugins.snapshotSceneEntities(scene.plugins, pluginContext(site)),
   });
 
   if (identity.joined) {
@@ -2804,9 +2823,11 @@ function handleMove(client, message) {
   if (nextX === null) return;
 
   const now = Date.now();
-  if (now - client.lastMoveAt < MOVE_THROTTLE_MS) return;
+  const sinceLastMove = now - client.lastMoveAt;
+  if (sinceLastMove < MOVE_THROTTLE_MS) return;
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
+  const prevX = client.identity.x;
   client.lastMoveAt = now;
   client.identity.x = nextX;
   clearPose(client.identity);
@@ -2814,6 +2835,22 @@ function handleMove(client, message) {
 
   emitIdentityState(client.identity, { exceptConnectionId: client.connectionId });
   maybeFleeBirds(client.scene, nextX);
+
+  // Let scene-entity plugins react to the move (e.g. a figure running into the
+  // ball kicks it). Speed in x-units/sec drives how plugins respond.
+  const scene = client.scene;
+  if (plugins.hasSceneEntities()) {
+    const speed = sinceLastMove > 0 ? Math.abs(nextX - prevX) / (sinceLastMove / 1000) : 0;
+    const context = pluginContext(scene.site, {
+      visitor: pluginVisitor(client.identity),
+      bounds: { minX: MIN_X, maxX: MAX_X },
+      x: nextX,
+      speed,
+    });
+    plugins.runSceneMove(scene.plugins, context, (name, frame) => {
+      broadcast(scene, { type: "plugin", plugin: name, ...frame });
+    });
+  }
 }
 
 function handleAction(client, message) {
@@ -3082,6 +3119,29 @@ const birdTimer = setInterval(() => {
 
 birdTimer.unref?.();
 
+// Advances scene-entity plugins and broadcasts their frames. Plugins emit only
+// while their entity is moving, so an idle square stays silent on the wire.
+const entityTimer = setInterval(() => {
+  if (!plugins.hasSceneEntities()) return;
+  for (const scene of scenes.values()) {
+    if (scene.clients.size === 0) continue;
+    const figures = [];
+    for (const identity of scene.identities.values()) {
+      if (identity.joined) figures.push({ x: identity.x });
+    }
+    const context = pluginContext(scene.site, {
+      figures,
+      bounds: { minX: MIN_X, maxX: MAX_X },
+      dtMs: ENTITY_TICK_INTERVAL_MS,
+    });
+    plugins.tickSceneEntities(scene.plugins, context, (name, frame) => {
+      broadcast(scene, { type: "plugin", plugin: name, ...frame });
+    });
+  }
+}, ENTITY_TICK_INTERVAL_MS);
+
+entityTimer.unref?.();
+
 const inactiveTimer = setInterval(() => {
   sweepInactiveIdentities(Date.now());
 }, INACTIVE_CHECK_INTERVAL_MS);
@@ -3136,6 +3196,7 @@ wss.on("connection", (ws, req) => {
 wss.on("close", () => {
   clearInterval(heartbeatTimer);
   clearInterval(birdTimer);
+  clearInterval(entityTimer);
   clearInterval(inactiveTimer);
 });
 
