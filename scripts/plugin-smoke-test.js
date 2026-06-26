@@ -1,12 +1,85 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
+const net = require("net");
 const path = require("path");
+const { spawn } = require("child_process");
 const WebSocket = require("ws");
 
-const HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
-const WS_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
+// `let` so the self-contained harness can repoint them at a spawned server.
+let HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
+let WS_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
+let DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
+
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForHealth(origin, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${origin}/healthz`);
+      if (res.ok) return;
+    } catch {
+      // not up yet
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("managed server did not become healthy in time");
+}
+
+// Spawn a server with the test-feature contract fixture injected via
+// TOWNSQUARE_EXTRA_PLUGINS, so the plugin contract is exercised end-to-end.
+async function startManagedServer() {
+  const port = await findFreePort();
+  const host = "127.0.0.1";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "townsquare-plugin-smoke-"));
+  const httpOrigin = `http://${host}:${port}`;
+  const fixture = path.join(__dirname, "..", "server", "fixtures", "feature-plugin.js");
+
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+    env: {
+      ...process.env,
+      HOST: host,
+      PORT: String(port),
+      DATA_DIR: dataDir,
+      ALLOWED_ORIGINS: httpOrigin,
+      MIN_HUMAN_SAY_MS: "0",
+      TOWNSQUARE_EXTRA_PLUGINS: fixture,
+    },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+
+  HTTP_ORIGIN = httpOrigin;
+  WS_URL = `ws://${host}:${port}/live`;
+  DATA_DIR = dataDir;
+
+  try {
+    await waitForHealth(httpOrigin);
+  } catch (error) {
+    child.kill("SIGKILL");
+    throw error;
+  }
+
+  return () => {
+    child.kill("SIGTERM");
+    try {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+  };
+}
 
 async function post(pathname, body) {
   const response = await fetch(`${HTTP_ORIGIN}${pathname}`, {
@@ -35,6 +108,16 @@ function connect(siteKey) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function waitForValue(read, predicate, message, { timeout = 2500, interval = 50 } = {}) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const value = read();
+    if (predicate(value)) return value;
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  throw new Error(message);
 }
 
 async function main() {
@@ -75,15 +158,37 @@ async function main() {
     "plugin action did not broadcast updated visitor data",
   );
 
-  const persisted = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "sites.json"), "utf8"));
-  const savedSite = persisted.sites.find((site) => site.siteKey === siteKey);
+  // Registry writes are debounced (~1s), so poll for the eventual persist
+  // rather than reading the file immediately.
+  const savedSite = await waitForValue(
+    () => {
+      try {
+        const persisted = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "sites.json"), "utf8"));
+        return persisted.sites.find((site) => site.siteKey === siteKey);
+      } catch {
+        return null;
+      }
+    },
+    (site) => site?.plugins?.["test-feature"]?.hat === "top-hat",
+    "plugin data was not persisted",
+  );
   assert(savedSite?.plugins?.["test-feature"]?.hat === "top-hat", "plugin data was not persisted");
 
   visitor.ws.close();
   console.log("Plugin smoke test passed.");
 }
 
-main().catch((error) => {
-  console.error(error.message);
+async function run() {
+  const external = Boolean(process.env.TOWNSQUARE_HTTP_ORIGIN);
+  const cleanup = external ? null : await startManagedServer();
+  try {
+    await main();
+  } finally {
+    cleanup?.();
+  }
+}
+
+run().catch((error) => {
+  console.error(error.stack || error.message);
   process.exitCode = 1;
 });

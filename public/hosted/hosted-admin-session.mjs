@@ -1,9 +1,11 @@
 /**
  * Shared login + polling runtime for the site-admin pages (the settings
- * dashboard and the standalone chat thread). Both authenticate with the same
- * admin token, store it under the same key, and poll `/api/admin/site` for a
- * fresh snapshot, so that flow lives here and each page supplies only its own
- * `onRender` and a couple of cleanup hooks.
+ * dashboard and the standalone chat thread). The admin token is used only once,
+ * to bootstrap a login: the server exchanges it for an HttpOnly session cookie,
+ * and every subsequent `/api/admin/site` and `/api/admin/action` request
+ * authenticates via that cookie. The raw token is never persisted in storage;
+ * we keep only the (non-secret) siteKey so a returning visitor with a valid
+ * cookie skips the login screen.
  */
 
 import { createAutoRefresh, createCredentialStore, createStatusSetter, postJson } from "./hosted-common.mjs";
@@ -45,9 +47,11 @@ export function createAdminSession({
   function readStoredCredentials() {
     const stored = credentialStore.read();
     const value = stored?.value;
-    if (value && typeof value.adminToken === "string") {
+    // Only the non-secret siteKey is persisted; auth rides on the HttpOnly
+    // cookie. (Older entries may also carry a token field — it is ignored.)
+    if (value && typeof value.siteKey === "string" && value.siteKey) {
       rememberMe = stored.remembered;
-      return { siteKey: value.siteKey || "", adminToken: value.adminToken };
+      return { siteKey: value.siteKey, adminToken: "" };
     }
     return { siteKey: "", adminToken: "" };
   }
@@ -67,7 +71,7 @@ export function createAdminSession({
   }
 
   function storeCredentials() {
-    credentialStore.save({ siteKey, adminToken }, rememberMe);
+    credentialStore.save({ siteKey }, rememberMe);
   }
 
   function clearCredentials() {
@@ -95,13 +99,16 @@ export function createAdminSession({
   async function loadSite({ silent = false } = {}) {
     const seq = ++loadSeq;
 
-    if (!adminToken) {
+    // Need a known site (cookie auth) or a token to bootstrap a session.
+    if (!siteKey && !adminToken) {
       showLogin();
       return;
     }
 
-    if (!siteKey) {
-      const login = await postJson("/api/admin/login", { adminToken });
+    // Bootstrap: trade the one-time token for a session cookie + the siteKey,
+    // then drop the raw token so it is never stored or resent.
+    if (adminToken) {
+      const login = await postJson("/api/admin/login", { adminToken, rememberMe });
       if (seq !== loadSeq) return;
       if (!login.ok) {
         clearCredentials();
@@ -109,14 +116,15 @@ export function createAdminSession({
         return;
       }
       siteKey = login.body.site.siteKey;
+      adminToken = "";
     }
 
-    const result = await postJson("/api/admin/site", { siteKey, adminToken });
+    const result = await postJson("/api/admin/site", { siteKey });
     if (seq !== loadSeq) return;
     if (!result.ok) {
       if (result.status === 403) {
         clearCredentials();
-        showLogin("That admin token no longer works.", true);
+        showLogin("Your admin session expired. Paste your admin token to sign back in.", true);
         return;
       }
       if (!silent) {
@@ -131,7 +139,7 @@ export function createAdminSession({
   }
 
   async function action(name, data = {}) {
-    const result = await postJson("/api/admin/action", { siteKey, adminToken, action: name, ...data });
+    const result = await postJson("/api/admin/action", { siteKey, action: name, ...data });
     if (!result.ok) {
       onError?.(result.body.error || "Action failed.");
       return false;
@@ -144,7 +152,6 @@ export function createAdminSession({
   async function pluginAction(plugin, name, input = {}) {
     const result = await postJson("/api/admin/action", {
       siteKey,
-      adminToken,
       plugin,
       action: name,
       input,
@@ -175,9 +182,11 @@ export function createAdminSession({
     }
   });
 
-  signOut?.addEventListener("click", () => {
+  signOut?.addEventListener("click", async () => {
+    autoRefresh.stop();
+    await postJson("/api/admin/logout", {});
     clearCredentials();
-    showLogin("Signed out. Your token was forgotten on this device.");
+    showLogin("Signed out. Your admin session was ended on this device.");
   });
 
   function start() {
@@ -186,7 +195,7 @@ export function createAdminSession({
     adminToken = credentials.adminToken;
     if (rememberMeEl) rememberMeEl.checked = rememberMe;
 
-    if (adminToken) {
+    if (siteKey || adminToken) {
       loadSite();
     } else {
       showLogin();

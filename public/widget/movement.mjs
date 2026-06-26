@@ -6,6 +6,7 @@ import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } f
 import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
 import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
+import { MSG, GESTURE } from "../shared/protocol.mjs";
 import { clamp } from "./math.mjs";
 import {
   clearPresencePose,
@@ -103,7 +104,7 @@ export function maybeRequestPropSettle(ctx, now) {
   if (socket.readyState !== WebSocket.OPEN) return;
 
   self.settleRequested = true;
-  socket.send(JSON.stringify({ type: "settle", propId: prop.id }));
+  socket.send(JSON.stringify({ type: MSG.SETTLE, propId: prop.id }));
 }
 
 /**
@@ -121,7 +122,7 @@ export function maybeSendMove(ctx) {
 
   self.lastSentX = self.x;
   self.lastSendAt = now;
-  socket.send(JSON.stringify({ type: "move", x: self.x }));
+  socket.send(JSON.stringify({ type: MSG.MOVE, x: self.x }));
 }
 
 // Block re-jumping until the current jump animation finishes.
@@ -167,7 +168,7 @@ export function triggerJump(ctx) {
   playJump(ctx.self.avatar);
 
   if (ctx.socket.readyState === WebSocket.OPEN) {
-    ctx.socket.send(JSON.stringify({ type: "action", action: "jump" }));
+    ctx.socket.send(JSON.stringify({ type: MSG.ACTION, action: GESTURE.JUMP }));
   }
 }
 
@@ -205,7 +206,7 @@ export function triggerHighFive(ctx) {
     clearPresencePose(peer, ctx.sceneProps);
     playHighFivePair(ctx.self, peer, standUpFirst);
     if (ctx.socket.readyState === WebSocket.OPEN) {
-      ctx.socket.send(JSON.stringify({ type: "action", action: "high-five", targetId: peer.id }));
+      ctx.socket.send(JSON.stringify({ type: MSG.ACTION, action: GESTURE.HIGH_FIVE, targetId: peer.id }));
     }
     return;
   }
@@ -213,7 +214,7 @@ export function triggerHighFive(ctx) {
   clearSelfPoseForAction(ctx);
   playRaisedHand(ctx.self.avatar);
   if (ctx.socket.readyState === WebSocket.OPEN) {
-    ctx.socket.send(JSON.stringify({ type: "action", action: "raise-hand" }));
+    ctx.socket.send(JSON.stringify({ type: MSG.ACTION, action: GESTURE.RAISE_HAND }));
   }
 }
 

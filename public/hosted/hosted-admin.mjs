@@ -1,5 +1,5 @@
 import { bindCopy } from "../lib/ui-common.mjs";
-import { createStatusSetter, escapeHtml, formatTime } from "./hosted-common.mjs";
+import { createStatusSetter, el, formatTime, safeLink } from "./hosted-common.mjs";
 import { createAdminSession } from "./hosted-admin-session.mjs";
 import { createAdminPluginRuntime } from "./admin-plugins.mjs";
 import {
@@ -674,7 +674,11 @@ function renderModerationLog(log) {
     row.className = "moderation-log-entry";
     const label = MODERATION_LABELS[entry.action] || entry.action;
     const detail = entry.detail ? ` · ${entry.detail}` : "";
-    row.innerHTML = `<time>${escapeHtml(formatTime(entry.at))}</time> <span>${escapeHtml(`${label}${detail}`)}</span>`;
+    row.append(
+      el("time", { text: formatTime(entry.at) }),
+      " ",
+      el("span", { text: `${label}${detail}` }),
+    );
     moderationLog.appendChild(row);
   }
 }
@@ -690,10 +694,10 @@ function buildOwnerRow(owner, index) {
   const savedName = String(owner.displayName || "").trim();
   const head = document.createElement("div");
   head.className = "owner-row__head";
-  head.innerHTML = `
-    <strong>${escapeHtml(savedName || `Owner ${index + 1}`)} 👑</strong>
-    <span>${owner.online ? "online now" : "offline"}</span>
-  `;
+  head.append(
+    el("strong", { text: `${savedName || `Owner ${index + 1}`} 👑` }),
+    el("span", { text: owner.online ? "online now" : "offline" }),
+  );
 
   const editor = document.createElement("form");
   editor.className = "owner-editor";
@@ -824,14 +828,14 @@ function renderPluginToggles(list) {
   for (const plugin of items) {
     const row = document.createElement("div");
     row.className = "hosted-section";
-    row.innerHTML = `
-      <label class="hosted-toggle">
-        <input type="checkbox" ${plugin.enabled ? "checked" : ""} />
-        <span>${escapeHtml(plugin.label)}</span>
-      </label>
-      ${plugin.description ? `<p class="hosted-note">${escapeHtml(plugin.description)}</p>` : ""}
-    `;
-    const input = row.querySelector("input");
+
+    const input = el("input", { type: "checkbox" });
+    input.checked = Boolean(plugin.enabled);
+    row.append(el("label", { class: "hosted-toggle" }, [input, el("span", { text: plugin.label })]));
+    if (plugin.description) {
+      row.append(el("p", { class: "hosted-note", text: plugin.description }));
+    }
+
     input.addEventListener("change", () => {
       session.action("setPluginEnabled", { name: plugin.name, enabled: input.checked });
     });
@@ -845,20 +849,27 @@ function render(data) {
 
   syncSiteDetailsFromServer();
 
-  metaEl.innerHTML = `
-    <dl>
-      <div><dt>Site</dt><dd>${escapeHtml(currentSite.name)}</dd></div>
-      <div><dt>Website</dt><dd>${escapeHtml(currentSite.origin)}</dd></div>
-      <div><dt>Also allows</dt><dd>${escapeHtml((currentSite.allowedOrigins || []).filter((origin) => origin !== currentSite.origin).join(", ") || "—")}</dd></div>
-      <div><dt>Status</dt><dd>${currentSite.disabled ? "Disabled" : "Enabled"}</dd></div>
-      <div><dt>Verified</dt><dd>${formatTime(currentSite.verifiedAt, "Not seen yet")}</dd></div>
-      <div><dt>Last loaded on</dt><dd>${currentSite.lastSeenUrl ? `<a href="${escapeHtml(currentSite.lastSeenUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(currentSite.lastSeenUrl)}</a>` : "—"}</dd></div>
-      <div><dt>Messages</dt><dd>${currentSite.messageCount ?? 0}</dd></div>
-      <div><dt>Last message</dt><dd>${formatTime(currentSite.lastMessageAt)}</dd></div>
-      <div><dt>Active visitors</dt><dd>${scene.activeVisitors} / ${currentSite.connectionLimit ?? 100}</dd></div>
-      <div><dt>Blocked</dt><dd>${currentSite.blockedCount}</dd></div>
-    </dl>
-  `;
+  const otherOrigins = (currentSite.allowedOrigins || [])
+    .filter((origin) => origin !== currentSite.origin)
+    .join(", ") || "—";
+  const metaRow = (term, value) => {
+    const dd = el("dd");
+    if (typeof value === "string") dd.textContent = value;
+    else dd.append(value);
+    return el("div", {}, [el("dt", { text: term }), dd]);
+  };
+  metaEl.replaceChildren(el("dl", {}, [
+    metaRow("Site", String(currentSite.name)),
+    metaRow("Website", String(currentSite.origin)),
+    metaRow("Also allows", otherOrigins),
+    metaRow("Status", currentSite.disabled ? "Disabled" : "Enabled"),
+    metaRow("Verified", formatTime(currentSite.verifiedAt, "Not seen yet")),
+    metaRow("Last loaded on", currentSite.lastSeenUrl ? safeLink(currentSite.lastSeenUrl) : "—"),
+    metaRow("Messages", String(currentSite.messageCount ?? 0)),
+    metaRow("Last message", formatTime(currentSite.lastMessageAt)),
+    metaRow("Active visitors", `${scene.activeVisitors} / ${currentSite.connectionLimit ?? 100}`),
+    metaRow("Blocked", String(currentSite.blockedCount)),
+  ]));
 
   if (document.activeElement !== snippetEl) {
     snippetEl.value = data.embedSnippet;
@@ -891,12 +902,11 @@ function render(data) {
     const visitorLabel = visitorName || `Visitor ${visitor.id}`;
     const ownerTag = visitor.isOwner ? " 👑 owner" : "";
     const visitorMeta = visitorName ? `Visitor ${visitor.id} · ` : "";
-    row.innerHTML = `
-      <div>
-        <strong>${escapeHtml(visitorLabel)}${ownerTag}</strong>
-        <span>${escapeHtml(visitorMeta)}${visitor.clientCount} tab${visitor.clientCount === 1 ? "" : "s"} connected</span>
-      </div>
-    `;
+    const tabs = `${visitor.clientCount} tab${visitor.clientCount === 1 ? "" : "s"} connected`;
+    row.append(el("div", {}, [
+      el("strong", { text: `${visitorLabel}${ownerTag}` }),
+      el("span", { text: `${visitorMeta}${tabs}` }),
+    ]));
 
     const owner = document.createElement("button");
     owner.type = "button";

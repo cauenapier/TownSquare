@@ -6,9 +6,43 @@ const { WebSocketServer } = require("ws");
 const { ensurePluginData, getPluginData, setPluginData } = require("./server/plugin-data");
 const { plugins } = require("./server/plugins");
 const { registerPublicPlugins } = require("./plugins");
+const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
+const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
+const { createPlausibleProxy } = require("./server/plausible");
+const { createStaticFiles } = require("./server/static-files");
+const { makeBucketStore } = require("./server/rate-limit");
+const { createSitesWriter } = require("./server/sites-store");
+const {
+  clampPosition,
+  sanitizeBrowserId,
+  sanitizeBrowserSecret,
+  sanitizeBlockedWords,
+  parseOptionalEmail,
+} = require("./server/sanitize");
+
+// Browser admin sessions: a valid token login mints one of these and the id is
+// returned in an HttpOnly cookie, so the raw token is not persisted in JS.
+const adminSessions = createAdminSessionStore();
 
 loadEnvFile();
-registerPublicPlugins();
+// Defense-in-depth: registration is already isolated per-plugin, but never let
+// a registration failure prevent the server process from starting.
+try {
+  registerPublicPlugins();
+} catch (error) {
+  console.error("Plugin registration failed; continuing without plugins", error);
+}
+
+// Optional plugin injection: TOWNSQUARE_EXTRA_PLUGINS is a comma/space-separated
+// list of module paths that self-register via registerPlugin on require. Used by
+// the plugin smoke test and by private plugin bundles loaded at deploy time.
+for (const entry of String(process.env.TOWNSQUARE_EXTRA_PLUGINS || "").split(/[,\s]+/).filter(Boolean)) {
+  try {
+    require(path.resolve(entry));
+  } catch (error) {
+    console.error(`Failed to load extra plugin '${entry}'`, error);
+  }
+}
 
 /**
  * Tiny demo server for the first playable TownSquare slice.
@@ -60,15 +94,11 @@ const DEFAULT_DEV_ORIGINS = new Set([
 ]);
 const MAX_SITE_CONNECTION_LIMIT = 1000;
 const DEFAULT_CONNECTION_LIMIT = Math.min(MAX_SITE_CONNECTION_LIMIT, Math.max(1, readLimit("MAX_CONNECTIONS", 100)));
-const MAX_BROWSER_ID_LEN = 80;
-const MAX_BROWSER_SECRET_LEN = 64;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
 const MAX_READING_URL_LEN = 240;
 const MAX_SITE_NAME_LEN = 80;
-const MAX_EMAIL_LEN = 254;
 const MAX_ORIGIN_LEN = 240;
 const MAX_PAGE_URL_LEN = 512;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const IP_MAX_IDENTITIES = readLimit("IP_MAX_IDENTITIES", 2);
@@ -79,6 +109,9 @@ const IP_SYNC_ACTION_ROUNDS = readLimit("IP_SYNC_ACTION_ROUNDS", 3);
 const IP_SYNC_ACTION_WINDOW_MS = readLimit("IP_SYNC_ACTION_WINDOW_MS", 10000);
 const IP_SYNC_ACTION_TOLERANCE_MS = readLimit("IP_SYNC_ACTION_TOLERANCE_MS", 250);
 const IP_QUARANTINE_MS = readLimit("IP_QUARANTINE_MS", 10 * 60 * 1000);
+// Hard cap on the per-(scene, IP) activity map so a flood of distinct keys
+// (including spoofed x-real-ip behind a proxy) can't grow it without bound.
+const MAX_IP_ACTIVITY_ENTRIES = readLimit("MAX_IP_ACTIVITY_ENTRIES", 50000);
 const IP_JOIN_WINDOW_MS = 60 * 1000;
 const IP_EVENT_WINDOW_MS = 10 * 1000;
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
@@ -86,8 +119,6 @@ const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
 const DEFAULT_CHAT_THROTTLE_MS = 500;
 const MAX_CHAT_THROTTLE_MS = 30000;
-const MAX_BLOCKED_WORDS = 60;
-const MAX_BLOCKED_WORD_LEN = 40;
 const MAX_MODERATION_LOG = 50;
 const RECONNECT_GRACE_MS = 1500;
 const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 * 60 * 1000);
@@ -111,8 +142,6 @@ const BIRD_FIRST_SPAWN_MS = Number(process.env.BIRD_FIRST_SPAWN_MS || 500);
 // Wire-protocol limits and the character palette, shared with the widget.
 // Populated from public/shared/shared-constants.mjs in startServer (the server is
 // CommonJS, so the shared ES module is loaded via dynamic import).
-let MIN_X;
-let MAX_X;
 let MAX_MESSAGE_LEN;
 let MAX_DISPLAY_NAME_LEN;
 let MAX_READING_LABEL_LEN;
@@ -180,18 +209,23 @@ function parseHttpOrigin(value) {
 let PROPS_BY_ID = new Map();
 /** @type {Array<import("./public/shared/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
-let DEFAULT_SITE_SCENE_CONFIG = { benches: 2, trees: 1, lamps: 1, birds: 3 };
-let DEFAULT_SITE_STYLE = {
-  light: { scene: "#e4e2dd", page: "#efede9", surface: "#fdf8f4", ink: "#2a2926", accent: "#c8641f", other: "#26241f", ground: "rgba(42, 41, 38, 0.16)" },
-  dark: { scene: "#242521", page: "#181917", surface: "#24231f", ink: "#f2eee6", accent: "#df8a43", other: "#ddd7cc", ground: "rgba(242, 238, 230, 0.18)" },
-};
-let sanitizeSceneConfig = (config) => ({ ...DEFAULT_SITE_SCENE_CONFIG, ...(config || {}) });
-let sanitizeConnections = (connections) => (Array.isArray(connections) ? connections : []);
-let sanitizeSiteStyle = (style) => (style && (style.light || style.dark) ? style : { ...DEFAULT_SITE_STYLE, light: { ...DEFAULT_SITE_STYLE.light, ...(style || {}) } });
-let buildSceneProps = () => [];
-let buildBirdPerches = () => [];
-let buildSiteCss = () => "";
-/** @type {(prop: import("./public/shared/site-config.mjs").SceneProp, x: number) => boolean} */
+// Shared realtime protocol vocabulary, assigned from protocol.mjs in
+// loadSharedModules() before the server starts listening.
+let MSG;
+let GESTURE;
+let BIRD_ACTION;
+// Assigned synchronously from site-config-core.mjs once loadSharedModules()
+// resolves — before server.listen(), so requests never see them unset. (No
+// stub re-implementations: those were a second, divergent source of truth.)
+let DEFAULT_SITE_SCENE_CONFIG;
+let DEFAULT_SITE_STYLE;
+let sanitizeSceneConfig;
+let sanitizeConnections;
+let sanitizeSiteStyle;
+let buildSceneProps;
+let buildBirdPerches;
+let buildSiteCss;
+/** @type {(prop: import("./public/shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 /** @type {(storedWorld: object, siteCount: number) => object} */
@@ -200,17 +234,6 @@ let mapWorld;
 let normalizeOrigin;
 let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
 let getMatchingWwwOrigin = () => null;
-let originUsesMatchingWwwPair = () => false;
-
-const MIME_TYPES = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-};
 
 function parseAllowedOrigins(value) {
   return new Set(
@@ -305,7 +328,7 @@ function leadingZeroBits(buffer) {
 function issuePowChallenge(client) {
   const salt = crypto.randomBytes(16).toString("hex");
   client.challenge = { salt, difficulty: POW_DIFFICULTY_BITS };
-  send(client.ws, { type: "challenge", salt, difficulty: POW_DIFFICULTY_BITS });
+  send(client.ws, { type: MSG.CHALLENGE, salt, difficulty: POW_DIFFICULTY_BITS });
 }
 
 function verifyPow(challenge, nonce) {
@@ -364,41 +387,9 @@ function createIdentity(id, browserId, x) {
   };
 }
 
-function clampPosition(x) {
-  if (typeof x !== "number" || Number.isNaN(x)) return null;
-  if (x < 0 || x > 1) return null;
-  return x;
-}
-
-function sanitizeBrowserId(browserId) {
-  if (typeof browserId !== "string") return "";
-  return browserId.slice(0, MAX_BROWSER_ID_LEN).replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-function sanitizeBrowserSecret(browserSecret) {
-  if (typeof browserSecret !== "string") return "";
-  return browserSecret.slice(0, MAX_BROWSER_SECRET_LEN).replace(/[^a-f0-9]/gi, "");
-}
-
 function sanitizeMessage(text) {
   if (typeof text !== "string") return "";
   return text.trim().slice(0, MAX_MESSAGE_LEN);
-}
-
-/** A site's forbidden-word list: trimmed, lowercased, de-duped, capped. */
-function sanitizeBlockedWords(input) {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set();
-  const words = [];
-  for (const raw of input) {
-    if (typeof raw !== "string") continue;
-    const word = raw.trim().toLowerCase().slice(0, MAX_BLOCKED_WORD_LEN);
-    if (!word || seen.has(word)) continue;
-    seen.add(word);
-    words.push(word);
-    if (words.length >= MAX_BLOCKED_WORDS) break;
-  }
-  return words;
 }
 
 /** Per-site slow-mode cooldown, clamped to a sane range; falls back to default. */
@@ -596,202 +587,6 @@ function sanitizeSiteName(name, origin) {
   }
 }
 
-function parseOptionalEmail(email) {
-  const clean = typeof email === "string" ? email.trim().slice(0, MAX_EMAIL_LEN) : "";
-  if (!clean) return { ok: true, email: null };
-  if (!EMAIL_RE.test(clean)) return { ok: false, email: null };
-  return { ok: true, email: clean };
-}
-
-function createToken(prefix, bytes = 18) {
-  return `${prefix}_${crypto.randomBytes(bytes).toString("base64url")}`;
-}
-
-function hashAdminToken(adminToken, salt = crypto.randomBytes(16).toString("base64url")) {
-  const digest = crypto.createHash("sha256").update(`${salt}:${adminToken}`).digest("base64url");
-  return `sha256:${salt}:${digest}`;
-}
-
-function tokensMatch(expected, provided) {
-  const a = Buffer.from(String(expected || ""));
-  const b = Buffer.from(String(provided || ""));
-  if (a.length === 0 || a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-function adminTokenMatches(site, adminToken) {
-  const token = typeof adminToken === "string" ? adminToken.trim() : "";
-  if (!site || !token) return false;
-
-  if (site.adminTokenHash) {
-    const [algorithm, salt] = String(site.adminTokenHash).split(":");
-    if (algorithm !== "sha256" || !salt) return false;
-    return tokensMatch(site.adminTokenHash, hashAdminToken(token, salt));
-  }
-
-  return tokensMatch(site.adminToken, token);
-}
-
-function getContentType(filePath) {
-  return MIME_TYPES[path.extname(filePath)] || "application/octet-stream";
-}
-
-function getStaticHeaders(filePath) {
-  const headers = {
-    "cache-control": "no-store",
-    "content-type": getContentType(filePath),
-  };
-
-  if ([".css", ".mjs"].includes(path.extname(filePath))) {
-    headers["access-control-allow-origin"] = "*";
-  }
-
-  return headers;
-}
-
-function escapeHtmlAttr(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function plausibleScriptPath() {
-  if (!PLAUSIBLE_SCRIPT_SRC.startsWith("/")) return null;
-  return PLAUSIBLE_SCRIPT_SRC.split("?")[0];
-}
-
-function shouldInjectPlausible(filePath) {
-  return Boolean(PLAUSIBLE_DOMAIN && path.extname(filePath) === ".html");
-}
-
-function buildPlausibleSnippet() {
-  const attrs = [
-    "defer",
-    `data-domain="${escapeHtmlAttr(PLAUSIBLE_DOMAIN)}"`,
-    `src="${escapeHtmlAttr(PLAUSIBLE_SCRIPT_SRC)}"`,
-  ];
-  if (PLAUSIBLE_API_PATH) {
-    attrs.splice(2, 0, `data-api="${escapeHtmlAttr(PLAUSIBLE_API_PATH)}"`);
-  }
-  return `<script ${attrs.join(" ")}></script>`;
-}
-
-function injectPlausibleIntoHtml(html) {
-  const snippet = buildPlausibleSnippet();
-  const headClose = html.indexOf("</head>");
-  if (headClose === -1) return html;
-  return `${html.slice(0, headClose)}    ${snippet}\n  ${html.slice(headClose)}`;
-}
-
-async function proxyPlausibleScript(req, res) {
-  try {
-    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/js/script.js`, {
-      headers: { "user-agent": req.headers["user-agent"] || "TownSquare" },
-    });
-    if (!response.ok) {
-      res.writeHead(response.status, { "content-type": "text/plain; charset=utf-8" });
-      res.end("upstream error");
-      return;
-    }
-
-    res.writeHead(200, {
-      "content-type": response.headers.get("content-type") || "application/javascript; charset=utf-8",
-      "cache-control": "public, max-age=86400, immutable",
-    });
-    res.end(Buffer.from(await response.arrayBuffer()));
-  } catch (error) {
-    console.warn(`Plausible script proxy failed: ${error.message}`);
-    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
-    res.end("bad gateway");
-  }
-}
-
-function proxyPlausibleEvent(req, res) {
-  const chunks = [];
-
-  req.on("data", (chunk) => {
-    chunks.push(chunk);
-    if (chunks.reduce((size, part) => size + part.length, 0) > 4096) {
-      res.writeHead(413, { "content-type": "text/plain; charset=utf-8" });
-      res.end("payload too large");
-      req.destroy();
-    }
-  });
-
-  req.on("end", () => {
-    void forwardPlausibleEvent(req, res, Buffer.concat(chunks));
-  });
-}
-
-async function forwardPlausibleEvent(req, res, body) {
-  try {
-    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/api/event`, {
-      method: "POST",
-      headers: {
-        "content-type": req.headers["content-type"] || "application/json",
-        "user-agent": req.headers["user-agent"] || "",
-        "x-forwarded-for": getRequestIp(req),
-      },
-      body,
-    });
-
-    res.writeHead(response.status, {
-      "content-type": response.headers.get("content-type") || "text/plain; charset=utf-8",
-    });
-    res.end(Buffer.from(await response.arrayBuffer()));
-  } catch (error) {
-    console.warn(`Plausible event proxy failed: ${error.message}`);
-    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
-    res.end("bad gateway");
-  }
-}
-
-function resolvePublicFile(requestUrl, hostHeader) {
-  const url = new URL(requestUrl, `http://${hostHeader}`);
-  if (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname)) {
-    return null;
-  }
-  if (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname)) {
-    return null;
-  }
-  const aliases = new Map([
-    ["/register", "/hosted/register.html"],
-    ["/admin", "/hosted/admin.html"],
-    ["/admin/chat", "/hosted/chat.html"],
-    ["/service-admin", "/hosted/service-admin.html"],
-    ["/map", "/map.html"],
-    ["/dev", "/dev/dev.html"],
-    ["/walk-sandbox", "/dev/walk-sandbox.html"],
-    ["/staging", "/staging.html"],
-  ]);
-  const pathname = aliases.get(url.pathname) || url.pathname;
-  const normalized = path.normalize(pathname).replace(/^\.+/, "");
-
-  // Candidate files are tried in order: the core public dir first, then the
-  // optional plugin assets overlay. Each must stay inside its own root.
-  const candidates = [];
-  const corePath = path.join(PUBLIC_DIR, normalized);
-  if (corePath.startsWith(PUBLIC_DIR)) candidates.push(corePath);
-  if (PLUGIN_ASSETS_DIR) {
-    const pluginPath = path.join(PLUGIN_ASSETS_DIR, normalized);
-    if (pluginPath.startsWith(PLUGIN_ASSETS_DIR)) candidates.push(pluginPath);
-  }
-
-  return candidates.length > 0 ? candidates : null;
-}
-
-function isDevToolsRequest(pathname) {
-  return pathname === "/dev"
-    || pathname === "/walk-sandbox"
-    || pathname.startsWith("/dev/");
-}
-
-function isStagingPageRequest(pathname) {
-  return pathname === "/staging" || pathname === "/staging.html";
-}
-
 function readJsonBody(req, res, callback, maxBytes = 4096) {
   let raw = "";
 
@@ -820,8 +615,11 @@ function readJsonBody(req, res, callback, maxBytes = 4096) {
   });
 }
 
-function sendJson(res, status, body) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+function sendJson(res, status, body, extraHeaders = null) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    ...(extraHeaders || {}),
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -962,9 +760,82 @@ function buildAdminUrl(req, adminToken) {
   return url.toString();
 }
 
-const registrationsByIp = new Map();
-const adminAuthFailuresByIp = new Map();
-const serviceAdminAuthFailuresByIp = new Map();
+// Cookies are only marked Secure over https, otherwise the browser would drop
+// them on plain-http local dev.
+function requestIsSecure(req) {
+  return getPublicOrigin(req).startsWith("https://");
+}
+
+function buildSessionCookie(id, maxAgeMs, secure) {
+  const attrs = [
+    `${adminSessions.cookieName}=${id}`,
+    "HttpOnly",
+    "SameSite=Strict",
+    "Path=/api/admin",
+    `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+}
+
+function clearSessionCookie(secure) {
+  const attrs = [
+    `${adminSessions.cookieName}=`,
+    "HttpOnly",
+    "SameSite=Strict",
+    "Path=/api/admin",
+    "Max-Age=0",
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+}
+
+function readSessionFromCookie(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  return adminSessions.get(cookies[adminSessions.cookieName]);
+}
+
+/**
+ * Authenticate an admin request, preferring an HttpOnly session cookie over the
+ * bootstrap token in the body. On a successful token bootstrap a fresh session
+ * is minted and a Set-Cookie header is returned so the raw token is not needed
+ * (nor resent) again.
+ *
+ * @returns {{ site: any, tokenPresented: boolean, setCookie: string|null }|null}
+ */
+function resolveAdminRequest(req, body) {
+  const requestedKey = String(body.siteKey || "");
+  const token = String(body.adminToken || "").trim();
+
+  // 1) Existing session cookie. The cookie's site must match an explicitly
+  //    requested siteKey so a session can't be aimed at another site.
+  const session = readSessionFromCookie(req);
+  if (session) {
+    const site = sitesByKey.get(session.siteKey);
+    if (site && (!requestedKey || requestedKey === session.siteKey)) {
+      return { site, tokenPresented: token.length > 0, setCookie: null };
+    }
+  }
+
+  // 2) Bootstrap token in the body. Mint a session cookie on success.
+  if (token) {
+    const site = getAdminSiteByCredentials(requestedKey, token);
+    if (site) {
+      const created = adminSessions.create(site.siteKey, { remember: Boolean(body.rememberMe) });
+      return {
+        site,
+        tokenPresented: true,
+        setCookie: buildSessionCookie(created.id, created.maxAgeMs, requestIsSecure(req)),
+      };
+    }
+  }
+
+  return null;
+}
+
+const registrationsByIp = makeBucketStore();
+const adminAuthFailuresByIp = makeBucketStore();
+const serviceAdminAuthFailuresByIp = makeBucketStore();
 const activityByIpAndScene = new Map();
 
 function getRequestIp(req) {
@@ -978,11 +849,37 @@ function getIpActivity(scene, ip, now = Date.now()) {
   const key = `${scene.key}\0${ip}`;
   let activity = activityByIpAndScene.get(key);
   if (!activity) {
+    if (activityByIpAndScene.size >= MAX_IP_ACTIVITY_ENTRIES) {
+      enforceIpActivityCap(now);
+    }
     activity = { lastSeenAt: now, budgets: new Map() };
     activityByIpAndScene.set(key, activity);
   }
   activity.lastSeenAt = now;
   return activity;
+}
+
+// Bound activityByIpAndScene so a flood of distinct (scene, spoofed-IP) keys —
+// including quarantined ones, which pruneIpActivity deliberately keeps — can't
+// grow it without limit. Drop stale entries first, then, if still at the cap,
+// evict the least-recently-seen entries (preferring un-quarantined ones) down
+// to 90% in a single batch so this stays amortized cheap per insert.
+function enforceIpActivityCap(now = Date.now()) {
+  pruneIpActivity(now);
+  const target = Math.floor(MAX_IP_ACTIVITY_ENTRIES * 0.9);
+  if (activityByIpAndScene.size <= target) return;
+
+  const byAge = Array.from(activityByIpAndScene.entries())
+    .sort((a, b) => a[1].lastSeenAt - b[1].lastSeenAt);
+  for (const [key, activity] of byAge) {
+    if (activityByIpAndScene.size <= target) break;
+    if ((activity.quarantinedUntil || 0) > now) continue;
+    activityByIpAndScene.delete(key);
+  }
+  for (const [key] of byAge) {
+    if (activityByIpAndScene.size <= target) break;
+    activityByIpAndScene.delete(key);
+  }
 }
 
 function consumeIpBudget(client, type, limit, windowMs, now = Date.now()) {
@@ -1114,51 +1011,51 @@ function allowIdentityInit(client, message) {
   return true;
 }
 
-function recentBucket(map, key, limit) {
-  if (limit <= 0) return [];
-
-  const now = Date.now();
-  const cutoff = now - 60 * 60 * 1000;
-
-  if (map.size > 1000) {
-    for (const [bucketKey, timestamps] of map) {
-      if (timestamps.every((at) => at <= cutoff)) map.delete(bucketKey);
-    }
-  }
-
-  const recent = (map.get(key) || []).filter((at) => at > cutoff);
-  map.set(key, recent);
-  return recent;
-}
-
 function isRegistrationAllowed(ip) {
-  if (REGISTRATIONS_PER_HOUR <= 0) return true;
-
-  const recent = recentBucket(registrationsByIp, ip, REGISTRATIONS_PER_HOUR);
-
-  if (recent.length >= REGISTRATIONS_PER_HOUR) return false;
-
-  recent.push(Date.now());
-  return true;
+  return registrationsByIp.take(ip, REGISTRATIONS_PER_HOUR);
 }
 
-function isAuthAttemptAllowed(map, ip) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return true;
-  return recentBucket(map, ip, AUTH_FAILURES_PER_HOUR).length < AUTH_FAILURES_PER_HOUR;
+function isAuthAttemptAllowed(store, ip) {
+  return store.under(ip, AUTH_FAILURES_PER_HOUR);
 }
 
-function recordAuthFailure(map, ip) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return;
-  recentBucket(map, ip, AUTH_FAILURES_PER_HOUR).push(Date.now());
+function recordAuthFailure(store, ip) {
+  store.record(ip, AUTH_FAILURES_PER_HOUR);
 }
 
-function clearAuthFailures(map, ip) {
-  map.delete(ip);
+function clearAuthFailures(store, ip) {
+  store.clear(ip);
 }
 
 function sendAuthThrottled(res) {
   sendJson(res, 429, { error: "Too many failed sign-in attempts. Try again later." });
 }
+
+// Per-IP hourly budget for the first-party Plausible event relay, so it can't
+// be abused to amplify traffic at the upstream using this server's address.
+const plausibleEventsByIp = makeBucketStore();
+const PLAUSIBLE_EVENTS_PER_HOUR = readLimit("PLAUSIBLE_EVENTS_PER_HOUR", 600);
+function isPlausibleEventAllowed(ip) {
+  return plausibleEventsByIp.take(ip, PLAUSIBLE_EVENTS_PER_HOUR);
+}
+
+const plausible = createPlausibleProxy({
+  domain: PLAUSIBLE_DOMAIN,
+  upstream: PLAUSIBLE_UPSTREAM,
+  scriptSrc: PLAUSIBLE_SCRIPT_SRC,
+  apiPath: PLAUSIBLE_API_PATH,
+  getRequestIp,
+  isEventAllowed: isPlausibleEventAllowed,
+});
+
+const staticFiles = createStaticFiles({
+  publicDir: PUBLIC_DIR,
+  pluginAssetsDir: PLUGIN_ASSETS_DIR,
+  devToolsEnabled: DEV_TOOLS_ENABLED,
+  stagingPageEnabled: STAGING_PAGE_ENABLED,
+  shouldInjectHtml: (filePath) => plausible.shouldInject(filePath),
+  injectHtml: (html) => plausible.injectIntoHtml(html),
+});
 
 function handleRegisterSite(req, res) {
   readJsonBody(req, res, (body) => {
@@ -1289,7 +1186,7 @@ function saveMapWorld(nextWorld) {
   mapWorld = nextWorld;
 }
 
-function sendAdminSite(req, res, site, adminToken) {
+function sendAdminSite(req, res, site, adminToken, setCookie = null) {
   if (!site) {
     sendJson(res, 403, { error: "Invalid site key or admin token." });
     return;
@@ -1298,13 +1195,15 @@ function sendAdminSite(req, res, site, adminToken) {
   const scene = getScene(site.siteKey, site);
   const panel = {
     site: publicSite(site),
-    adminUrl: buildAdminUrl(req, adminToken),
+    // The recovery link embeds the raw token, so only surface it on a request
+    // that actually presented it (login/bootstrap), never on cookie-auth polls.
+    ...(adminToken ? { adminUrl: buildAdminUrl(req, adminToken) } : {}),
     embedSnippet: buildEmbedSnippet(req, site),
     styleSnippet: buildStyleSnippet(site),
     scene: getSceneStats(scene, site),
     owners: getOwners(site, scene),
   };
-  sendJson(res, 200, extendAdminPanel(panel, site));
+  sendJson(res, 200, extendAdminPanel(panel, site), setCookie ? { "set-cookie": setCookie } : null);
 }
 
 function extendAdminPanel(panel, site) {
@@ -1324,14 +1223,18 @@ function handlePostAdminSite(req, res) {
       return;
     }
 
-    const adminToken = String(body.adminToken || "").trim();
-    const site = getAdminSiteByCredentials(String(body.siteKey || ""), adminToken);
-    if (!site) {
-      recordAuthFailure(adminAuthFailuresByIp, ip);
-    } else {
-      clearAuthFailures(adminAuthFailuresByIp, ip);
+    const presentedToken = String(body.adminToken || "").trim();
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      // Only count a token brute-force attempt; an expired/absent cookie alone
+      // is a benign re-auth, not a failed credential guess.
+      if (presentedToken) recordAuthFailure(adminAuthFailuresByIp, ip);
+      sendAdminSite(req, res, null, presentedToken);
+      return;
     }
-    sendAdminSite(req, res, site, adminToken);
+
+    if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
+    sendAdminSite(req, res, resolved.site, presentedToken, resolved.setCookie);
   });
 }
 
@@ -1352,11 +1255,21 @@ function handleAdminLogin(req, res) {
     }
 
     clearAuthFailures(adminAuthFailuresByIp, ip);
+    // Mint a session so subsequent admin requests authenticate via the HttpOnly
+    // cookie and never need to resend the raw token.
+    const created = adminSessions.create(site.siteKey, { remember: Boolean(body.rememberMe) });
     sendJson(res, 200, {
       site: publicSite(site),
       adminUrl: buildAdminUrl(req, adminToken),
-    });
+    }, { "set-cookie": buildSessionCookie(created.id, created.maxAgeMs, requestIsSecure(req)) });
   });
+}
+
+function handleAdminLogout(req, res) {
+  const cookies = parseCookies(req.headers.cookie);
+  const sessionId = cookies[adminSessions.cookieName];
+  if (sessionId) adminSessions.destroy(sessionId);
+  sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookie(requestIsSecure(req)) });
 }
 
 const ADMIN_ACTIONS = {
@@ -1414,7 +1327,7 @@ const ADMIN_ACTIONS = {
     touchSite(site);
     // Push the new cooldown to connected widgets so their "wait" hint stays in
     // sync — otherwise a visitor keeps the old limit until they reconnect.
-    broadcast(scene, { type: "chatThrottle", ms: getChatThrottle(site) });
+    broadcast(scene, { type: MSG.CHAT_THROTTLE, ms: getChatThrottle(site) });
   },
   kickVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -1473,7 +1386,7 @@ const ADMIN_ACTIONS = {
       delete site.ownerProfiles[identity.browserId];
     }
     touchSite(site);
-    broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+    broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
   },
   updateOwnerProfile(site, scene, body) {
     // Keyed by the opaque owner handle so the dedicated admin section can edit
@@ -1493,7 +1406,7 @@ const ADMIN_ACTIONS = {
     const identity = scene.identityByBrowser.get(browserId);
     if (identity) {
       applyOwnerProfile(site, identity);
-      broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+      broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
     }
   },
   clearMessages(site, scene) {
@@ -1533,14 +1446,19 @@ function handleAdminAction(req, res) {
       return;
     }
 
-    const site = getAdminSiteByCredentials(String(body.siteKey || ""), String(body.adminToken || ""));
-    if (!site) {
-      recordAuthFailure(adminAuthFailuresByIp, ip);
+    const presentedToken = String(body.adminToken || "").trim();
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      if (presentedToken) recordAuthFailure(adminAuthFailuresByIp, ip);
       sendJson(res, 403, { error: "Invalid site key or admin token." });
       return;
     }
+    if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
 
-    clearAuthFailures(adminAuthFailuresByIp, ip);
+    const site = resolved.site;
+    // Carry the upgrade cookie (if any) on whichever response this handler sends.
+    const cookieHeader = resolved.setCookie ? { "set-cookie": resolved.setCookie } : null;
+    const respond = (status, payload) => sendJson(res, status, payload, cookieHeader);
     const action = String(body.action || "");
     const pluginName = String(body.plugin || "");
     const scene = getScene(site.siteKey, site);
@@ -1566,7 +1484,7 @@ function handleAdminAction(req, res) {
         isPlainObject(body.input) ? body.input : {},
       );
       if (!invoked.found) {
-        sendJson(res, 400, { error: "Unknown plugin action." });
+        respond(400, { error: "Unknown plugin action." });
         return;
       }
       if (invoked.error || invoked.result?.error) {
@@ -1574,33 +1492,33 @@ function handleAdminAction(req, res) {
           if (hadPluginData) site.plugins[pluginName] = previousPluginData;
           else delete site.plugins[pluginName];
         }
-        sendJson(res, 400, { error: invoked.error || invoked.result.error });
+        respond(400, { error: invoked.error || invoked.result.error });
         return;
       }
       if (changed) {
         touchSite(site);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
-          broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+          broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
         }
       }
       const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
-      sendJson(res, 200, extendAdminPanel(panel, site));
+      respond(200, extendAdminPanel(panel, site));
       return;
     }
 
     if (!Object.hasOwn(ADMIN_ACTIONS, action)) {
-      sendJson(res, 400, { error: "Unknown action." });
+      respond(400, { error: "Unknown action." });
       return;
     }
 
     const actionResult = ADMIN_ACTIONS[action](site, scene, body);
     if (actionResult?.error) {
-      sendJson(res, 400, actionResult);
+      respond(400, actionResult);
       return;
     }
     const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
-    sendJson(res, 200, extendAdminPanel(panel, site));
+    respond(200, extendAdminPanel(panel, site));
   });
 }
 
@@ -1659,6 +1577,11 @@ function closeSiteScene(siteKey, code, reason) {
   const scene = scenes.get(siteKey);
   if (!scene) return;
 
+  // Cancel pending reconnect-grace disconnects so their timers don't fire
+  // against this scene after it's been removed.
+  for (const identity of scene.identities.values()) {
+    clearLeaveTimer(identity);
+  }
   for (const client of Array.from(scene.clients.values())) {
     client.ws.close(code, reason);
   }
@@ -1703,6 +1626,8 @@ const SERVICE_ADMIN_ACTIONS = {
   resetAdminToken(req, site) {
     const adminToken = createToken("admin", 24);
     site.adminTokenHash = hashAdminToken(adminToken);
+    // Existing admin sessions were authorized by the old token; revoke them.
+    adminSessions.destroyForSite(site.siteKey);
     touchSite(site);
     return {
       site: serviceAdminSite(site),
@@ -1735,6 +1660,7 @@ const SERVICE_ADMIN_ACTIONS = {
   },
   deleteSite(req, site) {
     closeSiteScene(site.siteKey, 4003, "site deleted");
+    adminSessions.destroyForSite(site.siteKey);
     sitesByKey.delete(site.siteKey);
     saveSites();
     return { deletedSiteKey: site.siteKey };
@@ -1898,7 +1824,7 @@ function broadcastReading(scene, identity, options = {}) {
     readingActive = identity.readingActive,
   } = options;
   broadcast(scene, {
-    type: "reading",
+    type: MSG.READING,
     id: identity.id,
     readingLabel,
     readingUrl,
@@ -1908,7 +1834,7 @@ function broadcastReading(scene, identity, options = {}) {
 
 function emitIdentityState(identity, options = {}) {
   broadcast(identity.scene, {
-    type: "move",
+    type: MSG.MOVE,
     ...serializeIdentity(identity, { reading: true }),
   }, { exceptConnectionId: options.exceptConnectionId ?? null });
 }
@@ -2009,7 +1935,7 @@ function pickFreeBirdPerch(scene) {
 }
 
 function broadcastBird(scene, message, options = {}) {
-  broadcast(scene, { type: "bird", ...message }, options);
+  broadcast(scene, { type: MSG.BIRD, ...message }, options);
 }
 
 function fleeBird(scene, bird, playerX) {
@@ -2017,7 +1943,7 @@ function fleeBird(scene, bird, playerX) {
 
   const dir = playerX < bird.x ? 1 : -1;
   broadcastBird(scene, {
-    action: "flee",
+    action: BIRD_ACTION.FLEE,
     id: bird.id,
     x: bird.x,
     dir,
@@ -2051,7 +1977,7 @@ function spawnBird(scene) {
 
   const from = perch.x < 0.5 ? "left" : "right";
   broadcastBird(scene, {
-    action: "spawn",
+    action: BIRD_ACTION.SPAWN,
     id: bird.id,
     perchId: bird.perchId,
     x: bird.x,
@@ -2252,21 +2178,30 @@ function loadSites() {
   }
 }
 
+// Persistence lives in server/sites-store.js; it reads the current registry at
+// write time and coalesces the high-frequency metadata writes (profile edits,
+// owner toggles, lastSeen) so a busy site doesn't block the event loop.
+const sitesWriter = createSitesWriter({
+  dataDir: DATA_DIR,
+  sitesFile: SITES_FILE,
+  getSites: () => Array.from(sitesByKey.values()),
+});
+
 function saveSites() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const sites = Array.from(sitesByKey.values());
-  // Atomic write: serialize to a temp file in the same directory, then rename
-  // over SITES_FILE. rename(2) is atomic on the same filesystem, so a crash or
-  // disk-full mid-write leaves the previous valid sites.json intact (it holds
-  // every site's adminTokenHash, and there is no admin-link recovery).
-  const tmpFile = `${SITES_FILE}.tmp`;
-  fs.writeFileSync(tmpFile, `${JSON.stringify({ sites }, null, 2)}\n`);
-  fs.renameSync(tmpFile, SITES_FILE);
+  sitesWriter.saveNow();
+}
+
+function scheduleSitesSave() {
+  sitesWriter.scheduleSave();
+}
+
+function flushSites() {
+  sitesWriter.flush();
 }
 
 function touchSite(site) {
   site.updatedAt = Date.now();
-  saveSites();
+  scheduleSitesSave();
 }
 
 // Visitor connection clicks are high-frequency, so we mirror the lastSeen save
@@ -2525,15 +2460,19 @@ let nextConnectionId = 1;
 
 function finalizeDisconnect(identity) {
   if (identity.clients.size > 0) return;
+  const scene = identity.scene;
+  // The scene may have been torn down (site disabled/deleted) during the
+  // reconnect-grace window; if so there's nothing left to remove or notify.
+  if (!scene || scenes.get(scene.key) !== scene) return;
   const hadJoined = identity.joined;
-  removeIdentity(identity.scene, identity);
+  removeIdentity(scene, identity);
 
   if (hadJoined) {
-    broadcast(identity.scene, { type: "leave", id: identity.id });
+    broadcast(scene, { type: MSG.LEAVE, id: identity.id });
   }
 }
 
-const server = http.createServer((req, res) => {
+function handleHttpRequest(req, res) {
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
     res.end("ok");
@@ -2543,8 +2482,8 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
 
   if (
-    (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname))
-    || (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname))
+    (!DEV_TOOLS_ENABLED && staticFiles.isDevToolsRequest(url.pathname))
+    || (!STAGING_PAGE_ENABLED && staticFiles.isStagingPageRequest(url.pathname))
   ) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end(req.method === "HEAD" ? undefined : "not found");
@@ -2592,6 +2531,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/admin/logout") {
+    handleAdminLogout(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/action") {
     handleAdminAction(req, res);
     return;
@@ -2617,20 +2561,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (PLAUSIBLE_DOMAIN) {
-    const scriptPath = plausibleScriptPath();
+  if (plausible.enabled) {
+    const scriptPath = plausible.scriptPath();
     if (scriptPath && req.method === "GET" && url.pathname === scriptPath) {
-      void proxyPlausibleScript(req, res);
+      void plausible.proxyScript(req, res);
       return;
     }
 
-    if (PLAUSIBLE_API_PATH && req.method === "POST" && url.pathname === PLAUSIBLE_API_PATH) {
-      proxyPlausibleEvent(req, res);
+    if (plausible.apiPath && req.method === "POST" && url.pathname === plausible.apiPath) {
+      plausible.proxyEvent(req, res);
       return;
     }
   }
 
-  const candidates = resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
+  const candidates = staticFiles.resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
 
   if (!candidates) {
     res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
@@ -2638,36 +2582,27 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  serveStaticCandidate(candidates, 0, res);
+  staticFiles.serveCandidate(candidates, 0, res);
+}
+
+// Wraps the request dispatcher so a single unhandled throw cannot crash the
+// process (and with it every live WebSocket connection across every site).
+const server = http.createServer((req, res) => {
+  try {
+    handleHttpRequest(req, res);
+  } catch (error) {
+    console.error("Unhandled error handling request", req.method, req.url, error);
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end(req.method === "HEAD" ? undefined : "server error");
+    } else {
+      res.end();
+    }
+  }
 });
 
 // Tries each candidate file path in order, falling back to the next on a
 // missing file so the plugin assets overlay can back the core public dir.
-function serveStaticCandidate(candidates, index, res) {
-  const filePath = candidates[index];
-  fs.readFile(filePath, (error, data) => {
-    if (error) {
-      if (error.code === "ENOENT" && index + 1 < candidates.length) {
-        serveStaticCandidate(candidates, index + 1, res);
-        return;
-      }
-      const status = error.code === "ENOENT" ? 404 : 500;
-      const body = status === 404 ? "not found" : "server error";
-      res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
-      res.end(body);
-      return;
-    }
-
-    let body = data;
-    if (path.extname(filePath) === ".html" && shouldInjectPlausible(filePath)) {
-      body = Buffer.from(injectPlausibleIntoHtml(data.toString("utf8")), "utf8");
-    }
-
-    res.writeHead(200, getStaticHeaders(filePath));
-    res.end(body);
-  });
-}
-
 const wss = new WebSocketServer({
   server,
   path: "/live",
@@ -2738,7 +2673,7 @@ function handleInit(client, message) {
   const { id, ...selfFields } = self;
 
   send(client.ws, {
-    type: "hello",
+    type: MSG.HELLO,
     id,
     browserSecret: identity.browserSecret,
     ...selfFields,
@@ -2761,7 +2696,7 @@ function handleInit(client, message) {
     if (identity.isOwner && site) {
       broadcast(
         scene,
-        { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) },
+        { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) },
         { exceptConnectionId: client.connectionId },
       );
     }
@@ -2789,7 +2724,7 @@ function handleInit(client, message) {
     }
   }
 
-  broadcast(scene, { type: "join", peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
+  broadcast(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
   syncIdentityAwayState(identity, joinedAt);
   plugins.run("onVisitorJoin", pluginContext(site, {
     visitor: pluginVisitor(identity),
@@ -2825,7 +2760,7 @@ function handleAction(client, message) {
 
   let targetId = null;
   let target = null;
-  if (message.action === "high-five") {
+  if (message.action === GESTURE.HIGH_FIVE) {
     targetId = Number(message.targetId);
     target = Number.isInteger(targetId) ? client.scene.identities.get(targetId) : null;
     if (!target || !target.joined || target.id === client.identity.id) return;
@@ -2839,7 +2774,7 @@ function handleAction(client, message) {
   if (target) clearPose(target);
   touchIdentityActivity(client.identity, now);
   const action = {
-    type: "action",
+    type: MSG.ACTION,
     id: client.identity.id,
     action: message.action,
   };
@@ -2861,7 +2796,7 @@ function handleProfile(client, message) {
   // Owners keep their look across resets: persist their own edits too.
   rememberOwnerProfile(client.site, client.identity);
 
-  broadcast(client.scene, { type: "profile", ...serializeIdentity(client.identity, { owner: true, badge: true }) });
+  broadcast(client.scene, { type: MSG.PROFILE, ...serializeIdentity(client.identity, { owner: true, badge: true }) });
 }
 
 function handleReading(client, message) {
@@ -2972,7 +2907,7 @@ function handleSay(client, message) {
   broadcast(
     client.scene,
     {
-      type: "say",
+      type: MSG.SAY,
       id: client.identity.id,
       text,
       at: now,
@@ -2991,7 +2926,7 @@ function handleTyping(client, message) {
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.typing = message.typing;
-  broadcast(client.scene, { type: "typing", id: client.identity.id, typing });
+  broadcast(client.scene, { type: MSG.TYPING, id: client.identity.id, typing });
 }
 
 function handleClientMessage(client, raw) {
@@ -3015,9 +2950,20 @@ function handleClientMessage(client, raw) {
 
   if (!Object.hasOwn(MESSAGE_HANDLERS, message.type)) return;
 
-  if (message.type !== "init" && message.type !== "solve" && !client.joined) return;
+  if (message.type !== MSG.INIT && message.type !== MSG.SOLVE && !client.joined) return;
 
-  MESSAGE_HANDLERS[message.type](client, message);
+  try {
+    MESSAGE_HANDLERS[message.type](client, message);
+  } catch (error) {
+    // Isolate a faulty handler to this one connection rather than letting the
+    // throw bubble up and take down every other live socket.
+    console.error("Error handling client message", message.type, error);
+    try {
+      client.ws.close(1011, "internal error");
+    } catch {
+      // socket already closing/closed
+    }
+  }
 }
 
 function handleClientClose(client) {
@@ -3030,7 +2976,7 @@ function handleClientClose(client) {
   client.identity = null;
   client.readingActive = false;
   if (wasTyping && !Array.from(identity.clients).some((candidate) => candidate.typing)) {
-    broadcast(identity.scene, { type: "typing", id: identity.id, typing: false });
+    broadcast(identity.scene, { type: MSG.TYPING, id: identity.id, typing: false });
   }
 
   if (identity.clients.size > 0) {
@@ -3148,8 +3094,6 @@ async function startServer() {
   }
 
   const shared = await import("./public/shared/shared-constants.mjs");
-  MIN_X = shared.MIN_X;
-  MAX_X = shared.MAX_X;
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
   MAX_DISPLAY_NAME_LEN = shared.DISPLAY_NAME_MAX;
   MAX_READING_LABEL_LEN = shared.READING_LABEL_MAX;
@@ -3161,20 +3105,38 @@ async function startServer() {
   OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
   randomSpawnX = shared.randomSpawnX;
 
+  // A failure to bind the port is fatal and must not be swallowed by the
+  // uncaughtException guard below — exit so the supervisor can restart.
+  server.on("error", (error) => {
+    console.error(`TownSquare server error: ${error.message}`);
+    process.exit(1);
+  });
+
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
   });
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule] = await Promise.all([
-    import("./public/shared/site-config.mjs"),
+  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
+    import("./public/shared/site-config-core.mjs"),
     import("./public/shared/scene-props.mjs"),
     import("./public/shared/bird-perches.mjs"),
     import("./public/shared/scene-prop-geometry.mjs"),
     import("./public/shared/map-world.mjs"),
     import("./public/shared/url.mjs"),
+    import("./public/shared/protocol.mjs"),
   ]);
+
+  MSG = protocol.MSG;
+  GESTURE = protocol.GESTURE;
+  BIRD_ACTION = protocol.BIRD_ACTION;
+  // Fail loudly at boot if a handler key drifts from the shared vocabulary.
+  for (const type of Object.keys(MESSAGE_HANDLERS)) {
+    if (!Object.values(MSG).includes(type)) {
+      throw new Error(`MESSAGE_HANDLERS has unknown message type "${type}" (not in shared protocol)`);
+    }
+  }
 
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
   DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
@@ -3190,7 +3152,6 @@ async function loadSharedModules() {
   normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
   buildAllowedOrigins = urlModule.buildAllowedOrigins;
   getMatchingWwwOrigin = urlModule.getMatchingWwwOrigin;
-  originUsesMatchingWwwPair = urlModule.originUsesMatchingWwwPair;
   ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
   mapWorld = loadMapWorld();
   ensureMapWorldGrown();
@@ -3198,6 +3159,46 @@ async function loadSharedModules() {
   PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
   BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;
 }
+
+// Last-resort guards: log and keep running rather than letting an unexpected
+// throw/rejection from a non-request code path take down every live connection.
+// A request- or message-scoped error is already caught closer to its source.
+process.on("uncaughtException", (error) => {
+  console.error("uncaughtException", error);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection", reason);
+});
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}, shutting down`);
+
+  // Flush any pending registry write so a debounced save is not lost.
+  try {
+    flushSites();
+  } catch (error) {
+    console.error("Error flushing sites on shutdown", error);
+  }
+
+  // Stop accepting new sockets, then close the open ones cleanly.
+  for (const ws of wss.clients) {
+    try {
+      ws.close(1001, "server shutting down");
+    } catch {
+      // already closing
+    }
+  }
+  wss.close();
+  server.close(() => process.exit(0));
+
+  // Don't hang forever if a socket refuses to close.
+  setTimeout(() => process.exit(0), 5000).unref?.();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 startServer().catch((error) => {
   console.error(`Failed to start TownSquare server: ${error.message}`);

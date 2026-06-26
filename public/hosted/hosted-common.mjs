@@ -20,6 +20,52 @@ export function escapeHtml(value) {
 }
 
 /**
+ * Build a DOM element. Untrusted values go through `text`/string children
+ * (which become text nodes) or DOM properties — never string-interpolated HTML
+ * — so there is no escaping to remember and no markup-injection surface.
+ *
+ * @param {string} tag
+ * @param {Object} [props] `class`, `text`, `href`, or any attribute name.
+ * @param {Array<Node|string|null|false>|Node|string} [children]
+ * @returns {HTMLElement}
+ */
+export function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (value == null) continue;
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else node.setAttribute(key, value);
+  }
+  for (const child of Array.isArray(children) ? children : [children]) {
+    if (child == null || child === false) continue;
+    node.append(child);
+  }
+  return node;
+}
+
+/**
+ * An anchor whose href is only set when it is a safe http(s) URL; anything else
+ * (e.g. a `javascript:` scheme) renders as plain text instead of a link.
+ *
+ * @param {string} url
+ * @returns {HTMLElement}
+ */
+export function safeLink(url) {
+  let safe = false;
+  try {
+    const parsed = new URL(url);
+    safe = parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    safe = false;
+  }
+  if (!safe) return el("span", { text: url });
+  const anchor = el("a", { text: url, target: "_blank", rel: "noopener noreferrer" });
+  anchor.href = url;
+  return anchor;
+}
+
+/**
  * @param {number | string | null | undefined} value Epoch ms or date string.
  * @param {string} [fallback] Shown when there is no timestamp yet.
  * @returns {string}
@@ -43,6 +89,7 @@ export async function postJson(path, payload) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
+      credentials: "same-origin",
     });
     const body = await response.json();
     return { ok: response.ok, status: response.status, body };

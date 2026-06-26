@@ -3,7 +3,7 @@
 const TELEGRAM_API_TIMEOUT_MS = 5000;
 
 function escapeMarkdown(text) {
-  return String(text || "").replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+  return String(text || "").replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
 function buildMessage({ site, visitor, message }) {
