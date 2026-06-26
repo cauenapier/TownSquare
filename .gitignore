@@ -20,3 +20,6 @@ npm-debug.log*
 
 # Admin scripts
 /scripts/admin/*
+
+# Local Claude Code worktrees
+.claude/worktrees/

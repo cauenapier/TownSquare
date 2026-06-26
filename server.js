@@ -5,6 +5,8 @@ const path = require("path");
 const { WebSocketServer } = require("ws");
 const { ensurePluginData, getPluginData, setPluginData } = require("./server/plugin-data");
 const { plugins } = require("./server/plugins");
+const { atomicWriteJson } = require("./server/atomic-write");
+const { createVisitorStats } = require("./server/visitor-stats");
 const { registerPublicPlugins } = require("./plugins");
 const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
 const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
@@ -82,6 +84,7 @@ const DEV_TOOLS_ENABLED = envFlag("ENABLE_DEV_TOOLS");
 const STAGING_PAGE_ENABLED = envFlag("ENABLE_STAGING_PAGE");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
+const VISITOR_STATS_FILE = path.join(DATA_DIR, "visitor-stats.json");
 const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
 let ALLOWED_ORIGINS = new Set();
 const DEFAULT_DEV_ORIGINS = new Set([
@@ -1179,10 +1182,7 @@ function loadMapWorld() {
 }
 
 function saveMapWorld(nextWorld) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmpFile = `${MAP_WORLD_FILE}.tmp`;
-  fs.writeFileSync(tmpFile, `${JSON.stringify(nextWorld, null, 2)}\n`);
-  fs.renameSync(tmpFile, MAP_WORLD_FILE);
+  atomicWriteJson(MAP_WORLD_FILE, nextWorld);
   mapWorld = nextWorld;
 }
 
@@ -1559,6 +1559,7 @@ function serviceAdminSite(site) {
     ...publicSite(site),
     updatedAt: site.updatedAt,
     activeVisitors: scene ? countActiveVisitors(scene) : 0,
+    visitorStats: visitorStats.getStats(site.siteKey),
     connectionClicks,
     connectionClickTotal: Object.values(connectionClicks).reduce(
       (sum, entry) => sum + (entry?.count || 0),
@@ -2456,6 +2457,7 @@ function rememberSiteLastSeenUrl(site, readingUrl) {
 
 let sitesByKey = new Map();
 const scenes = new Map();
+const visitorStats = createVisitorStats({ filePath: VISITOR_STATS_FILE });
 let nextConnectionId = 1;
 
 function finalizeDisconnect(identity) {
@@ -2722,6 +2724,9 @@ function handleInit(client, message) {
       saveSites();
       if (firstVerify) ensureMapWorldGrown();
     }
+
+    // Tally this visitor toward the site's daily/weekly/monthly unique counts.
+    visitorStats.recordVisit(site.siteKey, identity.browserId, now);
   }
 
   broadcast(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
@@ -3093,6 +3098,9 @@ async function startServer() {
     saveSites();
   }
 
+  visitorStats.load();
+  visitorStats.start();
+
   const shared = await import("./public/shared/shared-constants.mjs");
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
   MAX_DISPLAY_NAME_LEN = shared.DISPLAY_NAME_MAX;
@@ -3175,6 +3183,15 @@ function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`Received ${signal}, shutting down`);
+
+  // Persist the throttled visitor-stats buffer; systemd sends SIGTERM on
+  // restart/stop and the counts recorded since the last flush would be lost.
+  try {
+    visitorStats.stop();
+    visitorStats.flush();
+  } catch (error) {
+    console.error("Error flushing visitor stats on shutdown", error);
+  }
 
   // Flush any pending registry write so a debounced save is not lost.
   try {
