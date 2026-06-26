@@ -86,6 +86,11 @@ const PREVIEW_SPAWN_X = (MIN_X + MAX_X) / 2;
 const MOBILE_KEYBOARD_SCROLL_GAP = 12;
 const MOBILE_KEYBOARD_MIN_HEIGHT = 60;
 
+// Hosted sites receive their scene from the server on connect, so we start them
+// empty rather than flashing the stock default props before the real scene
+// arrives. Self-hosted embeds with no server config keep the stock default.
+const EMPTY_SCENE_CONFIG = { benches: 0, trees: 0, lamps: 0, birds: 0 };
+
 /**
  * @param {VisualViewport | undefined} viewport
  */
@@ -166,7 +171,20 @@ export function mountTownSquare(root, options = {}) {
   );
   const siteKey = options.siteKey || root.dataset.townsquareSiteKey || "";
   const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey);
-  const sceneConfig = sanitizeSceneConfig(options.scene || DEFAULT_SCENE_CONFIG);
+  // Which config fields the host declared inline. The dashboard delivers scene /
+  // connections / message board live by siteKey, but any field declared here is a
+  // deliberate power-user override that wins and is never overwritten live.
+  const inlineConfig = {
+    scene: options.scene !== undefined,
+    connections: options.connections !== undefined,
+    messageBoard: options.messageBoard !== undefined,
+  };
+  // Hosted sites (siteKey, real socket) fill the scene from the server's `hello`,
+  // so start empty unless the host pinned a scene inline.
+  const serverDrivenScene = Boolean(siteKey) && !(options.preview === true || options.simulate === true);
+  const initialScene = options.scene
+    || (serverDrivenScene ? EMPTY_SCENE_CONFIG : DEFAULT_SCENE_CONFIG);
+  const sceneConfig = sanitizeSceneConfig(initialScene);
   const sceneProps = buildSceneProps(sceneConfig);
   const birdPerches = buildBirdPerches(sceneProps);
   const browserId = getBrowserId();
@@ -216,6 +234,7 @@ export function mountTownSquare(root, options = {}) {
   const ctx = {
     root,
     options,
+    inlineConfig,
     serverOrigin,
     socketUrl,
     browserId,
@@ -383,6 +402,25 @@ export function mountTownSquare(root, options = {}) {
   } else {
     updateStatus(ctx);
   }
+
+  // Apply config the server pushes live (in `hello` and on owner edits). Each
+  // field is honoured only when the host did not pin it inline — an inline value
+  // is a power-user override that stays in the host's control.
+  ctx.applyLiveConfig = ({ scene, connections, messageBoard } = {}) => {
+    if (scene !== undefined && !ctx.inlineConfig.scene) {
+      const sceneConfig = sanitizeSceneConfig(scene);
+      ctx.options = { ...ctx.options, scene: sceneConfig };
+      refreshScene(ctx, sceneConfig);
+    }
+    if (connections !== undefined && !ctx.inlineConfig.connections) {
+      ctx.options = { ...ctx.options, connections };
+      setupConnections(ctx);
+    }
+    if (messageBoard !== undefined && !ctx.inlineConfig.messageBoard) {
+      ctx.options = { ...ctx.options, messageBoard };
+      setupMessageBoard(ctx);
+    }
+  };
 
   if (!localOnly) {
     wireSocket(ctx);

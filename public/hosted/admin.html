@@ -114,7 +114,7 @@
             <h2>Connected towns</h2>
           </div>
           <p class="hosted-note">
-            Link neighbouring TownSquares to the left or right edge of your square. A signpost appears on that side, and visitors can walk over to travel there. Copy the refreshed snippet below after you save.
+            Link neighbouring TownSquares to the left or right edge of your square. A signpost appears on that side, and visitors can walk over to travel there. Saved links appear on your site automatically — no need to re-paste the snippet.
           </p>
           <div class="hosted-connections" id="connections-list"></div>
           <div class="hosted-actions">
@@ -201,7 +201,7 @@
             <h2>Scene customization</h2>
           </div>
           <p class="hosted-note">
-            Edit the scene and style with a live preview. Your changes update the snippet and CSS below — copy and paste them into your site to apply.
+            Edit the scene, colors, and message board with a live preview. Scene and message board changes apply to your site automatically. Colors are delivered as CSS — re-copy the Customization CSS below after changing them.
           </p>
 
           <form class="hosted-form" id="customization-form">
@@ -262,7 +262,7 @@
               <div class="hosted-section-head">
                 <h2 id="message-board-title">Message board</h2>
               </div>
-              <p class="hosted-note">Leave a note visitors can read by clicking the board. The board only appears once it has a title or message.</p>
+              <p class="hosted-note">Leave a note visitors can read by clicking the board. It appears on your site automatically and shows a "!" badge until each visitor opens it. The board only appears once it has a title or message.</p>
               <label>
                 <span>Title</span>
                 <input id="board-title" name="board-title" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Welcome!" />
@@ -319,19 +319,24 @@
           </section>
         </section>
 
-        <!-- Embed output — snippet + CSS derived from the appearance settings above. -->
+        <!-- Embed output — install-once snippet + colors CSS. -->
         <section class="hosted-section" id="install-section">
           <h2>Embed snippet</h2>
-          <p class="hosted-note">Paste this where you want the square to appear.</p>
+          <p class="hosted-note">
+            Paste this once where you want the square to appear. It only carries your site identity — your scene, neighbour links, and message board are delivered live by TownSquare, so anything you change above shows up on your site automatically, no re-pasting needed.
+          </p>
           <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-snippet">Copy snippet</button>
           </div>
+          <p class="hosted-note hosted-footnote">
+            Power user? You can pin any field (<code>scene</code>, <code>connections</code>, <code>messageBoard</code>) directly in the snippet's options. A field you set there is yours to manage in code and stops updating from this dashboard — just like the CSS below.
+          </p>
         </section>
 
         <section class="hosted-section" id="style-section">
-          <h2>Customization CSS</h2>
-          <p class="hosted-note">Paste this into your site's stylesheet. Re-copy it after editing the scene or style above.</p>
+          <h2>Customization CSS (colors)</h2>
+          <p class="hosted-note">Colors are the one thing delivered as CSS so your own stylesheet can override them. Paste this into your site's stylesheet, and re-copy it after changing colors above. (Scene, links, and the message board don't need this — they're live.)</p>
           <textarea id="style-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-style">Copy CSS</button>

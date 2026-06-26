@@ -26,6 +26,8 @@ export const MSG = Object.freeze({
   CHAT_THROTTLE: "chatThrottle",
   BIRD: "bird",
   MESSAGE_BOARD: "messageBoard",
+  SCENE: "scene",
+  CONNECTIONS: "connections",
 });
 
 /** `action`-message gesture verbs. */

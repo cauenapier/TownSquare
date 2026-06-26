@@ -216,24 +216,43 @@ Every square ships with a default hosted style — the palette baked into
 `public/tokens.css` (light and dark), which `DEFAULT_SITE_STYLE` in
 `public/shared/site-config.mjs` mirrors. No setup is needed to look good.
 
-The admin and registration pages expose two kinds of customization, each with a
-live preview:
+### How customization reaches a site
 
-- **Scene** — bench/tree/lamp/bird counts and per-prop placement. Saved server-side
-  per site in `sceneConfig` and pushed to live embeds by `siteKey`, so changes take
-  effect immediately without re-pasting anything (`refreshSiteScenes` in `server.js`).
-- **Colors** — a palette per mode (light/dark) saved in `styleConfig`. Because hosted
-  embeds never write palette tokens inline, colors are delivered as a small scoped CSS
-  block (`buildSiteCss`) the owner copies into their own stylesheet. The admin/register
-  pages generate this **Customization CSS** block from the swatch choices. Re-copy it
-  after changing colors.
-- **Message board** — an optional single prop carrying a note for visitors. The owner
-  sets a title, body, board art variant, accent, and position; clicking the board opens
-  a modal with the message. Saved per site in `messageBoard` and delivered to live
-  embeds over the socket by `siteKey` (in the `hello` payload, with edits broadcast as a
-  `messageBoard` message), so changes take effect immediately without re-pasting the
-  snippet. Visitors see a "!" badge until they open the current message (read-state is
-  kept per site in `localStorage`).
+There are two delivery channels, and the split is deliberate:
+
+1. **Install-once snippet (identity only).** `buildEmbedSnippet` emits a small
+   snippet carrying just `serverOrigin`, `siteKey`, `theme` (and any plugin
+   modules). The owner pastes it **once**. It does not change when they tweak the
+   square, so it never needs re-pasting.
+2. **Live by `siteKey` over the socket.** Per-site content the owner edits in
+   admin is delivered in the `hello` payload and re-pushed when it changes, so
+   edits show up on embedded sites immediately:
+   - **Scene** — bench/tree/lamp/bird counts and placement (`sceneConfig`),
+     broadcast as a `scene` message on edit.
+   - **Connections** — neighbouring-town links (`connections`), broadcast as a
+     `connections` message.
+   - **Message board** — an optional clickable note prop (`messageBoard`),
+     broadcast as a `messageBoard` message. Title, body, art variant, accent, and
+     position; visitors see a "!" badge until they open the current message
+     (read-state kept per site in `localStorage`).
+
+   Hosted sites (those with a `siteKey`) start with an empty scene and fill it in
+   the moment the socket connects, so they never flash the stock default props.
+
+**Power-user overrides.** Any of `scene`, `connections`, or `messageBoard` can be
+pinned directly in the snippet's `mountTownSquare` options. A field declared inline
+is a deliberate override: it wins and the widget stops applying live updates for
+*that* field (other fields stay dashboard-managed). This is the same "the dashboard
+generates it, but you own it if you want" idea as the colors CSS below — see
+`ctx.applyLiveConfig` / `inlineConfig` in `public/townsquare.mjs`.
+
+**Colors** are the one exception, delivered as CSS rather than live. A palette per
+mode (light/dark) is saved in `styleConfig` and emitted as a small scoped CSS block
+(`buildSiteCss`) the owner pastes into their own stylesheet — so host-page CSS can
+override it, owners can hand-edit it, and the widget never writes inline palette
+styles that would fight the host. The admin/register pages generate this
+**Customization CSS** block from the swatch choices; **re-copy it after changing
+colors** (scene, connections, and the board do not need this).
 
 The CSS sets these tokens, scoped to `#townsquare-root` for light, explicit dark, and
 `prefers-color-scheme` dark: `--scene` (background), `--page` (ground), `--surface`

@@ -733,15 +733,15 @@ function parseSiteOriginSettings(body, { defaultIncludeMatchingWww = true } = {}
 
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
-  const connections = getConnections(site);
   const pluginModules = plugins.browserModules("widget", pluginContext(site));
-  // The message board is delivered live over the socket (see the hello payload),
-  // not baked here, so owners never re-paste the snippet after editing it.
+  // Scene, connections, and the message board are delivered live over the socket
+  // (see the `hello` payload), not baked here, so this snippet is install-once:
+  // owners paste it a single time and manage everything else from the dashboard.
+  // Power users can still pin any of those fields inline to take them off live
+  // management (see README → Customization).
   const coreConfig = {
     serverOrigin,
     siteKey: site.siteKey,
-    scene: getSceneConfig(site),
-    ...(connections.length > 0 ? { connections } : {}),
     ...(pluginModules.length > 0 ? { pluginModules } : {}),
     theme: "host",
   };
@@ -1315,12 +1315,19 @@ const ADMIN_ACTIONS = {
     }
 
     rebuildSceneProps(scene, site);
-    // Push the edited board to everyone currently in the square so it updates live.
-    broadcast(scene, { type: "messageBoard", messageBoard: getMessageBoard(site) });
+    // Push the edited scene and board to everyone currently in the square so they
+    // update live, no snippet re-paste needed. Colours stay in the pasted CSS.
+    broadcast(scene, { type: MSG.SCENE, scene: getSceneConfig(site) });
+    broadcast(scene, { type: MSG.MESSAGE_BOARD, messageBoard: getMessageBoard(site) });
   },
   updateConnections(site, scene, body) {
     site.connections = sanitizeConnections(body.connections);
     touchSite(site);
+    // Push edited neighbour links to everyone currently in the square so they
+    // update live, no snippet re-paste needed.
+    if (scene.clients.size > 0) {
+      broadcast(scene, { type: MSG.CONNECTIONS, connections: getConnections(site) });
+    }
   },
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
@@ -2700,9 +2707,9 @@ function handleInit(client, message) {
     birds: snapshotBirds(scene),
     chatThrottleMs: getChatThrottle(site),
     pluginModules: plugins.browserModules("widget", pluginContext(site)),
-    // Hosted sites carry the owner's message board over the socket so admin edits
-    // apply live without re-pasting the embed snippet.
-    ...(site ? { messageBoard: getMessageBoard(site) } : {}),
+    // Hosted sites carry scene, connections, and the message board over the socket
+    // so admin edits apply live without re-pasting the embed snippet.
+    ...(site ? { scene: getSceneConfig(site), connections: getConnections(site), messageBoard: getMessageBoard(site) } : {}),
   });
 
   if (identity.joined) {

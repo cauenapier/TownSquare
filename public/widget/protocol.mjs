@@ -15,26 +15,12 @@ import {
   updateStatus,
 } from "./presence.mjs";
 import { getBrowserSecret, saveBrowserSecret } from "./utils.mjs";
-import { setupMessageBoard } from "./message-board.mjs";
 import { solveChallenge } from "./pow.mjs";
 import { MSG, GESTURE, BIRD_ACTION } from "../shared/protocol.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
  */
-
-/**
- * Apply an owner message board pushed by the server (hosted sites). Replaces any
- * board the widget mounted with, so admin edits take effect live without the
- * owner re-pasting the embed snippet. A disabled board tears the prop down.
- *
- * @param {WidgetContext} ctx
- * @param {import("../shared/site-config.mjs").MessageBoard} board
- */
-function applyServerMessageBoard(ctx, board) {
-  ctx.options = { ...ctx.options, messageBoard: board };
-  setupMessageBoard(ctx);
-}
 
 function isSolo(ctx) {
   return ctx.options.solo === true;
@@ -177,13 +163,16 @@ export function wireSocket(ctx) {
             applyPeerState(ctx, peer);
           }
         }
+        // Hosted sites deliver scene, connections, and the message board over the
+        // socket so admin edits apply live without re-pasting the snippet. Apply
+        // before birds so their perches exist. Inline overrides are respected
+        // inside applyLiveConfig.
+        ctx.applyLiveConfig?.({
+          scene: message.scene,
+          connections: message.connections,
+          messageBoard: message.messageBoard,
+        });
         syncBirdsFromHello(ctx, message.birds);
-        // Hosted sites deliver the owner's message board over the socket so edits
-        // apply live; only act when the server actually sent one (self-hosted
-        // embeds keep whatever board they mounted with).
-        if (message.messageBoard !== undefined) {
-          applyServerMessageBoard(ctx, message.messageBoard);
-        }
         updateStatus(ctx);
         return;
       }
@@ -194,11 +183,20 @@ export function wireSocket(ctx) {
         return;
       }
 
-      // Owner edited the message board mid-session: re-render it in place.
+      // Owner edited the scene, connections, or message board mid-session: the
+      // server pushes the new value to re-render it live.
+      if (message.type === MSG.SCENE) {
+        ctx.applyLiveConfig?.({ scene: message.scene });
+        return;
+      }
+
+      if (message.type === MSG.CONNECTIONS) {
+        ctx.applyLiveConfig?.({ connections: message.connections });
+        return;
+      }
+
       if (message.type === MSG.MESSAGE_BOARD) {
-        if (message.messageBoard !== undefined) {
-          applyServerMessageBoard(ctx, message.messageBoard);
-        }
+        ctx.applyLiveConfig?.({ messageBoard: message.messageBoard });
         return;
       }
 

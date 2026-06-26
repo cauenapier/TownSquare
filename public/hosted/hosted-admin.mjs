@@ -450,8 +450,8 @@ async function saveCustomization({ auto = false } = {}) {
   if (ok) {
     customizationTouched = false;
     customizationSavedMessage = auto
-      ? "Customization saved."
-      : "Customization saved. Copy the refreshed snippet and CSS below.";
+      ? "Saved — your site updates automatically."
+      : "Saved — scene and board are live. Re-copy the Customization CSS below if you changed colors.";
   }
   updateCustomizationButtons();
   updateCustomizationStatus();
@@ -612,7 +612,7 @@ async function saveConnections() {
   connectionsBusy = false;
   if (ok) {
     connectionsTouched = false;
-    connectionsSavedMessage = "Connections saved. Copy the refreshed snippet above.";
+    connectionsSavedMessage = "Connections saved — your site updates automatically.";
   }
   // render() runs after a successful action and resyncs the draft from server.
   updateConnectionsControls();

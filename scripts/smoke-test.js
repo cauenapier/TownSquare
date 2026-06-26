@@ -194,7 +194,10 @@ async function assertCustomizationPersists() {
   assert(body.site.sceneConfig?.benchXs?.[0] === 0.14, "registered site did not persist bench placement");
   assert(body.site.styleConfig?.light?.accent === "#9d5c2f", "registered site did not persist light accent");
   assert(body.site.styleConfig?.dark?.accent === "#ffcc00", "registered site did not persist dark accent");
-  assert(body.embedSnippet.includes("scene:"), "embed snippet did not include the scene config");
+  // The snippet is install-once identity; scene/connections/messageBoard are
+  // delivered live over the socket (see the hello payload), not baked here.
+  assert(body.embedSnippet.includes(body.site.siteKey), "embed snippet did not include the site key");
+  assert(!body.embedSnippet.includes("scene:"), "embed snippet should no longer bake the scene config");
   assert(
     typeof body.styleSnippet === "string"
       && body.styleSnippet.includes("#townsquare-root#townsquare-root")
