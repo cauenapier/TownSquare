@@ -1013,7 +1013,7 @@
 }
 .townsquare-avatar--reading-away > svg,
 .townsquare-avatar--reading-away .townsquare-avatar__below {
-  opacity: 0.52;
+  opacity: 0.22;
 }
 
 .townsquare-avatar--reading-away::after {
