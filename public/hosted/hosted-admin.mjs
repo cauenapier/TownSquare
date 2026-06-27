@@ -91,15 +91,12 @@ renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(customizationForm);
 bindSceneCountProse(customizationForm);
 
-const AUTO_SAVE_DELAY_MS = 1500;
-
 let currentSite = null;
 let siteDetailsTouched = false;
 let siteDetailsBusy = false;
 let siteDetailsSavedMessage = "";
 let customizationBusy = false;
 let customizationSavedMessage = "";
-let autoSaveTimer = null;
 let customizationTouched = false;
 
 /** Working copy of the connections editor; `touched` guards it from polls. */
@@ -224,7 +221,6 @@ const session = createAdminSession({
   onError: (message) => setStatus(message, true),
   onBeforeShowLogin: () => preview.destroy(),
   onClear: () => {
-    clearAutoSaveTimer();
     currentSite = null;
     siteDetailsTouched = false;
     siteDetailsBusy = false;
@@ -343,9 +339,7 @@ function applyMessageBoardToForm(board) {
   boardTitleInput.value = next.title;
   boardBodyInput.value = next.body;
   boardVariantSelect.value = MESSAGE_BOARD_VARIANTS.includes(next.variant) ? next.variant : MESSAGE_BOARD_VARIANTS[0];
-  const usesDefault = !next.accent;
-  boardAccentDefaultInput.checked = usesDefault;
-  boardAccentInput.disabled = usesDefault;
+  boardAccentDefaultInput.checked = !next.accent;
   // A real hex accent drives the picker; "transparent"/inherit leave it at its default.
   if (/^#[0-9a-f]{6}$/i.test(next.accent)) boardAccentInput.value = next.accent;
   boardXInput.value = String(Math.round(next.x * 100));
@@ -401,7 +395,7 @@ function updateCustomizationButtons() {
 
 function updateCustomizationStatus() {
   if (customizationBusy) {
-    setCustomizationStatus("Saving customization...");
+    setCustomizationStatus("Publishing customization...");
     return;
   }
 
@@ -411,36 +405,18 @@ function updateCustomizationStatus() {
   }
 
   if (customizationIsDirty()) {
-    setCustomizationStatus("Unsaved changes will save automatically.");
+    setCustomizationStatus("Unpublished changes — press Publish to make them live.");
     return;
   }
 
   setCustomizationStatus("");
 }
 
-function clearAutoSaveTimer() {
-  if (autoSaveTimer) {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = null;
-  }
-}
-
-function scheduleAutoSave() {
-  clearAutoSaveTimer();
-  if (!currentSite || customizationBusy || !customizationIsDirty()) return;
-
-  autoSaveTimer = setTimeout(() => {
-    autoSaveTimer = null;
-    void saveCustomization({ auto: true });
-  }, AUTO_SAVE_DELAY_MS);
-}
-
-async function saveCustomization({ auto = false } = {}) {
+async function saveCustomization() {
   if (!currentSite || customizationBusy || !customizationIsDirty()) return false;
 
-  clearAutoSaveTimer();
   customizationBusy = true;
-  if (!auto) customizationSavedMessage = "";
+  customizationSavedMessage = "";
   updateCustomizationButtons();
   updateCustomizationStatus();
 
@@ -449,9 +425,7 @@ async function saveCustomization({ auto = false } = {}) {
   customizationBusy = false;
   if (ok) {
     customizationTouched = false;
-    customizationSavedMessage = auto
-      ? "Saved — your site updates automatically."
-      : "Saved — scene and board are live. Re-copy the Customization CSS below if you changed colors.";
+    customizationSavedMessage = "Published — scene and board are live. Re-copy the Customization CSS below if you changed colors.";
   }
   updateCustomizationButtons();
   updateCustomizationStatus();
@@ -1003,13 +977,13 @@ customizationForm.addEventListener("input", (event) => {
   if (isSceneCountInputName(event.target?.name || "")) {
     syncScenePositionInputs(readSceneConfigFromForm(customizationForm));
   }
-  if (event.target === boardAccentDefaultInput) {
-    boardAccentInput.disabled = boardAccentDefaultInput.checked;
+  // Picking a custom colour means the owner no longer wants the theme accent.
+  if (event.target === boardAccentInput) {
+    boardAccentDefaultInput.checked = false;
   }
   updateCustomizationButtons();
   updateCustomizationStatus();
   mountPreview();
-  scheduleAutoSave();
 });
 
 customizationForm.addEventListener("submit", async (event) => {
@@ -1018,14 +992,12 @@ customizationForm.addEventListener("submit", async (event) => {
 });
 
 resetCustomizationButton.addEventListener("click", () => {
-  clearAutoSaveTimer();
   customizationSavedMessage = "";
-  customizationTouched = false;
+  customizationTouched = true;
   applyCustomizationToForm(getDefaultCustomization());
   updateCustomizationButtons();
   updateCustomizationStatus();
   mountPreview({ remount: true });
-  scheduleAutoSave();
 });
 
 addConnectionButton.addEventListener("click", addConnection);

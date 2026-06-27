@@ -165,16 +165,16 @@ const TREE_SVG = `
   </svg>
 `;
 
-// A standing notice board: two legs and a framed panel. The `--<variant>` class
-// fills the panel differently in CSS; the line-art frame is shared.
+// A notice sign on a single post — same silhouette as the edge signposts but
+// with a square panel instead of a pointed flag. The `--<variant>` class fills
+// the panel differently in CSS; the line-art frame is shared.
 const MESSAGE_BOARD_SVG = `
-  <svg viewBox="0 0 44 60" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-    <line x1="13" y1="40" x2="9" y2="59"></line>
-    <line x1="31" y1="40" x2="35" y2="59"></line>
-    <rect class="panel" x="4" y="3" width="36" height="34"></rect>
-    <line class="note" x1="11" y1="13" x2="33" y2="13"></line>
-    <line class="note" x1="11" y1="20" x2="33" y2="20"></line>
-    <line class="note" x1="11" y1="27" x2="26" y2="27"></line>
+  <svg viewBox="0 0 26 44" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <line x1="13" y1="18" x2="13" y2="43"></line>
+    <rect class="panel" x="4" y="3" width="18" height="15"></rect>
+    <line class="note" x1="8" y1="8" x2="18" y2="8"></line>
+    <line class="note" x1="8" y1="11" x2="18" y2="11"></line>
+    <line class="note" x1="8" y1="14" x2="14" y2="14"></line>
   </svg>
 `;
 
@@ -186,7 +186,7 @@ const PROP_PX = Object.freeze({
   bench: { width: 52, height: 18 },
   lamp: { width: 20, height: 56 },
   tree: { width: 56, height: 76 },
-  "message-board": { width: 44, height: 60 },
+  "message-board": { width: 18, height: 30 },
 });
 
 /**

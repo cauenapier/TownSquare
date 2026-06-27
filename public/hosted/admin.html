@@ -201,7 +201,7 @@
             <h2>Scene customization</h2>
           </div>
           <p class="hosted-note">
-            Edit the scene, colors, and message board with a live preview. Scene and message board changes apply to your site automatically. Colors are delivered as CSS — re-copy the Customization CSS below after changing them.
+            Edit the scene, colors, and message board with a live preview. Changes only go live on your site once you press Publish. Colors are delivered as CSS — re-copy the Customization CSS below after publishing color changes.
           </p>
 
           <form class="hosted-form" id="customization-form">
@@ -262,7 +262,7 @@
               <div class="hosted-section-head">
                 <h2 id="message-board-title">Message board</h2>
               </div>
-              <p class="hosted-note">Leave a note visitors can read by clicking the board. It appears on your site automatically and shows a "!" badge until each visitor opens it. The board only appears once it has a title or message.</p>
+              <p class="hosted-note">Leave a note visitors can read by clicking the board. It appears on your site once you Publish and shows a "!" badge until each visitor opens it. The board only appears once it has a title or message.</p>
               <label>
                 <span>Title</span>
                 <input id="board-title" name="board-title" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Welcome!" />
@@ -282,7 +282,7 @@
                 </label>
                 <label>
                   <span>Accent color</span>
-                  <input id="board-accent" name="board-accent" type="color" value="#c8641f" disabled />
+                  <input id="board-accent" name="board-accent" type="color" value="#c8641f" />
                 </label>
                 <label>
                   <span>Position <small>% from left</small></span>
@@ -296,7 +296,7 @@
             </section>
 
             <div class="hosted-actions">
-              <button type="submit" id="save-customization">Save customization</button>
+              <button type="submit" id="save-customization">Publish</button>
               <button type="button" id="reset-customization">Reset form</button>
             </div>
             <p class="hosted-status" id="customization-status" role="status" hidden></p>
