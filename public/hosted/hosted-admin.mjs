@@ -597,6 +597,8 @@ const MODERATION_LABELS = {
   block: "Banned",
   mute: "Muted",
   unmute: "Unmuted",
+  hide: "Hidden",
+  unhide: "Unhidden",
   "chat-off": "Chat disabled",
   "chat-on": "Chat enabled",
   "clear-messages": "Cleared messages",
@@ -931,6 +933,11 @@ function render(data) {
     mute.textContent = visitor.muted ? "Unmute" : "Mute";
     mute.addEventListener("click", () => session.action(visitor.muted ? "unmuteVisitor" : "muteVisitor", { visitorId: visitor.id }));
 
+    const hide = document.createElement("button");
+    hide.type = "button";
+    hide.textContent = visitor.hidden ? "Unhide" : "Hide";
+    hide.addEventListener("click", () => session.action(visitor.hidden ? "unhideVisitor" : "hideVisitor", { visitorId: visitor.id }));
+
     const kick = document.createElement("button");
     kick.type = "button";
     kick.textContent = "Kick";
@@ -941,7 +948,7 @@ function render(data) {
     block.textContent = "Block";
     block.addEventListener("click", () => session.action("blockVisitor", { visitorId: visitor.id }));
 
-    row.append(owner, mute, kick, block);
+    row.append(owner, mute, hide, kick, block);
     visitorList.appendChild(row);
   }
 

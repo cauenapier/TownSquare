@@ -8,9 +8,9 @@
  *
  * @param {HTMLElement} container
  * @param {Array<{ id: number, displayName?: string, color?: string, messages?: Array<{ text: string, at: number }> }>} visitors
- * @param {{ onKick: (visitorId: number) => void, onBlock: (visitorId: number) => void, onMute: (visitorId: number, muted: boolean) => void }} handlers
+ * @param {{ onKick: (visitorId: number) => void, onBlock: (visitorId: number) => void, onMute: (visitorId: number, muted: boolean) => void, onHide: (visitorId: number, hidden: boolean) => void }} handlers
  */
-export function renderChatThread(container, visitors, { onKick, onBlock, onMute }) {
+export function renderChatThread(container, visitors, { onKick, onBlock, onMute, onHide }) {
   const entries = [];
   for (const visitor of visitors) {
     const visitorName = String(visitor.displayName || "").trim();
@@ -21,7 +21,7 @@ export function renderChatThread(container, visitors, { onKick, onBlock, onMute 
   }
   entries.sort((a, b) => a.at - b.at);
 
-  const fingerprint = entries.map((entry) => `${entry.visitor.id}:${entry.visitor.muted ? 1 : 0}:${entry.at}:${entry.text}`).join("\n");
+  const fingerprint = entries.map((entry) => `${entry.visitor.id}:${entry.visitor.muted ? 1 : 0}:${entry.visitor.hidden ? 1 : 0}:${entry.at}:${entry.text}`).join("\n");
   if (container.dataset.chatFingerprint === fingerprint) return;
   container.dataset.chatFingerprint = fingerprint;
 
@@ -59,6 +59,12 @@ export function renderChatThread(container, visitors, { onKick, onBlock, onMute 
     mute.textContent = entry.visitor.muted ? "Unmute" : "Mute";
     mute.addEventListener("click", () => onMute(entry.visitor.id, Boolean(entry.visitor.muted)));
 
+    const hide = document.createElement("button");
+    hide.type = "button";
+    hide.className = "chat-mod-button";
+    hide.textContent = entry.visitor.hidden ? "Unhide" : "Hide";
+    hide.addEventListener("click", () => onHide(entry.visitor.id, Boolean(entry.visitor.hidden)));
+
     const kick = document.createElement("button");
     kick.type = "button";
     kick.className = "chat-mod-button";
@@ -71,7 +77,7 @@ export function renderChatThread(container, visitors, { onKick, onBlock, onMute 
     block.textContent = "Ban";
     block.addEventListener("click", () => onBlock(entry.visitor.id));
 
-    head.append(author, time, mute, kick, block);
+    head.append(author, time, mute, hide, kick, block);
 
     const body = document.createElement("p");
     body.className = "chat-text";

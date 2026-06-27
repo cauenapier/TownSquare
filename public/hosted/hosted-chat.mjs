@@ -39,6 +39,7 @@ function render(data) {
     onKick: (visitorId) => session.action("kickVisitor", { visitorId }),
     onBlock: (visitorId) => session.action("blockVisitor", { visitorId }),
     onMute: (visitorId, muted) => session.action(muted ? "unmuteVisitor" : "muteVisitor", { visitorId }),
+    onHide: (visitorId, hidden) => session.action(hidden ? "unhideVisitor" : "hideVisitor", { visitorId }),
   });
 
   if (site.disabled) {

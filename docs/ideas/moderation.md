@@ -23,6 +23,8 @@ Implemented in `server.js` (admin action handlers near `kickVisitor`):
 - `setChatDisabled` — site-wide chat kill switch
 - `kickVisitor` — disconnect, rejoinable (close code 4001)
 - `blockVisitor` — ban persisted by `browserId` (close code 4003)
+- `hideVisitor` — shadow block persisted by `browserId`; visitor stays
+  connected but invisible to peers (see Phase 1 hide notes)
 - `setOwnerVisitor` — promote / demote owners
 - auto inactive-kick, fixed chat throttle (`CHAT_THROTTLE_MS`), `MAX_MESSAGE_LEN`
 - per-IP/per-site limits for identities, joins, state changes, and chat
@@ -50,6 +52,13 @@ Moderation section.
   - *Note:* like the existing site-wide chat disable, the muted user still sees
     their own optimistic local echo (the widget echoes before the server);
     peers never receive it. Timed/auto-expiring mutes were deferred.
+- [x] **Hide (shadow block).** `site.shadowBlockedBrowserIds`. A hidden visitor
+  stays connected but is invisible to everyone else: no JOIN/MOVE/chat/typing
+  events reach peers, and they are omitted from HELLO `peers`. Chat is dropped
+  server-side like mute. The hidden user still sees themselves and other visible
+  visitors. Indefinite, toggled as Hide/Unhide from the visitor list and chat
+  thread. Mid-session hide broadcasts LEAVE to visible peers; unhide broadcasts
+  JOIN.
 - [x] **Configurable slow mode.** `site.chatThrottleMs` (default 0.5s, capped at
   30s) read by `getChatThrottle()`. Owners pick a cooldown in the admin UI; the
   widget enforces it too, showing a "wait" hint instead of silently dropping.
@@ -57,8 +66,9 @@ Moderation section.
   `logModeration()`. Records kick/block/mute/unmute and chat/site toggles;
   rendered read-only in the admin Moderation section.
 
-Covered by `scripts/smoke-test.js` (`assertModerationTools`): word masking,
-mute/unmute propagation, slow-mode suppression, and log ordering.
+Covered by `scripts/smoke-test.js` (`assertModerationTools`, `assertHideVisitor`):
+word masking, mute/unmute propagation, hide/unhide propagation, slow-mode
+suppression, and log ordering.
 
 ## Phase 2 — Medium
 
@@ -80,8 +90,8 @@ Real product tension with the "lightweight, not a community platform" ethos.
 Don't build until the open questions below are answered.
 
 - [ ] **Shadow mute.** Muted user still sees their own messages; nobody else
-  does. Reduces retaliation, but is deliberately deceptive — does it fit the
-  product's tone?
+  does. *(Chat already behaves this way; this item is about whether to keep
+  calling it out as an explicit product choice.)*
 - [ ] **Pre-moderation / approval mode.** Messages held until an owner approves.
   Powerful for high-stakes sites, heavy for a presence layer.
 - [ ] **Stronger bans (IP / auth).** The only way past trivial ban evasion, but

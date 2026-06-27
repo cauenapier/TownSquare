@@ -185,7 +185,7 @@ The admin page can:
 - show active visitors
 - customize the scene (bench/tree/lamp/bird counts and placement), colors, and a clickable message board, with a live preview (see [Customization](#customization))
 - mark an active visitor as the verified site owner (and unmark them)
-- kick or block active visitors
+- kick, hide, or block active visitors
 - disable chat
 - disable the site
 - clear recent in-memory messages
@@ -458,7 +458,7 @@ The smoke test verifies:
 - say
 - leave
 - hosted site isolation and admin token hashing
-- moderation tools (word filter, mute/unmute, slow mode, moderation log)
+- moderation tools (word filter, mute/unmute, hide/unhide, slow mode, moderation log)
 - service-admin map validation and persistence
 - per-IP identity, join, state-event, chat, and synchronized-action quarantine limits
 

@@ -1389,6 +1389,30 @@ const ADMIN_ACTIONS = {
       touchSite(site);
     }
   },
+  hideVisitor(site, scene, body) {
+    const identity = scene.identities.get(Number(body.visitorId));
+    if (!identity) return;
+    if (!Array.isArray(site.shadowBlockedBrowserIds)) site.shadowBlockedBrowserIds = [];
+    if (!site.shadowBlockedBrowserIds.includes(identity.browserId)) {
+      broadcastIdentity(scene, { type: MSG.LEAVE, id: identity.id }, identity);
+      site.shadowBlockedBrowserIds.push(identity.browserId);
+      logModeration(site, "hide", visitorLogLabel(identity));
+      touchSite(site);
+    }
+  },
+  unhideVisitor(site, scene, body) {
+    const identity = scene.identities.get(Number(body.visitorId));
+    if (!identity || !Array.isArray(site.shadowBlockedBrowserIds)) return;
+    const index = site.shadowBlockedBrowserIds.indexOf(identity.browserId);
+    if (index !== -1) {
+      site.shadowBlockedBrowserIds.splice(index, 1);
+      logModeration(site, "unhide", visitorLogLabel(identity));
+      touchSite(site);
+      if (identity.joined) {
+        broadcastIdentity(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, identity);
+      }
+    }
+  },
   setOwnerVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
     if (!identity) return;
@@ -1409,7 +1433,7 @@ const ADMIN_ACTIONS = {
       delete site.ownerProfiles[identity.browserId];
     }
     touchSite(site);
-    broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
+    broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
   },
   updateOwnerProfile(site, scene, body) {
     // Keyed by the opaque owner handle so the dedicated admin section can edit
@@ -1429,7 +1453,7 @@ const ADMIN_ACTIONS = {
     const identity = scene.identityByBrowser.get(browserId);
     if (identity) {
       applyOwnerProfile(site, identity);
-      broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
+      broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
     }
   },
   clearMessages(site, scene) {
@@ -1522,7 +1546,7 @@ function handleAdminAction(req, res) {
         touchSite(site);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
-          broadcast(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) });
+          broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
         }
       }
       const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
@@ -1840,6 +1864,28 @@ function broadcast(scene, message, options = {}) {
   }
 }
 
+/** Whether `viewer` should receive presence/chat events from `target`. */
+function canSeeIdentity(site, viewerIdentity, targetIdentity) {
+  if (!targetIdentity) return true;
+  if (viewerIdentity.id === targetIdentity.id) return true;
+  return !isShadowBlocked(site, targetIdentity.browserId);
+}
+
+/** Broadcast an identity-scoped event only to clients who can see that identity. */
+function broadcastIdentity(scene, message, sourceIdentity, options = {}) {
+  const { exceptConnectionId = null } = options;
+  const site = scene.site;
+  const payload = JSON.stringify(message);
+
+  for (const client of scene.clients.values()) {
+    if (!client.joined || !client.identity) continue;
+    if (client.connectionId === exceptConnectionId) continue;
+    if (client.ws.readyState !== client.ws.OPEN) continue;
+    if (!canSeeIdentity(site, client.identity, sourceIdentity)) continue;
+    client.ws.send(payload);
+  }
+}
+
 function broadcastReading(scene, identity, options = {}) {
   const {
     exceptConnectionId = null,
@@ -1847,20 +1893,20 @@ function broadcastReading(scene, identity, options = {}) {
     readingUrl = identity.readingUrl,
     readingActive = identity.readingActive,
   } = options;
-  broadcast(scene, {
+  broadcastIdentity(scene, {
     type: MSG.READING,
     id: identity.id,
     readingLabel,
     readingUrl,
     readingActive,
-  }, { exceptConnectionId });
+  }, identity, { exceptConnectionId });
 }
 
 function emitIdentityState(identity, options = {}) {
-  broadcast(identity.scene, {
+  broadcastIdentity(identity.scene, {
     type: MSG.MOVE,
     ...serializeIdentity(identity, { reading: true }),
-  }, { exceptConnectionId: options.exceptConnectionId ?? null });
+  }, identity, { exceptConnectionId: options.exceptConnectionId ?? null });
 }
 
 function createEphemeralIdentity(scene, fallbackX, connectionId) {
@@ -2104,6 +2150,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       updatedAt: now,
       blockedBrowserIds: [],
       mutedBrowserIds: [],
+      shadowBlockedBrowserIds: [],
       ownerBrowserIds: [],
       ownerProfiles: {},
       blockedWords: [],
@@ -2136,6 +2183,9 @@ function loadSites() {
       }
       if (!Array.isArray(site.mutedBrowserIds)) {
         site.mutedBrowserIds = [];
+      }
+      if (!Array.isArray(site.shadowBlockedBrowserIds)) {
+        site.shadowBlockedBrowserIds = [];
       }
       if (!Array.isArray(site.ownerBrowserIds)) {
         site.ownerBrowserIds = [];
@@ -2311,6 +2361,11 @@ function isMuted(site, browserId) {
   return Boolean(site) && Array.isArray(site.mutedBrowserIds) && site.mutedBrowserIds.includes(browserId);
 }
 
+/** A hidden visitor stays connected but is invisible to everyone else. */
+function isShadowBlocked(site, browserId) {
+  return Boolean(site) && Array.isArray(site.shadowBlockedBrowserIds) && site.shadowBlockedBrowserIds.includes(browserId);
+}
+
 /** A short, human label for an identity used in the moderation log. */
 function visitorLogLabel(identity) {
   const name = String(identity?.displayName || "").trim();
@@ -2350,6 +2405,7 @@ function publicSite(site) {
     createdAt: site.createdAt,
     blockedCount: site.blockedBrowserIds.length,
     mutedCount: Array.isArray(site.mutedBrowserIds) ? site.mutedBrowserIds.length : 0,
+    hiddenCount: Array.isArray(site.shadowBlockedBrowserIds) ? site.shadowBlockedBrowserIds.length : 0,
     blockedWords: Array.isArray(site.blockedWords) ? site.blockedWords : [],
     chatThrottleMs: typeof site.chatThrottleMs === "number" ? site.chatThrottleMs : DEFAULT_CHAT_THROTTLE_MS,
     connectionLimit: getConnectionLimit(site),
@@ -2424,6 +2480,7 @@ function getSceneStats(scene, site = null) {
     .map((identity) => {
       const serialized = serializeIdentity(identity, { owner: true, messages: true, clientCount: true });
       serialized.muted = isMuted(site, identity.browserId);
+      serialized.hidden = isShadowBlocked(site, identity.browserId);
       return serialized;
     });
 
@@ -2499,7 +2556,7 @@ function finalizeDisconnect(identity) {
   removeIdentity(scene, identity);
 
   if (hadJoined) {
-    broadcast(scene, { type: MSG.LEAVE, id: identity.id });
+    broadcastIdentity(scene, { type: MSG.LEAVE, id: identity.id }, identity);
   }
 }
 
@@ -2697,7 +2754,7 @@ function handleInit(client, message) {
   refreshIdentityReadingActive(identity);
 
   const peers = Array.from(scene.identities.values())
-    .filter((peer) => peer.joined && peer.id !== identity.id)
+    .filter((peer) => peer.joined && peer.id !== identity.id && canSeeIdentity(site, identity, peer))
     .map(snapshotIdentity);
 
   const self = serializeIdentity(identity, { reading: true, owner: true, messages: true, badge: true });
@@ -2728,9 +2785,10 @@ function handleInit(client, message) {
     // Reconnect during the grace window: the owner gets applyOwnerProfile above
     // but we skip the join broadcast, so refresh peers with the claimed look.
     if (identity.isOwner && site) {
-      broadcast(
+      broadcastIdentity(
         scene,
         { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) },
+        identity,
         { exceptConnectionId: client.connectionId },
       );
     }
@@ -2761,12 +2819,16 @@ function handleInit(client, message) {
     visitorStats.recordVisit(site.siteKey, identity.browserId, now);
   }
 
-  broadcast(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
+  if (!isShadowBlocked(site, identity.browserId)) {
+    broadcastIdentity(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, identity, { exceptConnectionId: client.connectionId });
+  }
   syncIdentityAwayState(identity, joinedAt);
-  plugins.run("onVisitorJoin", pluginContext(site, {
-    visitor: pluginVisitor(identity),
-    joinedAt,
-  }));
+  if (!isShadowBlocked(site, identity.browserId)) {
+    plugins.run("onVisitorJoin", pluginContext(site, {
+      visitor: pluginVisitor(identity),
+      joinedAt,
+    }));
+  }
 }
 
 function handleMove(client, message) {
@@ -2816,7 +2878,7 @@ function handleAction(client, message) {
     action: message.action,
   };
   if (targetId !== null) action.targetId = targetId;
-  broadcast(client.scene, action, { exceptConnectionId: client.connectionId });
+  broadcastIdentity(client.scene, action, client.identity, { exceptConnectionId: client.connectionId });
 }
 
 function handleProfile(client, message) {
@@ -2833,7 +2895,7 @@ function handleProfile(client, message) {
   // Owners keep their look across resets: persist their own edits too.
   rememberOwnerProfile(client.site, client.identity);
 
-  broadcast(client.scene, { type: MSG.PROFILE, ...serializeIdentity(client.identity, { owner: true, badge: true }) });
+  broadcastIdentity(client.scene, { type: MSG.PROFILE, ...serializeIdentity(client.identity, { owner: true, badge: true }) }, client.identity);
 }
 
 function handleReading(client, message) {
@@ -2907,6 +2969,7 @@ function handleSay(client, message) {
   const site = client.site;
   if (site?.chatDisabled) return;
   if (isMuted(site, client.identity.browserId)) return;
+  if (isShadowBlocked(site, client.identity.browserId)) return;
 
   const now = Date.now();
   if (now - client.lastChatAt < getChatThrottle(site)) return;
@@ -2941,7 +3004,7 @@ function handleSay(client, message) {
     }
   }
 
-  broadcast(
+  broadcastIdentity(
     client.scene,
     {
       type: MSG.SAY,
@@ -2949,6 +3012,7 @@ function handleSay(client, message) {
       text,
       at: now,
     },
+    client.identity,
     { exceptConnectionId: client.connectionId },
   );
 }
@@ -2963,7 +3027,7 @@ function handleTyping(client, message) {
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.typing = message.typing;
-  broadcast(client.scene, { type: MSG.TYPING, id: client.identity.id, typing });
+  broadcastIdentity(client.scene, { type: MSG.TYPING, id: client.identity.id, typing }, client.identity);
 }
 
 function handleClientMessage(client, raw) {
@@ -3013,7 +3077,7 @@ function handleClientClose(client) {
   client.identity = null;
   client.readingActive = false;
   if (wasTyping && !Array.from(identity.clients).some((candidate) => candidate.typing)) {
-    broadcast(identity.scene, { type: MSG.TYPING, id: identity.id, typing: false });
+    broadcastIdentity(identity.scene, { type: MSG.TYPING, id: identity.id, typing: false }, identity);
   }
 
   if (identity.clients.size > 0) {

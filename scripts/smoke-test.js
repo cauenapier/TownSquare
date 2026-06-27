@@ -481,6 +481,80 @@ async function assertModerationTools() {
   observer.ws.close();
 }
 
+async function assertHideVisitor() {
+  const hosted = await createSite("Hide");
+  const { siteKey } = hosted.site;
+  const { adminToken } = hosted;
+
+  const target = await connect({ x: 0.3, browserId: "hide-target", siteKey, origin: HTTP_ORIGIN, displayName: "Ghost" });
+  const observer = await connect({ x: 0.7, browserId: "hide-observer", siteKey, origin: HTTP_ORIGIN });
+  await delay(80);
+
+  assert(
+    (observer.hello.peers || []).some((peer) => peer.id === target.id),
+    "observer did not receive the target visitor in hello peers before hide",
+  );
+
+  const hid = await postJson("/api/admin/action", { siteKey, adminToken, action: "hideVisitor", visitorId: target.id });
+  assert(hid.response.ok, hid.body.error || "hideVisitor failed");
+  assert(
+    hid.body.scene.visitors.find((v) => v.id === target.id)?.hidden === true,
+    "hidden visitor was not flagged in scene stats",
+  );
+  await delay(80);
+  assert(
+    observer.seen.some((m) => m.type === "leave" && m.id === target.id),
+    "hiding a visitor did not send leave to visible peers",
+  );
+
+  await delay(1600);
+  target.ws.send(JSON.stringify({ type: "say", text: "you should not see or hear this" }));
+  await delay(200);
+  assert(
+    !observer.seen.some((m) => m.type === "say" && m.id === target.id),
+    "a hidden visitor's chat reached the observer",
+  );
+
+  const newcomer = await connect({ x: 0.5, browserId: "hide-newcomer", siteKey, origin: HTTP_ORIGIN, ip: "192.0.2.60" });
+  await delay(80);
+  assert(
+    !(newcomer.hello.peers || []).some((peer) => peer.id === target.id),
+    "a newcomer received a hidden visitor in hello peers",
+  );
+  await waitFor(
+    () => target.seen.some((m) => m.type === "join" && m.peer?.id === newcomer.id),
+    "a hidden visitor did not receive join events for visible newcomers",
+  );
+
+  const unhid = await postJson("/api/admin/action", { siteKey, adminToken, action: "unhideVisitor", visitorId: target.id });
+  assert(unhid.response.ok, unhid.body.error || "unhideVisitor failed");
+  assert(
+    unhid.body.scene.visitors.find((v) => v.id === target.id)?.hidden === false,
+    "unhidden visitor was still flagged as hidden",
+  );
+  await delay(80);
+  assert(
+    observer.seen.some((m) => m.type === "join" && m.peer?.id === target.id)
+      || newcomer.seen.some((m) => m.type === "join" && m.peer?.id === target.id),
+    "unhiding a visitor did not send join to visible peers",
+  );
+
+  await delay(1600);
+  target.ws.send(JSON.stringify({ type: "say", text: "visible again" }));
+  await waitFor(
+    () => observer.seen.some((m) => m.type === "say" && m.id === target.id && m.text === "visible again"),
+    "unhidden visitor's message did not reach the observer",
+  );
+
+  const logView = await postJson("/api/admin/site", { siteKey, adminToken });
+  const actions = (logView.body.site.moderationLog || []).map((entry) => entry.action);
+  assert(actions.includes("hide") && actions.includes("unhide"), "moderation log did not record hide/unhide");
+
+  target.ws.close();
+  observer.ws.close();
+  newcomer.ws.close();
+}
+
 async function assertPerSiteConnectionLimit() {
   const hosted = await createSite("Connection Limit");
   const { siteKey, origin } = hosted.site;
@@ -1345,6 +1419,7 @@ async function main() {
   await assertMatchingWwwOriginsWork();
   await assertOwnerProfilePersists();
   await assertModerationTools();
+  await assertHideVisitor();
   await assertPerSiteConnectionLimit();
 
   const hostedA = await createSite("Smoke A");
