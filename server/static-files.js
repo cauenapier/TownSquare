@@ -49,13 +49,26 @@ function getContentType(filePath) {
 const SECURED_HTML = new Set(["admin.html", "service-admin.html", "chat.html", "register.html"]);
 const ADMIN_CSP = "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
+// Static, non-HTML asset types (widget JS, CSS, fonts, images) are safe to cache
+// in the browser: an embedding host page otherwise re-downloads the whole widget
+// on every view, which tanks its PageSpeed/LCP. Filenames are not content-hashed,
+// so we use a moderate freshness window with stale-while-revalidate rather than a
+// year-long immutable TTL — a deploy then propagates within the hour while repeat
+// views stay cache-served. (Fingerprinted filenames could later move this to
+// `immutable`.) HTML is excluded: it is content-injected and includes credentialed
+// admin pages, so it must stay no-store.
+const CACHEABLE_ASSET_EXTS = new Set([".css", ".mjs", ".js", ".json", ".png", ".svg"]);
+const STATIC_ASSET_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400";
+
 function getStaticHeaders(filePath) {
+  const ext = path.extname(filePath);
+  const cacheable = CACHEABLE_ASSET_EXTS.has(ext) && !SECURED_HTML.has(path.basename(filePath));
   const headers = {
-    "cache-control": "no-store",
+    "cache-control": cacheable ? STATIC_ASSET_CACHE_CONTROL : "no-store",
     "content-type": getContentType(filePath),
   };
 
-  if ([".css", ".mjs"].includes(path.extname(filePath))) {
+  if ([".css", ".mjs"].includes(ext)) {
     headers["access-control-allow-origin"] = "*";
   }
 

@@ -752,9 +752,14 @@ function buildEmbedSnippet(req, site) {
     .map(([key, value]) => `    ${key}: ${JSON.stringify(value)}`)
     .join(",\n");
 
-  return `<link rel="stylesheet" href="${serverOrigin}/widget.css" />
+  // `preconnect` warms the DNS/TLS handshake to the widget origin before the
+  // module import fires, shaving a round trip off a cross-origin embed. `async`
+  // on the module lets it run the moment it arrives instead of waiting in the
+  // defer queue, so the widget never delays the host page's own work.
+  return `<link rel="preconnect" href="${serverOrigin}" crossorigin />
+<link rel="stylesheet" href="${serverOrigin}/widget.css" />
 <div id="townsquare-root"></div>
-<script type="module">
+<script type="module" async>
   import { mountTownSquare } from "${serverOrigin}/townsquare.mjs";
 
   mountTownSquare(document.getElementById("townsquare-root"), {
