@@ -200,6 +200,7 @@ WORKING_TREE_INDEX=""
 cleanup() {
   rm -f "$ARCHIVE"
   [[ -n "$WORKING_TREE_INDEX" ]] && rm -f "$WORKING_TREE_INDEX"
+  return 0
 }
 trap cleanup EXIT
 
