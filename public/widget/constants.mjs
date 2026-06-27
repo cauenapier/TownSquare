@@ -37,6 +37,8 @@ export const MAX_RECENT_MESSAGES_EXPANDED = 10;
 export const MOVEMENT_SPEED = 0.22;
 export const SEND_INTERVAL_MS = 45;
 export const RAISED_HAND_MS = 5000;
+/** How long a figure stays in the faded "away" (zZz) state before it's hidden entirely. Returning to the tab shows it again. */
+export const AWAY_HIDE_MS = 2 * 60 * 1000;
 export const HIGH_FIVE_MS = 760;
 /** Time for a seated/resting figure to stand before an action animation; matches widget.css pose transition. */
 export const POSE_STAND_MS = 220;

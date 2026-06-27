@@ -1016,6 +1016,13 @@
   opacity: 0.22;
 }
 
+/* Long-idle figures fade away entirely; returning to the tab brings them back. */
+.townsquare-avatar--asleep {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
+
 .townsquare-avatar--reading-away::after {
   content: "Zz";
   position: absolute;

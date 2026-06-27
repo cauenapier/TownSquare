@@ -2,7 +2,7 @@
  * DOM construction and avatar/scene rendering for the TownSquare widget.
  */
 
-import { DISPLAY_NAME_MAX, HIGH_FIVE_MS, JUMP_MS, MESSAGE_MAX, POSE_STAND_MS, RAISED_HAND_MS } from "./constants.mjs";
+import { AWAY_HIDE_MS, DISPLAY_NAME_MAX, HIGH_FIVE_MS, JUMP_MS, MESSAGE_MAX, POSE_STAND_MS, RAISED_HAND_MS } from "./constants.mjs";
 import { figureMarkup } from "./figure.mjs";
 import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
 
@@ -48,6 +48,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {ReturnType<typeof setTimeout> | null} [jumpTimer]
  * @property {ReturnType<typeof setTimeout> | null} [raisedHandTimer]
  * @property {ReturnType<typeof setTimeout> | null} [highFiveTimer]
+ * @property {ReturnType<typeof setTimeout> | null} [awayTimer] Pending hide of a long-idle (zZz) figure.
  */
 
 /** @returns {HTMLSpanElement} */
@@ -692,7 +693,25 @@ export function setAvatarProfile(avatar, profile = {}) {
   avatar.el.classList.toggle("townsquare-avatar--owner", isOwner);
   avatar.el.classList.toggle("townsquare-avatar--has-display-name", Boolean(displayName));
   avatar.el.classList.toggle("townsquare-avatar--has-reading", Boolean(readingLabel));
-  avatar.el.classList.toggle("townsquare-avatar--reading-away", Boolean(readingLabel) && !readingActive);
+  const isAway = Boolean(readingLabel) && !readingActive;
+  avatar.el.classList.toggle("townsquare-avatar--reading-away", isAway);
+  // A figure that stays away (zZz) too long fades out completely; coming back
+  // to the tab flips readingActive true again and reveals it. The timer is only
+  // armed on entering the away state, so repeated profile renders don't reset it.
+  if (isAway) {
+    if (!avatar.awayTimer && !avatar.el.classList.contains("townsquare-avatar--asleep")) {
+      avatar.awayTimer = setTimeout(() => {
+        avatar.awayTimer = null;
+        avatar.el.classList.add("townsquare-avatar--asleep");
+      }, AWAY_HIDE_MS);
+    }
+  } else {
+    if (avatar.awayTimer) {
+      clearTimeout(avatar.awayTimer);
+      avatar.awayTimer = null;
+    }
+    avatar.el.classList.remove("townsquare-avatar--asleep");
+  }
   if (avatar.dot) {
     avatar.dot.style.background = color || "";
   }

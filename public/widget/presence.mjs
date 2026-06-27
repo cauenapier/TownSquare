@@ -101,6 +101,7 @@ export function removePeer(ctx, id) {
   const peer = ctx.peers.get(id);
   if (!peer) return;
   clearTimeout(peer.walkTimer);
+  clearTimeout(peer.avatar.awayTimer);
   ctx.widgetPlugins?.removePresence(peer);
   peer.avatar.el.remove();
   ctx.peers.delete(id);
