@@ -90,7 +90,7 @@
   z-index: 2147483001;
   right: 8px;
   bottom: 12px;
-  display: none;
+  display: flex;
   gap: 8px;
 }
 
@@ -2029,6 +2029,12 @@
 @media (pointer: coarse) {
   .townsquare__toolbar {
     display: flex;
+  }
+
+  /* Touch mounts move the jump / high-five buttons into the toolbar, so the
+     absolute-positioned actions container is empty here — hide it. */
+  .townsquare__actions {
+    display: none;
   }
 
   .townsquare__control {
