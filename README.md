@@ -506,4 +506,4 @@ It also means leaving room for self-hosted TownSquares to optionally communicate
 
 ## License
 
-TBD
+MIT — see [LICENSE](LICENSE).

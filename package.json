@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Embeddable TownSquare slice: self-hostable realtime presence, walking, chat, and a default scene.",
+  "license": "MIT",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
