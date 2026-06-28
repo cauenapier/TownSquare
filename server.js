@@ -1388,12 +1388,25 @@ const ADMIN_ACTIONS = {
   },
   blockVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
-    if (identity && !site.blockedBrowserIds.includes(identity.browserId)) {
+    if (!identity) return;
+    if (!site.blockedBrowserIds.includes(identity.browserId)) {
       site.blockedBrowserIds.push(identity.browserId);
-      logModeration(site, "block", visitorLogLabel(identity));
-      touchSite(site);
-      closeIdentityClients(identity, 4003, "blocked");
     }
+    // Also block the visitor's live source IP(s). The browserId is chosen by the
+    // client, so a reconnecting bot rotates it and a browserId-only block never
+    // sticks. The IP is far harder to rotate, so capturing it here is what makes
+    // Block actually hold across reconnects. Runs even when the browserId was
+    // already blocked, so re-blocking a rotated identity still catches its IP.
+    if (!Array.isArray(site.blockedIps)) site.blockedIps = [];
+    for (const peerClient of identity.clients) {
+      const peerIp = peerClient.ip;
+      if (peerIp && peerIp !== "unknown" && !site.blockedIps.includes(peerIp)) {
+        site.blockedIps.push(peerIp);
+      }
+    }
+    logModeration(site, "block", visitorLogLabel(identity));
+    touchSite(site);
+    closeIdentityClients(identity, 4003, "blocked");
   },
   muteVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -2179,6 +2192,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       createdAt: now,
       updatedAt: now,
       blockedBrowserIds: [],
+      blockedIps: [],
       mutedBrowserIds: [],
       shadowBlockedBrowserIds: [],
       ownerBrowserIds: [],
@@ -2210,6 +2224,9 @@ function loadSites() {
       }
       if (!Array.isArray(site.blockedBrowserIds)) {
         site.blockedBrowserIds = [];
+      }
+      if (!Array.isArray(site.blockedIps)) {
+        site.blockedIps = [];
       }
       if (!Array.isArray(site.mutedBrowserIds)) {
         site.mutedBrowserIds = [];
@@ -2442,6 +2459,7 @@ function publicSite(site) {
     lastMessageAt: site.lastMessageAt || null,
     createdAt: site.createdAt,
     blockedCount: site.blockedBrowserIds.length,
+    blockedIpCount: Array.isArray(site.blockedIps) ? site.blockedIps.length : 0,
     mutedCount: Array.isArray(site.mutedBrowserIds) ? site.mutedBrowserIds.length : 0,
     hiddenCount: Array.isArray(site.shadowBlockedBrowserIds) ? site.shadowBlockedBrowserIds.length : 0,
     blockedWords: Array.isArray(site.blockedWords) ? site.blockedWords : [],
@@ -2931,6 +2949,19 @@ function handleProfile(client, message) {
 
   client.identity.displayName = displayName;
   client.identity.color = color;
+  // Log renames: the abusive bot joins blank then renames to slurs, so this is
+  // where its IP + fingerprint become visible for a targeted IP block.
+  if (LOG_JOINS && displayName) {
+    console.log(JSON.stringify({
+      event: "rename",
+      at: new Date().toISOString(),
+      site: client.site ? client.site.siteKey : null,
+      name: displayName,
+      ip: client.ip,
+      fp: client.site ? ownerHandle(client.site.siteKey, client.identity.browserId) : null,
+      origin: client.origin || null,
+    }));
+  }
   touchIdentityActivity(client.identity);
   // Owners keep their look across resets: persist their own edits too.
   rememberOwnerProfile(client.site, client.identity);
@@ -3200,6 +3231,15 @@ wss.on("connection", (ws, req) => {
   const ip = getRequestIp(req);
   if (isIpQuarantined(access.scene, ip)) {
     ws.close(1008, "rate limited");
+    return;
+  }
+
+  // Per-site IP block (set when an admin blocks a visitor). Rejected here, before
+  // the connection can join or pick a fresh browserId, so a reconnecting bot
+  // cannot evade the block by rotating its client-chosen identity.
+  if (access.site && Array.isArray(access.site.blockedIps) && access.site.blockedIps.includes(ip)) {
+    console.log(JSON.stringify({ event: "block_ip_reject", at: new Date().toISOString(), site: access.site.siteKey, ip }));
+    ws.close(4003, "blocked");
     return;
   }
 
