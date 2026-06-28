@@ -136,6 +136,10 @@ const MIN_HUMAN_SAY_MS = readLimit("MIN_HUMAN_SAY_MS", 1500);
 // gate. Sent to the widget in the challenge, so it is tunable without shipping a
 // new widget. Higher costs the client more CPU per join.
 const POW_DIFFICULTY_BITS = readLimit("POW_DIFFICULTY_BITS", 15);
+// Emit one structured JSON line per new visitor join (name, IP, a stable
+// per-site browser fingerprint, origin, PoW status) so abuse can be diagnosed
+// from server logs. On by default; set LOG_JOINS=0 to silence.
+const LOG_JOINS = process.env.LOG_JOINS !== "0";
 const BIRD_FLEE_RADIUS = 0.07;
 const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
@@ -562,6 +566,28 @@ function applyOwnerProfile(site, identity) {
  */
 function ownerHandle(siteKey, browserId) {
   return crypto.createHash("sha256").update(`${siteKey}:${browserId}`).digest("hex").slice(0, 16);
+}
+
+// One structured line per genuine new join, for diagnosing bot/abuse patterns
+// from server logs. The browser fingerprint is the same per-site hash the admin
+// editor uses (ownerHandle), so a bot reusing its browserId shows a stable `fp`
+// across joins; a rotating one shows a fresh `fp` each time. Raw browserId never
+// leaves the server.
+function logJoin(client, identity) {
+  if (!LOG_JOINS) return;
+  const site = client.site;
+  console.log(JSON.stringify({
+    event: "join",
+    at: new Date().toISOString(),
+    site: site ? site.siteKey : null,
+    scene: client.scene.key,
+    name: identity.displayName,
+    ip: client.ip,
+    fp: site ? ownerHandle(site.siteKey, identity.browserId) : null,
+    origin: client.origin || null,
+    powVerified: Boolean(client.powVerified),
+    botProtection: Boolean(site && site.botProtection),
+  }));
 }
 
 /** The site's owners with their persisted look, for the dedicated admin section. */
@@ -2138,7 +2164,11 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       messageBoard: sanitizeMessageBoard(messageBoard),
       disabled: false,
       chatDisabled: false,
-      botProtection: false,
+      botProtection: true,
+      // Marks that the on-by-default flip has already been applied, so the
+      // one-time migration in loadSites never re-forces it (owners stay free to
+      // turn protection off afterwards).
+      botProtectionDefaulted: true,
       plus: false,
       verifiedAt: null,
       lastSeenAt: null,
@@ -2241,6 +2271,14 @@ function loadSites() {
       }
       if (typeof site.supporter !== "boolean") {
         site.supporter = false;
+      }
+      // Bot protection is on by default. Flip every pre-existing site on exactly
+      // once (including those persisted as `false`), then record the marker so a
+      // later owner toggle-off survives restarts instead of being re-forced.
+      if (site.botProtectionDefaulted !== true) {
+        site.botProtection = true;
+        site.botProtectionDefaulted = true;
+        sitesMigratedOnLoad = true;
       }
       if (typeof site.plus !== "boolean") {
         // Migrate the former `pro` flag onto `plus`; default new/unset sites to false.
@@ -2800,6 +2838,8 @@ function handleInit(client, message) {
   const joinedAt = Date.now();
   identity.lastActivityAt = joinedAt;
   identity.joinedAt = joinedAt;
+
+  logJoin(client, identity);
 
   if (site) {
     const now = Date.now();
