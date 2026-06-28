@@ -360,7 +360,11 @@ async function run() {
     console.log("Bot replay test passed.");
   } finally {
     for (const ws of openSockets) {
-      try { ws.close(); } catch {}
+      try {
+        ws.close();
+      } catch {
+        // ignore — socket may already be closed
+      }
     }
     await stopServer(server);
   }
