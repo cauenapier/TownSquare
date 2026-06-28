@@ -125,6 +125,13 @@ join, movement, profile, and admin visitor snapshots. Its return value is
 placed under `visitor.plugins[pluginName]`; plugins cannot replace core visitor
 fields or another plugin's namespace.
 
+The server-side `visitor` context passed to `extendVisitor` exposes `id`,
+`browserId`, `displayName`, `color`, `isOwner`, `ownerHandle` (owners only), and
+`fp` — a stable per-visitor fingerprint (the same hash as `ownerHandle`) usable
+as a storage key without ever handling the raw `browserId`. The admin panel's
+`scene.visitors` carry the matching `fp`, so an admin action can target a
+specific present visitor (e.g. `visitor-figure` assigns a hat by `fp`).
+
 Widget modules are announced in the WebSocket hello payload, so enabling a
 plugin does not require owners to replace an existing embed snippet. A module
 mounts once and receives idempotent figure updates:

@@ -2589,13 +2589,18 @@ function pluginSite(site) {
 
 function pluginVisitor(identity) {
   const site = identity.scene?.site || null;
+  // Stable per-visitor fingerprint (same hash as ownerHandle), so plugins can
+  // key data on a visitor without ever seeing the raw browserId. Matches the
+  // `fp` exposed to the admin panel by getSceneStats.
+  const fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
   return Object.freeze({
     id: identity.id,
     browserId: identity.browserId,
     displayName: identity.displayName,
     color: identity.color,
     isOwner: identity.isOwner,
-    ownerHandle: identity.isOwner && site ? ownerHandle(site.siteKey, identity.browserId) : null,
+    ownerHandle: identity.isOwner ? fp : null,
+    fp,
   });
 }
 
@@ -2640,6 +2645,9 @@ function getSceneStats(scene, site = null) {
       const serialized = serializeIdentity(identity, { owner: true, messages: true, clientCount: true });
       serialized.muted = isMuted(site, identity.browserId);
       serialized.hidden = isShadowBlocked(site, identity.browserId);
+      // Stable fingerprint so the admin UI / plugin actions can target a
+      // specific visitor (e.g. assign a hat) without exposing the browserId.
+      serialized.fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
       return serialized;
     });
 
