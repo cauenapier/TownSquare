@@ -7,6 +7,8 @@
 
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
+const crypto = require("crypto");
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -55,10 +57,79 @@ const ADMIN_CSP = "script-src 'self'; object-src 'none'; base-uri 'none'; frame-
 // so we use a moderate freshness window with stale-while-revalidate rather than a
 // year-long immutable TTL — a deploy then propagates within the hour while repeat
 // views stay cache-served. (Fingerprinted filenames could later move this to
-// `immutable`.) HTML is excluded: it is content-injected and includes credentialed
-// admin pages, so it must stay no-store.
+// `immutable`.) Once stale, a content-hash ETag (see serveCandidate) lets the
+// revalidation collapse to a 304. HTML is excluded: it is content-injected and
+// includes credentialed admin pages, so it must stay no-store.
 const CACHEABLE_ASSET_EXTS = new Set([".css", ".mjs", ".js", ".json", ".png", ".svg"]);
 const STATIC_ASSET_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400";
+
+// Text asset types worth compressing on the wire. PNGs are already compressed,
+// and HTML is deliberately excluded: it is content-injected and includes
+// credentialed admin pages, so keeping it uncompressed sidesteps any
+// BREACH-style secret-leak concern with compressing dynamic, credentialed
+// responses.
+const COMPRESSIBLE_EXTS = new Set([".css", ".mjs", ".js", ".json", ".svg"]);
+
+// Compressed representations are cached in memory keyed by the asset's content
+// hash (its ETag) plus the encoding, so we compress each version of each file
+// once rather than on every request. Keys are content-derived, so a deploy that
+// changes a file naturally produces fresh entries; old ones age out via the
+// bounded LRU below.
+const COMPRESSION_CACHE = new Map();
+const COMPRESSION_CACHE_MAX = 256;
+
+function pickEncoding(acceptEncoding, ext) {
+  if (!COMPRESSIBLE_EXTS.has(ext)) return null;
+  const accept = String(acceptEncoding || "");
+  if (/(^|[\s,])br($|[\s,;])/.test(accept)) return "br";
+  if (/(^|[\s,])gzip($|[\s,;])/.test(accept)) return "gzip";
+  return null;
+}
+
+function compressBuffer(data, encoding) {
+  if (encoding === "br") {
+    return zlib.brotliCompressSync(data, {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]: 5,
+        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length,
+      },
+    });
+  }
+  return zlib.gzipSync(data, { level: 6 });
+}
+
+function getCompressed(cacheKey, data, encoding) {
+  const cached = COMPRESSION_CACHE.get(cacheKey);
+  if (cached) {
+    // Refresh recency: delete + re-set moves the key to the end of the Map's
+    // insertion order so the eviction below drops genuinely cold entries.
+    COMPRESSION_CACHE.delete(cacheKey);
+    COMPRESSION_CACHE.set(cacheKey, cached);
+    return cached;
+  }
+  const compressed = compressBuffer(data, encoding);
+  COMPRESSION_CACHE.set(cacheKey, compressed);
+  if (COMPRESSION_CACHE.size > COMPRESSION_CACHE_MAX) {
+    COMPRESSION_CACHE.delete(COMPRESSION_CACHE.keys().next().value);
+  }
+  return compressed;
+}
+
+// Weak ETag: weak because one resource has multiple byte-for-byte encodings
+// (identity/gzip/br), and a weak validator is the correct signal that they are
+// semantically equivalent. Derived from the served bytes (post HTML injection).
+function computeEtag(body) {
+  return `W/"${crypto.createHash("sha1").update(body).digest("base64url")}"`;
+}
+
+function etagMatches(ifNoneMatch, etag) {
+  if (!ifNoneMatch) return false;
+  if (ifNoneMatch.trim() === "*") return true;
+  const target = etag.replace(/^W\//, "");
+  return ifNoneMatch
+    .split(",")
+    .some((tag) => tag.trim().replace(/^W\//, "") === target);
+}
 
 function getStaticHeaders(filePath) {
   const ext = path.extname(filePath);
@@ -132,12 +203,12 @@ function createStaticFiles({
     return candidates.length > 0 ? candidates : null;
   }
 
-  function serveCandidate(candidates, index, res) {
+  function serveCandidate(candidates, index, res, req) {
     const filePath = candidates[index];
     fs.readFile(filePath, (error, data) => {
       if (error) {
         if (error.code === "ENOENT" && index + 1 < candidates.length) {
-          serveCandidate(candidates, index + 1, res);
+          serveCandidate(candidates, index + 1, res, req);
           return;
         }
         const status = error.code === "ENOENT" ? 404 : 500;
@@ -147,12 +218,40 @@ function createStaticFiles({
         return;
       }
 
+      const ext = path.extname(filePath);
       let body = data;
-      if (path.extname(filePath) === ".html" && shouldInjectHtml(filePath)) {
+      if (ext === ".html" && shouldInjectHtml(filePath)) {
         body = Buffer.from(injectHtml(data.toString("utf8")), "utf8");
       }
 
-      res.writeHead(200, getStaticHeaders(filePath));
+      const headers = getStaticHeaders(filePath);
+      const reqHeaders = (req && req.headers) || {};
+      const cacheable = headers["cache-control"] !== "no-store";
+
+      // Content negotiation only applies to cacheable static assets. HTML stays
+      // no-store and is served as-is (no ETag, no compression) so credentialed,
+      // injected pages keep their existing semantics.
+      if (COMPRESSIBLE_EXTS.has(ext)) {
+        headers.vary = "Accept-Encoding";
+      }
+
+      if (cacheable) {
+        const etag = computeEtag(body);
+        headers.etag = etag;
+        if (etagMatches(reqHeaders["if-none-match"], etag)) {
+          res.writeHead(304, headers);
+          res.end();
+          return;
+        }
+
+        const encoding = pickEncoding(reqHeaders["accept-encoding"], ext);
+        if (encoding) {
+          body = getCompressed(`${etag}|${encoding}`, body, encoding);
+          headers["content-encoding"] = encoding;
+        }
+      }
+
+      res.writeHead(200, headers);
       res.end(body);
     });
   }

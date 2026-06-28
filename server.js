@@ -2842,7 +2842,7 @@ function handleHttpRequest(req, res) {
     return;
   }
 
-  staticFiles.serveCandidate(candidates, 0, res);
+  staticFiles.serveCandidate(candidates, 0, res, req);
 }
 
 // Wraps the request dispatcher so a single unhandled throw cannot crash the
