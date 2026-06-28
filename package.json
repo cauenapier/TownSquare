@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "node --test server/*.test.js",
     "smoke": "node scripts/smoke-test.js",
-    "smoke:plugins": "node scripts/plugin-smoke-test.js"
+    "smoke:plugins": "node scripts/plugin-smoke-test.js",
+    "bot-replay": "node scripts/bot-replay-test.js"
   },
   "dependencies": {
     "ws": "^8.18.3"

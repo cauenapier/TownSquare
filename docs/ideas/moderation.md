@@ -4,6 +4,9 @@ How TownSquare grows its moderation story without becoming "a moderation-heavy
 community platform" (see `spec.md`). Presence first, conversation second —
 moderation should protect that, not dominate it.
 
+For admission controls, trust ladders, Turnstile placement, and bot-specific
+replay validation, see `docs/ideas/anti-bot-plan.md`.
+
 ## Guiding principles
 
 - **Off by default.** A fresh site needs zero moderation config to feel good.
