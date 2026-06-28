@@ -759,6 +759,19 @@ async function assertMapWorldSizingPolicy() {
 
   const tooLarge = validateMapWorld({ ...stored, width: 99999, height: MAP_WORLD_MIN_HEIGHT });
   assert(!tooLarge.ok, "a world above the maximum width should be rejected");
+
+  const legacyWater = validateMapWorld({
+    ...stored,
+    water: [
+      { type: "lake", width: 90, points: [{ x: 100, y: 100 }] },
+      { type: "river", width: 24, points: [{ x: 200, y: 200 }, { x: 300, y: 250 }] },
+    ],
+  });
+  assert(legacyWater.ok, "legacy lake and river strokes should still validate");
+  assert(
+    legacyWater.world.water.every((stroke) => stroke.type === "water"),
+    "legacy lake and river strokes should normalize to water",
+  );
 }
 
 async function assertServiceAdminCanEditMap() {
@@ -797,20 +810,27 @@ async function assertServiceAdminCanEditMap() {
     ...original,
     water: [
       ...original.water.slice(0, 198),
-      { type: "lake", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
-      { type: "river", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
+      { type: "water", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
+      { type: "water", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
     ],
   };
 
   try {
     const saved = await serviceAdminApi("/api/service-admin/map/save", { world: edited });
-    assert(saved.world.water.some((stroke) => stroke.type === "lake"), "service admin did not save a lake");
-    assert(saved.world.water.some((stroke) => stroke.type === "river"), "service admin did not save a river");
+    assert(saved.world.water.some((stroke) => stroke.type === "water"), "service admin did not save water");
+    assert(
+      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 90),
+      "service admin did not save a wide water stroke",
+    );
+    assert(
+      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 24),
+      "service admin did not save a narrow water stroke",
+    );
     const persisted = JSON.parse(fs.readFileSync(MAP_WORLD_FILE, "utf8"));
-    assert(persisted.water.some((stroke) => stroke.type === "lake"), "map world was not persisted to DATA_DIR");
+    assert(persisted.water.some((stroke) => stroke.type === "water"), "map world was not persisted to DATA_DIR");
 
     const publicAfter = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
-    assert(publicAfter.world.water.some((stroke) => stroke.type === "lake"), "saved world was not public");
+    assert(publicAfter.world.water.some((stroke) => stroke.type === "water"), "saved world was not public");
 
     for (const world of [
       { ...edited, props: [{ type: "castle", x: 10, y: 10 }] },

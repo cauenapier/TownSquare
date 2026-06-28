@@ -267,7 +267,7 @@ Set `PUBLIC_ORIGIN` in production so generated snippets use the public HTTPS ori
 Set `LANDING_ORIGIN` when this server should redirect `/`, `/docs`, and `/changelog` to a separately hosted public site.
 Set `PLAUSIBLE_DOMAIN` and `PLAUSIBLE_SCRIPT_SRC` to inject Plausible into every HTML page served by TownSquare. The landing repository loads the same tracker from its shared `site.mjs` on the canonical production hostname.
 Set `AUTH_FAILURES_PER_HOUR` to tune per-IP failed admin sign-in throttling; `0` disables it.
-Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering, freehand lakes, and curved rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
+Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering and a freehand water brush for lakes and rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
 Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to send a Telegram notification whenever a chat message is sent.
 Set `INACTIVE_DISCONNECT_MS` and `INACTIVE_CHECK_INTERVAL_MS` to control away/inactive disconnects (see `.env.example`).
 For local runs, copy `.env.example` to `.env` (or create `.env` directly); `server.js` loads it on startup. Real environment variables win over `.env` values.

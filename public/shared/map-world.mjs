@@ -17,7 +17,12 @@ export const MAP_PROP_TYPES = Object.freeze({
   mountain: Object.freeze({ brushSpacing: 68 }),
   tree: Object.freeze({}),
 });
-export const MAP_WATER_TYPES = Object.freeze({ lake: true, river: true });
+export const MAP_WATER_TYPES = Object.freeze({ water: true, lake: true, river: true });
+export const MAP_WATER_RIVER_STYLE_MAX_WIDTH = 40;
+
+function normalizeWaterType(type) {
+  return type === "lake" || type === "river" ? "water" : type;
+}
 
 function normalizeDimensions(width, height) {
   if (!Number.isFinite(width) || !Number.isFinite(height)) {
@@ -96,7 +101,7 @@ export function validateMapWorld(value) {
     if (prop?.type === "lake") {
       const point = normalizePoint(prop, width, height);
       if (!point) return { ok: false, error: "Map prop coordinates are outside the world." };
-      migratedWater.push({ type: "lake", width: 110, points: [point] });
+      migratedWater.push({ type: "water", width: 110, points: [point] });
       continue;
     }
     if (!prop || typeof prop !== "object" || !Object.hasOwn(MAP_PROP_TYPES, prop.type)) {
@@ -137,7 +142,11 @@ export function validateMapWorld(value) {
     if (pointCount > MAX_WATER_POINTS) {
       return { ok: false, error: `Map cannot contain more than ${MAX_WATER_POINTS} water points.` };
     }
-    water.push({ type: stroke.type, width: Math.round(stroke.width * 100) / 100, points });
+    water.push({
+      type: normalizeWaterType(stroke.type),
+      width: Math.round(stroke.width * 100) / 100,
+      points,
+    });
   }
 
   return { ok: true, world: { width, height, props, water } };

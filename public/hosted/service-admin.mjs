@@ -324,11 +324,11 @@ function paintWater(point) {
       updateMapEditorControls();
       return false;
     }
-    mapGesture.stroke = { type: mapTool, width: mapBrushSize, points: [] };
+    mapGesture.stroke = { type: "water", width: mapBrushSize, points: [] };
     draftMapWorld.water.push(mapGesture.stroke);
   }
   const lastPoint = mapGesture.stroke.points[mapGesture.stroke.points.length - 1];
-  const spacing = mapTool === "river" ? 14 : Math.max(10, mapBrushSize * 0.16);
+  const spacing = mapBrushSize <= 40 ? 14 : Math.max(10, mapBrushSize * 0.16);
   if (lastPoint && Math.hypot(lastPoint.x - point.x, lastPoint.y - point.y) < spacing) return false;
   mapGesture.stroke.points.push({ x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 });
   mapGesture.waterPointCount += 1;
@@ -341,7 +341,8 @@ function paintMapAt(point) {
   }
   if (mapTool === "tree") return paintTreeDab(point);
   if (mapTool === "mountain") return paintMountain(point);
-  return paintWater(point);
+  if (mapTool === "water") return paintWater(point);
+  return false;
 }
 
 function applyMapGesture(event) {

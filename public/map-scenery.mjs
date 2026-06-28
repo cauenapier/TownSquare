@@ -1,5 +1,6 @@
 import { createSvgElement } from "./lib/ui-common.mjs";
 import { mountainPath, treeCrownPath, treeTrunkPath } from "./map-glyphs.mjs";
+import { MAP_WATER_RIVER_STYLE_MAX_WIDTH } from "./shared/map-world.mjs";
 
 function smoothPath(points) {
   if (points.length === 1) return `M${points[0].x} ${points[0].y} l0.01 0`;
@@ -18,11 +19,15 @@ function smoothPath(points) {
   return path;
 }
 
+function waterUsesRiverStyle(stroke) {
+  return stroke.width <= MAP_WATER_RIVER_STYLE_MAX_WIDTH;
+}
+
 function renderWater(world) {
   const group = createSvgElement("g", { class: "map-water", "aria-hidden": "true" });
   for (const stroke of world.water) {
     const path = smoothPath(stroke.points);
-    if (stroke.type === "river") {
+    if (waterUsesRiverStyle(stroke)) {
       group.append(
         createSvgElement("path", { class: "map-river__bank", d: path, "stroke-width": stroke.width + 6 }),
         createSvgElement("path", { class: "map-river", d: path, "stroke-width": stroke.width }),
