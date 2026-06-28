@@ -68,6 +68,7 @@ import {
  * @property {"auto" | "light" | "dark" | "host"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; `host` follows common host-page dark mode signals.
  * @property {boolean} [preview=false] Static customization preview: fixed spawn, local prop settle, no socket, in-place scene/style updates via the mount handle.
  * @property {boolean} [solo=false] Live socket, but hide other visitors on the client.
+ * @property {boolean} [watch=false] Livestream-overlay mode: live socket, render the real crowd (peers, birds, scene), but do not place or move a self avatar and send nothing. Pairs with the chrome-free, transparent `/overlay` page.
  * @property {boolean} [simulate=false] Dev simulation harness: no socket and local prop settle (like `preview`), but peers and birds stay visible so the scene matches production. The caller drives simulated peers through the exposed `ctx`.
  * @property {import("./widget/bubble-layout.mjs").LayoutConfig} [layout] Live reading-experience dials read by the loop every frame. Omit in production to run on the defaults; the dev scene passes a mutable object its sliders edit in place.
  * @property {Array<{ side: "left"|"right", label?: string, url: string }>} [connections] Neighbouring towns linked at the stage edges. Each grows a signpost on its side that opens a "walk over" modal.
@@ -170,7 +171,10 @@ export function mountTownSquare(root, options = {}) {
     || window.location.origin,
   );
   const siteKey = options.siteKey || root.dataset.townsquareSiteKey || "";
-  const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey);
+  // Livestream overlay: connect read-only. The widget renders the live crowd but
+  // never places the viewer in the scene, and the server never counts it.
+  const watch = options.watch === true;
+  const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey, { watch });
   // Which config fields the host declared inline. The dashboard delivers scene /
   // connections / message board live by siteKey, but any field declared here is a
   // deliberate power-user override that wins and is never overwritten live.
@@ -393,9 +397,13 @@ export function mountTownSquare(root, options = {}) {
     initBirds(ctx);
     initClouds(ctx);
   }
-  stage.appendChild(ctx.self.avatar.el);
-  renderAvatar(ctx.self.avatar, ctx.self.x);
-  updatePose(ctx.self.avatar, ctx.self.pose);
+  // Watch (overlay) mode is a passive viewer: it renders the real crowd but
+  // never shows or moves a self avatar.
+  if (!watch) {
+    stage.appendChild(ctx.self.avatar.el);
+    renderAvatar(ctx.self.avatar, ctx.self.x);
+    updatePose(ctx.self.avatar, ctx.self.pose);
+  }
   ctx.widgetPlugins.setModules(options.pluginModules || []);
   if (localOnly) {
     setStatusMessage(ctx, null);
@@ -427,8 +435,11 @@ export function mountTownSquare(root, options = {}) {
   }
   setupConnections(ctx);
   setupMessageBoard(ctx);
-  wireKeyboard(ctx);
-  wireStagePointer(ctx);
+  // Overlay viewers take no input; the game loop still runs to animate peers.
+  if (!watch) {
+    wireKeyboard(ctx);
+    wireStagePointer(ctx);
+  }
   startGameLoop(ctx);
 
   return {

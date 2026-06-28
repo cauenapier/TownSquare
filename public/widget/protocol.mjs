@@ -26,6 +26,12 @@ function isSolo(ctx) {
   return ctx.options.solo === true;
 }
 
+// Livestream overlay: a passive viewer with no self identity. It still renders
+// peers, birds, and the scene, so only the self-identity setup is skipped.
+function isWatch(ctx) {
+  return ctx.options.watch === true;
+}
+
 const WALK_BUMP_MS = 120;
 const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 8000;
@@ -148,15 +154,19 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === MSG.HELLO) {
-        self.id = message.id;
-        saveBrowserSecret(message.browserSecret);
+        const watch = isWatch(ctx);
         ctx.widgetPlugins?.setModules(message.pluginModules || ctx.options.pluginModules || []);
         if (typeof message.chatThrottleMs === "number") ctx.chatThrottleMs = message.chatThrottleMs;
-        applySelfState(ctx, message);
-        // Backlog seeds the hover tray only — it never pops a live bubble, so a
-        // refresh doesn't replay everyone's last messages into the scene.
-        for (const recent of message.messages || []) {
-          recordMessage(self.avatar, recent);
+        // A spectator hello carries no self identity, so skip own-avatar setup.
+        if (!watch) {
+          self.id = message.id;
+          saveBrowserSecret(message.browserSecret);
+          applySelfState(ctx, message);
+          // Backlog seeds the hover tray only — it never pops a live bubble, so a
+          // refresh doesn't replay everyone's last messages into the scene.
+          for (const recent of message.messages || []) {
+            recordMessage(self.avatar, recent);
+          }
         }
         if (!isSolo(ctx)) {
           for (const peer of message.peers) {

@@ -294,8 +294,8 @@ const MESSAGE_HANDLERS = {
   typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
-function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown") {
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,spectator:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown", spectator = false) {
   return {
     connectionId,
     ws,
@@ -306,6 +306,9 @@ function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown"
     propsById: scene.propsById,
     identity: null,
     joined: false,
+    // Read-only livestream overlay: receives broadcasts but never joins as an
+    // identity, so it isn't counted or shown to real visitors.
+    spectator,
     readingActive: false,
     lastMoveAt: 0,
     lastActionAt: 0,
@@ -1883,7 +1886,7 @@ function broadcast(scene, message, options = {}) {
   const payload = JSON.stringify(message);
 
   for (const client of scene.clients.values()) {
-    if (!client.joined) continue;
+    if (!client.joined && !client.spectator) continue;
     if (client.connectionId === exceptConnectionId) continue;
     if (client.ws.readyState !== client.ws.OPEN) continue;
     client.ws.send(payload);
@@ -1904,9 +1907,16 @@ function broadcastIdentity(scene, message, sourceIdentity, options = {}) {
   const payload = JSON.stringify(message);
 
   for (const client of scene.clients.values()) {
-    if (!client.joined || !client.identity) continue;
     if (client.connectionId === exceptConnectionId) continue;
     if (client.ws.readyState !== client.ws.OPEN) continue;
+    // Read-only overlays have no identity of their own: they see every visitor
+    // except shadow-blocked ones.
+    if (client.spectator) {
+      if (isShadowBlocked(site, sourceIdentity?.browserId)) continue;
+      client.ws.send(payload);
+      continue;
+    }
+    if (!client.joined || !client.identity) continue;
     if (!canSeeIdentity(site, client.identity, sourceIdentity)) continue;
     client.ws.send(payload);
   }
@@ -2536,8 +2546,11 @@ function countActiveVisitors(scene) {
 function validateSiteAccess(reqUrl) {
   const url = new URL(reqUrl, `http://${HOST}:${PORT}`);
   const siteKey = url.searchParams.get("siteKey") || "";
+  // Livestream overlays connect read-only: they receive the live scene but are
+  // never registered as a visitor (no identity, no JOIN, uncounted).
+  const watch = url.searchParams.get("watch") === "1";
   if (!siteKey) {
-    return { ok: true, scene: getScene("default", null), site: null };
+    return { ok: true, scene: getScene("default", null), site: null, watch };
   }
 
   const site = sitesByKey.get(siteKey);
@@ -2545,7 +2558,7 @@ function validateSiteAccess(reqUrl) {
     return { ok: false, status: 403, reason: "site disabled or unknown" };
   }
 
-  return { ok: true, scene: getScene(site.siteKey, site), site };
+  return { ok: true, scene: getScene(site.siteKey, site), site, watch };
 }
 
 function isOriginAllowedForSite(origin, site) {
@@ -2735,6 +2748,29 @@ const wss = new WebSocketServer({
   maxPayload: MAX_WS_PAYLOAD_BYTES,
 });
 
+// One-off snapshot for a read-only livestream overlay. Mirrors the peers/birds/
+// scene payload of the join HELLO but carries no self identity, so the widget
+// renders the live crowd without placing the viewer in it.
+function sendSpectatorHello(client) {
+  const { scene, site } = client;
+  const peers = Array.from(scene.identities.values())
+    .filter((peer) => peer.joined && !isShadowBlocked(site, peer.browserId))
+    .map(snapshotIdentity);
+
+  send(client.ws, {
+    type: MSG.HELLO,
+    id: null,
+    spectator: true,
+    peers,
+    birds: snapshotBirds(scene),
+    chatThrottleMs: getChatThrottle(site),
+    pluginModules: plugins.browserModules("widget", pluginContext(site)),
+    // Hosted sites carry scene/connections/board over the socket so overlays
+    // track admin edits live, just like a normal embed.
+    ...(site ? { scene: getSceneConfig(site), connections: getConnections(site), messageBoard: getMessageBoard(site) } : {}),
+  });
+}
+
 function handleInit(client, message) {
   if (client.joined) return;
 
@@ -2744,6 +2780,15 @@ function handleInit(client, message) {
   if (client.site && client.site.botProtection && !client.powVerified) {
     client.pendingInit = message;
     issuePowChallenge(client);
+    return;
+  }
+
+  // Livestream overlay: send a one-off snapshot of the live scene, then let the
+  // normal broadcast fan-out keep it updated. The spectator never becomes an
+  // identity, so it is uncounted, invisible to real visitors, and consumes no
+  // join budget.
+  if (client.spectator) {
+    sendSpectatorHello(client);
     return;
   }
 
@@ -3203,7 +3248,7 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "", ip);
+  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "", ip, access.watch === true);
   access.scene.clients.set(client.connectionId, client);
   ws.isAlive = true;
 

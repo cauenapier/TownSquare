@@ -30,6 +30,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `public/lib/` — generic browser helpers shared across pages (e.g. `ui-common.mjs`)
 - `public/hosted/` — hosted registration/admin pages and scripts, served at `/register`, `/admin`, `/service-admin`
 - `public/map.html` — public map of verified, enabled TownSquares, served at `/map`
+- `public/overlay.html` — transparent, chrome-free, watch-only scene for livestream overlays, served at `/overlay` (point an OBS browser source at `/overlay?siteKey=<key>`)
 - `public/dev/` — local dev tooling: `dev.html` (simulation, `/dev`) and `walk-sandbox.html` (`/walk-sandbox`)
 - `public/staging.html` — live widget demo for the staging instance, served at `/staging` (gated by `ENABLE_STAGING_PAGE`)
 - `scripts/smoke-test.js` — automated websocket smoke test
