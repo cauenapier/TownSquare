@@ -76,6 +76,7 @@ const TABLE_COLUMNS = [
   { key: "visitorsWeekly", label: "Weekly", render: (site) => String(site.visitorStats?.weekly ?? 0) },
   { key: "visitorsMonthly", label: "Monthly", render: (site) => String(site.visitorStats?.monthly ?? 0) },
   { key: "connectionClickTotal", label: "Outbound", render: (site) => String(site.connectionClickTotal ?? 0) },
+  { key: "mapClickTotal", label: "Map clicks", render: (site) => String(site.mapClickTotal ?? 0) },
   { key: "blockedCount", label: "Blocked", render: (site) => String(site.blockedCount ?? 0) },
 ];
 
@@ -461,6 +462,7 @@ function siteSortValue(site, key) {
     case "messageCount":
     case "activeVisitors":
     case "connectionClickTotal":
+    case "mapClickTotal":
     case "blockedCount":
       return Number(site[key] ?? 0);
     case "visitorsDaily":

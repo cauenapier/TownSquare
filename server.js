@@ -1698,6 +1698,7 @@ function isServiceAdminAuthorized(req, body, res) {
 function serviceAdminSite(site) {
   const scene = scenes.get(site.siteKey);
   const connectionClicks = isPlainObject(site.connectionClicks) ? site.connectionClicks : {};
+  const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
 
   return {
     ...publicSite(site),
@@ -1709,6 +1710,8 @@ function serviceAdminSite(site) {
       (sum, entry) => sum + (entry?.count || 0),
       0,
     ),
+    mapClickTotal: Number(mapClicks.count || 0),
+    mapClickLastAt: Number(mapClicks.lastAt || 0),
   };
 }
 
@@ -2247,6 +2250,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       messageCount: 0,
       lastMessageAt: null,
       connectionClicks: {},
+      mapClicks: { count: 0, lastAt: 0 },
       createdAt: now,
       updatedAt: now,
       blockedBrowserIds: [],
@@ -2344,6 +2348,9 @@ function loadSites() {
       if (!isPlainObject(site.connectionClicks)) {
         site.connectionClicks = {};
       }
+      if (!isPlainObject(site.mapClicks)) {
+        site.mapClicks = { count: 0, lastAt: 0 };
+      }
       if (typeof site.supporter !== "boolean") {
         site.supporter = false;
       }
@@ -2401,6 +2408,7 @@ function touchSite(site) {
 // at most once per interval. Losing up to a minute of clicks on a crash is fine
 // for traffic analytics.
 let lastConnectionClicksSaveAt = 0;
+let lastMapClicksSaveAt = 0;
 
 // lastSeenUrl is refreshed on every navigation across every connected visitor.
 // Throttle the full sites.json rewrite the same way lastSeenAt is throttled so a
@@ -2447,6 +2455,43 @@ function handleConnectionClick(req, res) {
 
     if (now - lastConnectionClicksSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       lastConnectionClicksSaveAt = now;
+      saveSites();
+    }
+
+    respond(204);
+  });
+}
+
+/**
+ * Record one visitor click on a site's outbound website link from the public
+ * /map page. We only need a per-site tally (the map exposes a single website
+ * link per town), so a verified siteKey is enough to attribute the click.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handleMapClick(req, res) {
+  readJsonBody(req, res, (body) => {
+    // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
+    const respond = (status) => {
+      res.writeHead(status, { "access-control-allow-origin": "*" });
+      res.end();
+    };
+
+    const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
+    const site = sitesByKey.get(siteKey);
+    if (!site || site.disabled) {
+      respond(204);
+      return;
+    }
+
+    const now = Date.now();
+    const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : (site.mapClicks = { count: 0, lastAt: 0 });
+    mapClicks.count = (Number(mapClicks.count) || 0) + 1;
+    mapClicks.lastAt = now;
+
+    if (now - lastMapClicksSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+      lastMapClicksSaveAt = now;
       saveSites();
     }
 
@@ -2720,6 +2765,11 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/connection-click") {
     handleConnectionClick(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/map-click") {
+    handleMapClick(req, res);
     return;
   }
 
