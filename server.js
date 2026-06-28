@@ -108,6 +108,15 @@ const IP_MAX_IDENTITIES = readLimit("IP_MAX_IDENTITIES", 2);
 const IP_JOIN_LIMIT = readLimit("IP_JOIN_LIMIT", 30);
 const IP_STATE_EVENT_LIMIT = readLimit("IP_STATE_EVENT_LIMIT", 600);
 const IP_CHAT_EVENT_LIMIT = readLimit("IP_CHAT_EVENT_LIMIT", 20);
+// Behavioral flood ban: count rename + chat actions per IP over a rolling
+// window. Crossing FLOOD_BAN_LIMIT is non-human (the abuse bot renames several
+// times a second), so the IP is persistently blocked — but only when
+// FLOOD_BAN_ENFORCE is set. Unset (default) is dry-run: it logs `flood_detect`
+// with the rate it *would* ban and changes nothing, so the threshold can be
+// validated against real traffic before it can act. Owners are exempt.
+const FLOOD_BAN_LIMIT = readLimit("FLOOD_BAN_LIMIT", 30);
+const FLOOD_BAN_WINDOW_MS = readLimit("FLOOD_BAN_WINDOW_MS", 10000);
+const FLOOD_BAN_ENFORCE = process.env.FLOOD_BAN_ENFORCE === "1";
 const IP_SYNC_ACTION_ROUNDS = readLimit("IP_SYNC_ACTION_ROUNDS", 3);
 const IP_SYNC_ACTION_WINDOW_MS = readLimit("IP_SYNC_ACTION_WINDOW_MS", 10000);
 const IP_SYNC_ACTION_TOLERANCE_MS = readLimit("IP_SYNC_ACTION_TOLERANCE_MS", 250);
@@ -955,6 +964,55 @@ function allowIpEvent(client, type, limit) {
   if (consumeIpBudget(client, type, limit, IP_EVENT_WINDOW_MS)) return true;
   closeRateLimited(client);
   return false;
+}
+
+// Behavioral flood detector: tally rename/chat actions per IP in a rolling
+// window. A human cannot rename or message dozens of times in 10s; the abuse bot
+// does. On crossing the threshold we persistently block the IP (reusing
+// blockedIps enforcement) and kick every connection on it. In dry-run
+// (FLOOD_BAN_ENFORCE unset) it only logs what it *would* ban. Returns true when
+// the caller's action should be dropped (i.e. the IP was just banned).
+function registerFloodAction(client, now = Date.now()) {
+  if (FLOOD_BAN_LIMIT <= 0 || !client.site) return false;
+  if (client.identity?.isOwner) return false; // never auto-ban a verified owner
+
+  const activity = getIpActivity(client.scene, client.ip, now);
+  let flood = activity.flood;
+  if (!flood || now - flood.startedAt >= FLOOD_BAN_WINDOW_MS) {
+    flood = { startedAt: now, count: 0, flagged: false };
+    activity.flood = flood;
+  }
+  flood.count += 1;
+  if (flood.count < FLOOD_BAN_LIMIT || flood.flagged) return false;
+
+  // Threshold crossed: log once per window either way (audit + dry-run signal).
+  flood.flagged = true;
+  console.log(JSON.stringify({
+    event: "flood_detect",
+    at: new Date(now).toISOString(),
+    enforce: FLOOD_BAN_ENFORCE,
+    site: client.site.siteKey,
+    ip: client.ip,
+    count: flood.count,
+    windowMs: FLOOD_BAN_WINDOW_MS,
+    name: client.identity?.displayName || "",
+  }));
+
+  if (!FLOOD_BAN_ENFORCE) return false; // dry-run: detect only
+
+  if (!Array.isArray(client.site.blockedIps)) client.site.blockedIps = [];
+  if (client.ip && client.ip !== "unknown" && !client.site.blockedIps.includes(client.ip)) {
+    client.site.blockedIps.push(client.ip);
+    logModeration(client.site, "auto-block-ip", client.ip);
+    touchSite(client.site);
+  }
+  // Kick every live connection from this IP in the scene, not just this one.
+  for (const peer of client.scene.clients.values()) {
+    if (peer.ip === client.ip && peer.ws.readyState === peer.ws.OPEN) {
+      peer.ws.close(4003, "blocked");
+    }
+  }
+  return true;
 }
 
 function isIpQuarantined(scene, ip, now = Date.now()) {
@@ -2945,6 +3003,7 @@ function handleProfile(client, message) {
   const displayName = filterDisplayName(client.site, sanitizeDisplayName(message.displayName));
   const color = sanitizeCharacterColor(message.color);
   if (displayName === client.identity.displayName && color === client.identity.color) return;
+  if (registerFloodAction(client)) return;
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.identity.displayName = displayName;
@@ -3052,6 +3111,7 @@ function handleSay(client, message) {
   let text = sanitizeMessage(message.text);
   if (site) text = applyWordFilter(text, site.blockedWords);
   if (!text) return;
+  if (registerFloodAction(client)) return;
   if (!allowIpEvent(client, "chat", IP_CHAT_EVENT_LIMIT)) return;
 
   client.lastChatAt = now;
