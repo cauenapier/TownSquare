@@ -20,6 +20,50 @@ function isReadingActive() {
   return document.visibilityState === "visible" && document.hasFocus();
 }
 
+// One shared history patch backs every mount. Wrapping pushState/replaceState
+// per mount would nest wrappers and fire the navigation event once per mount;
+// instead we install a single wrapper, refcount it, and let the last teardown
+// restore the host's originals. The wrapper just emits a global
+// `townsquare:navigation` event that every mount already listens for.
+let historyPatchCount = 0;
+let originalPushState = null;
+let originalReplaceState = null;
+let wrappedPushState = null;
+let wrappedReplaceState = null;
+
+function installHistoryPatch() {
+  historyPatchCount += 1;
+  if (historyPatchCount > 1) return;
+  originalPushState = history.pushState;
+  originalReplaceState = history.replaceState;
+  wrappedPushState = function townsquarePushState(...args) {
+    const result = originalPushState.apply(this, args);
+    window.dispatchEvent(new Event("townsquare:navigation"));
+    return result;
+  };
+  wrappedReplaceState = function townsquareReplaceState(...args) {
+    const result = originalReplaceState.apply(this, args);
+    window.dispatchEvent(new Event("townsquare:navigation"));
+    return result;
+  };
+  history.pushState = wrappedPushState;
+  history.replaceState = wrappedReplaceState;
+}
+
+function uninstallHistoryPatch() {
+  if (historyPatchCount === 0) return;
+  historyPatchCount -= 1;
+  if (historyPatchCount > 0) return;
+  // Only restore methods that are still our wrapper; if the host swapped them
+  // out meanwhile, leave their version in place.
+  if (history.pushState === wrappedPushState) history.pushState = originalPushState;
+  if (history.replaceState === wrappedReplaceState) history.replaceState = originalReplaceState;
+  originalPushState = null;
+  originalReplaceState = null;
+  wrappedPushState = null;
+  wrappedReplaceState = null;
+}
+
 /**
  * Start watching the host page; returns a dispose function that removes the
  * listeners and restores the patched history methods.
@@ -63,20 +107,7 @@ export function watchCurrentPage(ctx) {
     recheckTimer = setTimeout(queueReadingUpdate, READING_RECHECK_MS);
   };
 
-  const originalPushState = history.pushState;
-  const originalReplaceState = history.replaceState;
-  const wrappedPushState = function townsquarePushState(...args) {
-    const result = originalPushState.apply(this, args);
-    window.dispatchEvent(new Event("townsquare:navigation"));
-    return result;
-  };
-  const wrappedReplaceState = function townsquareReplaceState(...args) {
-    const result = originalReplaceState.apply(this, args);
-    window.dispatchEvent(new Event("townsquare:navigation"));
-    return result;
-  };
-  history.pushState = wrappedPushState;
-  history.replaceState = wrappedReplaceState;
+  installHistoryPatch();
   window.addEventListener("popstate", scheduleReadingUpdate);
   window.addEventListener("hashchange", scheduleReadingUpdate);
   window.addEventListener("pageshow", scheduleReadingUpdate);
@@ -95,7 +126,6 @@ export function watchCurrentPage(ctx) {
     window.removeEventListener("townsquare:navigation", scheduleReadingUpdate);
     clearTimeout(updateTimer);
     clearTimeout(recheckTimer);
-    if (history.pushState === wrappedPushState) history.pushState = originalPushState;
-    if (history.replaceState === wrappedReplaceState) history.replaceState = originalReplaceState;
+    uninstallHistoryPatch();
   };
 }

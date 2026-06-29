@@ -6,8 +6,8 @@
  * new scene features can grow without turning the mount file into a monolith.
  */
 
-import { setLocalTyping, submitChat } from "./widget/chat.mjs";
-import { initBirds, destroyBirds } from "./widget/birds.mjs";
+import { createChatScope, setLocalTyping, submitChat } from "./widget/chat.mjs";
+import { initBirds, destroyBirds, syncBirdPerches } from "./widget/birds.mjs";
 import { initClouds, destroyClouds } from "./widget/clouds.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
 import { setupMessageBoard, teardownMessageBoard } from "./widget/message-board.mjs";
@@ -148,6 +148,7 @@ function refreshScene(ctx, sceneConfig) {
   for (const peer of ctx.peers.values()) {
     updatePropEffects(peer.avatar, peer.x, peer.propId, ctx.sceneProps);
   }
+  syncBirdPerches(ctx);
 }
 
 /**
@@ -204,6 +205,9 @@ export function mountTownSquare(root, options = {}) {
   const localOnly = preview || simulate;
   const spawnX = preview || solo || simulate ? PREVIEW_SPAWN_X : randomSpawnX();
   const peers = new Map();
+  // Per-mount chat state, shared by every avatar in this mount (and never across
+  // mounts), so two widgets on one page keep independent bubble limits.
+  const chatScope = createChatScope();
   const coarsePointer = typeof window.matchMedia === "function"
     && window.matchMedia("(pointer: coarse)").matches;
 
@@ -215,7 +219,8 @@ export function mountTownSquare(root, options = {}) {
     stage,
     statusRow,
     status: statusEl,
-    quietButton,
+    enableToggle,
+    enableToggleLabel,
     expandButton,
     helpButton,
     helpScrim,
@@ -243,6 +248,7 @@ export function mountTownSquare(root, options = {}) {
     socketUrl,
     browserId,
     peers,
+    chat: chatScope,
     sceneProps,
     propsById: new Map(sceneProps.map((prop) => [prop.id, prop])),
     birdPerchesById: new Map(birdPerches.map((perch) => [perch.id, perch])),
@@ -250,7 +256,7 @@ export function mountTownSquare(root, options = {}) {
     stage,
     statusRowEl: statusRow,
     statusEl,
-    quietButton,
+    enableToggle,
     expandButton,
     // Chat cooldown (slow mode); the server sends the live value in `hello` and
     // again whenever an owner changes it.
@@ -284,6 +290,7 @@ export function mountTownSquare(root, options = {}) {
         isSelf: true,
         profile: { ...profile, readingLabel, readingUrl, readingActive },
         colors: CHARACTER_COLORS,
+        chatScope,
         onProfileChange: (nextProfile) => {
           const saved = saveStoredProfile(nextProfile);
           ctx.self.displayName = saved.displayName;
@@ -294,7 +301,10 @@ export function mountTownSquare(root, options = {}) {
         },
         onSubmitChat: () => submitChat(ctx),
         onTypingChange: (typing) => setLocalTyping(ctx, typing),
-        toolbarHost: coarsePointer ? toolbar : undefined,
+        // Chat always lives in the fixed bottom bar, never floating under the
+        // (moving) figure: that float overlapped peer name tags and clipped at
+        // screen edges. The bar's space is already reserved (--ts-toolbar-reserve).
+        toolbarHost: toolbar,
       }),
       walkTimer: null,
     },
@@ -322,6 +332,7 @@ export function mountTownSquare(root, options = {}) {
   const expandController = createExpandController({
     app,
     expandButton,
+    chatScope,
     getAvatars: () => [ctx.self.avatar, ...Array.from(ctx.peers.values(), (peer) => peer.avatar)],
     onChange: (expanded) => {
       ctx.expanded = expanded;
@@ -337,10 +348,9 @@ export function mountTownSquare(root, options = {}) {
     if (quiet) setLocalTyping(ctx, false);
     if (quiet) setExpanded(false);
     ctx.app.classList.toggle("townsquare--quiet", quiet);
-    ctx.quietButton.classList.toggle("townsquare__control--active", quiet);
-    ctx.quietButton.setAttribute("aria-pressed", String(quiet));
-    ctx.quietButton.setAttribute("aria-label", quiet ? "Enable TownSquare" : "Disable TownSquare");
-    ctx.quietButton.title = quiet ? "Enable TownSquare" : "Disable TownSquare";
+    ctx.enableToggle.checked = !quiet;
+    ctx.enableToggle.setAttribute("aria-label", quiet ? "TownSquare disabled" : "TownSquare enabled");
+    ctx.enableToggle.title = quiet ? "Enable TownSquare" : "Disable TownSquare";
     ctx.self.movingLeft = false;
     ctx.self.movingRight = false;
     ctx.self.avatar.composer?.reset();
@@ -350,7 +360,7 @@ export function mountTownSquare(root, options = {}) {
     }
   };
 
-  quietButton.addEventListener("click", () => setQuiet(!ctx.quiet));
+  enableToggle.addEventListener("change", () => setQuiet(!enableToggle.checked));
   expandButton.addEventListener("click", () => {
     setExpanded(!expandController.isExpanded());
   });
@@ -358,13 +368,11 @@ export function mountTownSquare(root, options = {}) {
   const onHighFiveClick = () => triggerHighFive(ctx);
   jumpButton.addEventListener("click", onJumpClick);
   highFiveButton.addEventListener("click", onHighFiveClick);
-  // Touch: gather the action buttons into the bottom toolbar beside the docked
-  // composer and pencil (createAvatar already placed those). Moving the nodes
-  // keeps their click listeners intact. Final bar order: input, pencil, jump, hi5.
-  if (coarsePointer) {
-    toolbar.append(jumpButton, highFiveButton);
-  }
-  const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton);
+  // Gather the action buttons into the bottom toolbar beside the docked composer
+  // and pencil (createAvatar already placed those). Moving the nodes keeps their
+  // click listeners intact. Final bar order: input, pencil, jump, hi5.
+  toolbar.append(jumpButton, highFiveButton);
+  const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel);
 
   const unwatchPage = watchCurrentPage(ctx);
 

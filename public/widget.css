@@ -85,6 +85,74 @@
   height: 16px;
 }
 
+.townsquare__enable-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 30px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.townsquare__enable-toggle-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.townsquare__enable-toggle-track {
+  position: relative;
+  display: block;
+  width: 36px;
+  height: 20px;
+  border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 78%, transparent);
+  box-shadow: 0 4px 12px -10px rgba(42, 41, 38, 0.38);
+  backdrop-filter: blur(8px);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.townsquare__enable-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  transform: translateY(-50%);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.townsquare__enable-toggle-input:checked + .townsquare__enable-toggle-track {
+  background: color-mix(in oklab, var(--you) 32%, var(--surface));
+  border-color: color-mix(in oklab, var(--you) 48%, var(--hair-2));
+}
+
+.townsquare__enable-toggle-input:checked + .townsquare__enable-toggle-track::after {
+  transform: translate(16px, -50%);
+  background: var(--you-deep);
+}
+
+.townsquare__enable-toggle-input:focus-visible + .townsquare__enable-toggle-track {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .townsquare__enable-toggle-track,
+  .townsquare__enable-toggle-track::after {
+    transition: none;
+  }
+}
+
 .townsquare__actions {
   position: absolute;
   z-index: 2147483001;
@@ -653,7 +721,10 @@
   z-index: 2147483000;
   width: 100vw;
   height: 100dvh;
-  padding: 0 18px 18px;
+  /* Reserve room at the bottom for the docked toolbar (absolute, bottom:7px) so
+     the flex stage — and the figures' name tags at its base — never sit under
+     the chat input. Mirrors --ts-toolbar-reserve in non-expanded mode. */
+  padding: 0 18px var(--ts-toolbar-reserve);
   border-top: 0;
   border-radius: 0;
   /* Expanded mode must cover the host even when its embedded palette uses
@@ -997,10 +1068,13 @@
   pointer-events: none;
 }
 
-/* reading a character's tray outranks any neighbour's speak-order stacking */
+/* Reading a character's tray outranks everything in the scene — neighbours'
+   speak-order stacking AND the self figure (2147483001), so the open tray is
+   never painted over by your own figure/bubbles. Stays below the overlay panels
+   (message board / connections, 2147483005) and the help modal. */
 .townsquare-avatar--has-history:hover,
 .townsquare-avatar--has-history:focus-within,
-.townsquare-avatar--tray-open { z-index: 2147483000; }
+.townsquare-avatar--tray-open { z-index: 2147483003; }
 .townsquare-avatar:is(.townsquare-avatar--walking, .townsquare-avatar--shaded, .townsquare-avatar--lit) {
   filter: var(--townsquare-avatar-shade-filter) var(--townsquare-avatar-walk-filter) var(--townsquare-avatar-light-filter);
 }
@@ -1427,6 +1501,16 @@
   transition: opacity 140ms ease, transform 160ms ease;
 }
 
+/* Narrow stages (phones / small embeds): cap bubbles tighter so a long line
+   wraps to more rows (taller) instead of eating the width — that lets the
+   column solver pack more speakers side by side. Short lines are unaffected
+   (width: max-content). Container query, so it tracks the widget's own width. */
+@container (max-width: 460px) {
+  .townsquare-avatar__above {
+    max-width: min(190px, 52cqw);
+  }
+}
+
 .townsquare-avatar__above:empty { display: none; }
 
 /* hovering to read history yields the live stack to the tray */
@@ -1609,12 +1693,24 @@
   position: absolute;
   left: 50%;
   top: calc(100% + 9px);
-  transform: translateX(-50%);
+  /* --label-shift de-conflicts overlapping name tags (see layoutNameLabels in
+     bubble-layout.mjs), so no tag — including your own — covers another. */
+  transform: translateX(calc(-50% + var(--label-shift, 0px)));
+  /* --label-fade recedes distant tags so crowded narrow stages stay legible;
+     near 1 on wide stages (see layoutNameLabels). */
+  opacity: var(--label-fade, 1);
+  transition: opacity 140ms ease;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 7px;
   white-space: nowrap;
+}
+
+/* Hovering or focusing a faded distant character restores its tag to full. */
+.townsquare-avatar:hover .townsquare-avatar__below,
+.townsquare-avatar:focus-within .townsquare-avatar__below {
+  opacity: 1;
 }
 
 .townsquare-avatar__below[hidden] { display: none; }
@@ -1967,20 +2063,27 @@
   .townsquare-avatar__composer { min-width: min(260px, 80cqw); }
 }
 
-/* ── Touch: bottom toolbar ──
-   On coarse pointers chat moves off the (moving) figure into a fixed bar at the
-   bottom of the widget: an always-visible input, the rename pencil, and the
-   jump / high-five actions. The figure keeps a compact identity label, and the
-   virtual keyboard can't clip any of it. */
+/* ── Bottom toolbar ──
+   Chat lives in a fixed bar at the bottom of the widget — for every pointer
+   type — instead of floating under the (moving) figure: an always-visible
+   input, the rename pencil, and the jump / high-five actions. The figure keeps
+   a compact identity label, peer name tags are never covered, and the virtual
+   keyboard can't clip any of it. The space is reserved via --ts-toolbar-reserve. */
 .townsquare__toolbar {
   position: absolute;
   z-index: 2147483002;
   left: 10px;
   right: 10px;
   bottom: 7px;
-  display: none;
+  display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Actions (jump / high-five) are docked into the toolbar, so the floating
+   container that once held them bottom-right is always empty. */
+.townsquare__actions {
+  display: none;
 }
 
 /* The docked composer fills the bar instead of floating on its own. */
@@ -2027,16 +2130,6 @@
 }
 
 @media (pointer: coarse) {
-  .townsquare__toolbar {
-    display: flex;
-  }
-
-  /* Touch mounts move the jump / high-five buttons into the toolbar, so the
-     absolute-positioned actions container is empty here — hide it. */
-  .townsquare__actions {
-    display: none;
-  }
-
   .townsquare__control {
     width: 40px;
     height: 40px;

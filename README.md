@@ -21,6 +21,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 
 - `server.js` — Node server for static assets, health checks, and WebSocket presence
 - `public/townsquare.mjs` — reusable embeddable widget mount API (public embed URL `/townsquare.mjs`)
+- `public/townsquare-counter.mjs` — lightweight "N people here" counter embed (public URL `/townsquare-counter.mjs`); reads `/api/site-presence`
 - `public/widget/` — widget implementation modules (DOM, chat, presence, protocol, movement)
 - `public/shared/` — protocol, scene, style, and map definitions shared with the server
 - `public/widget.css` — embeddable widget styling (scoped to `#townsquare-root`)
@@ -154,6 +155,56 @@ Notes:
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
 
+### Presence counter
+
+For pages where the full square is too heavy, embed the lightweight counter — a
+self-contained "N people here" pill that links to the square. It loads no
+stylesheet and opens no socket, so showing it never adds a visitor to the square:
+
+```html
+<div id="townsquare-count"></div>
+<script type="module">
+  import { mountTownSquareCounter } from "https://your-townsquare-host/townsquare-counter.mjs";
+
+  mountTownSquareCounter(document.getElementById("townsquare-count"), {
+    serverOrigin: "https://your-townsquare-host",
+    // siteKey: "…",                       // only for multi-site hosted servers
+    variant: "pill",                       // pill | minimal | solid | outline
+    accent: "#c8641f",                     // optional; sets --ts-counter-accent
+    townSquareUrl: "https://your-site/townsquare"
+  });
+</script>
+```
+
+Hosted owners don't have to write this by hand: the admin page (Appearance tab →
+**Presence counter**) has a style picker with a live preview that generates the
+snippet for you.
+
+Notes:
+
+- A town square is keyed per **site**, not per page (everyone with the widget
+  open on any page of the site shares one square). So the counter's "here" count
+  is the whole site's live presence — the same number whether the counter sits on
+  the same page as the square or a different one.
+- The count is read from `GET /api/site-presence?siteKey=…`, a public, read-only
+  endpoint that reports the live scene count without joining it. A counter-only
+  page therefore never inflates the number or appears as a ghost to people in the
+  square.
+- Clicking the counter takes the visitor to the square: it scrolls to a full
+  widget already on the same page (`#townsquare-root`) if one exists, otherwise it
+  navigates to `townSquareUrl`. With neither, it renders as plain text.
+- `variant` picks one of four built-in looks (`pill`, `minimal`, `solid`,
+  `outline`); each is just a class painted from CSS variables.
+- Options can also be set via data attributes on the mount node:
+  `data-townsquare-server-origin`, `data-townsquare-site-key`,
+  `data-townsquare-url`, `data-townsquare-variant`, `data-townsquare-accent`.
+  `pollMs` defaults to 20s (floored at 5s).
+- For full control, override the CSS variables on the `.ts-counter` element:
+  `--ts-counter-accent`, `--ts-counter-bg`, `--ts-counter-ink`,
+  `--ts-counter-radius`, `--ts-counter-font-size`, `--ts-counter-pad-x`,
+  `--ts-counter-pad-y`. By default it uses system colors and follows light/dark
+  automatically.
+
 ## Hosted registration
 
 User-facing guidance is maintained with the public site in the private
@@ -268,7 +319,7 @@ Set `PUBLIC_ORIGIN` in production so generated snippets use the public HTTPS ori
 Set `LANDING_ORIGIN` when this server should redirect `/`, `/docs`, and `/changelog` to a separately hosted public site.
 Set `PLAUSIBLE_DOMAIN` and `PLAUSIBLE_SCRIPT_SRC` to inject Plausible into every HTML page served by TownSquare. The landing repository loads the same tracker from its shared `site.mjs` on the canonical production hostname.
 Set `AUTH_FAILURES_PER_HOUR` to tune per-IP failed admin sign-in throttling; `0` disables it.
-Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering, freehand lakes, and curved rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
+Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering and a freehand water brush for lakes and rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
 Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to send a Telegram notification whenever a chat message is sent.
 Set `INACTIVE_DISCONNECT_MS` and `INACTIVE_CHECK_INTERVAL_MS` to control away/inactive disconnects (see `.env.example`).
 For local runs, copy `.env.example` to `.env` (or create `.env` directly); `server.js` loads it on startup. Real environment variables win over `.env` values.
@@ -507,4 +558,4 @@ It also means leaving room for self-hosted TownSquares to optionally communicate
 
 ## License
 
-TBD
+MIT — see [LICENSE](LICENSE).

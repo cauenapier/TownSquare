@@ -133,7 +133,7 @@ function entryX(from) {
  * @param {number} x
  * @param {"left" | "right"} from
  */
-function upsertArrivingBird(ctx, id, perchId, x, from) {
+function upsertArrivingBird(ctx, id, perchId, from) {
   if (!ctx.birdLayer || !ctx.birds) return;
 
   const layout = perchLayout(ctx, perchId);
@@ -141,7 +141,7 @@ function upsertArrivingBird(ctx, id, perchId, x, from) {
 
   let bird = ctx.birds.get(id);
   if (!bird) {
-    bird = createBirdElement(id, x, layout.liftPx);
+    bird = createBirdElement(id, layout.x, layout.liftPx);
     ctx.birds.set(id, bird);
     ctx.birdLayer.appendChild(bird.el);
   } else {
@@ -152,12 +152,13 @@ function upsertArrivingBird(ctx, id, perchId, x, from) {
   setBirdFlyingArt(bird);
   bird.el.className = "bird bird--arriving";
   bird.el.style.setProperty("--bird-from", String(entryX(from)));
-  bird.el.style.setProperty("--bird-to", String(x));
+  bird.el.style.setProperty("--bird-to", String(layout.x));
   bird.el.style.setProperty("--bird-facing", from === "left" ? "1" : "-1");
 
   const onArrive = (event) => {
     if (event.animationName !== "bird-arrive") return;
     bird.el.removeEventListener("animationend", onArrive);
+    setBirdPerch(ctx, bird, perchId);
     setBirdPerchedArt(bird);
     bird.el.className = "bird bird--perched";
   };
@@ -170,7 +171,7 @@ function upsertArrivingBird(ctx, id, perchId, x, from) {
  * @param {string} perchId
  * @param {number} x
  */
-function upsertPerchedBird(ctx, id, perchId, x) {
+function upsertPerchedBird(ctx, id, perchId) {
   if (!ctx.birdLayer || !ctx.birds) return;
 
   const layout = perchLayout(ctx, perchId);
@@ -178,7 +179,7 @@ function upsertPerchedBird(ctx, id, perchId, x) {
 
   let bird = ctx.birds.get(id);
   if (!bird) {
-    bird = createBirdElement(id, x, layout.liftPx);
+    bird = createBirdElement(id, layout.x, layout.liftPx);
     bird.perchId = perchId;
     setBirdPerchedArt(bird);
     bird.el.className = "bird bird--perched";
@@ -201,7 +202,31 @@ export function syncBirdsFromHello(ctx, birds) {
 
   for (const bird of birds || []) {
     if (typeof bird.id !== "number" || typeof bird.perchId !== "string") continue;
-    upsertPerchedBird(ctx, bird.id, bird.perchId, bird.x);
+    upsertPerchedBird(ctx, bird.id, bird.perchId);
+  }
+}
+
+/**
+ * Re-anchor perched birds after the scene's prop layout changes (e.g. owner
+ * moved benches). Skips birds mid-flight.
+ *
+ * @param {BirdsContext} ctx
+ */
+export function syncBirdPerches(ctx) {
+  if (!ctx.birds) return;
+
+  for (const [id, bird] of ctx.birds) {
+    if (!bird.perchId) continue;
+    if (bird.el.classList.contains("bird--arriving") || bird.el.classList.contains("bird--fleeing")) {
+      continue;
+    }
+    const layout = perchLayout(ctx, bird.perchId);
+    if (!layout) {
+      ctx.birds.delete(id);
+      removeBirdElement(bird);
+      continue;
+    }
+    setBirdPerch(ctx, bird, bird.perchId);
   }
 }
 
@@ -211,7 +236,7 @@ export function syncBirdsFromHello(ctx, birds) {
  */
 export function applyBirdSpawn(ctx, message) {
   if (message.action !== "spawn") return;
-  upsertArrivingBird(ctx, message.id, message.perchId, message.x, message.from || "left");
+  upsertArrivingBird(ctx, message.id, message.perchId, message.from || "left");
 }
 
 /**

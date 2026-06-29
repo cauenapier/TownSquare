@@ -3,7 +3,7 @@
  */
 
 import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } from "./connections.mjs";
-import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
+import { layoutBubbleColumns, layoutNameLabels, layoutConfigFor } from "./bubble-layout.mjs";
 import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
 import { MSG, GESTURE } from "../shared/protocol.mjs";
@@ -109,10 +109,11 @@ export function maybeRequestPropSettle(ctx, now) {
 
 /**
  * @param {WidgetContext} ctx
+ * @param {number} now Frame timestamp (`performance.now()`), shared with the loop
+ *   so send-throttle timing uses the same clock as prop-settle and frame timing.
  */
-export function maybeSendMove(ctx) {
+export function maybeSendMove(ctx, now) {
   const { self, socket } = ctx;
-  const now = Date.now();
   const movedEnough = Math.abs(self.x - self.lastSentX) > 0.002;
   const waitedLongEnough = now - self.lastSendAt > SEND_INTERVAL_MS;
 
@@ -264,7 +265,7 @@ export function tick(ctx, now) {
     setFacing(ctx.self.avatar, direction < 0);
     updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
     setWalking(ctx.self.avatar, true);
-    maybeSendMove(ctx);
+    maybeSendMove(ctx, now);
   } else {
     setWalking(ctx.self.avatar, false);
     updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
@@ -273,12 +274,12 @@ export function tick(ctx, now) {
 
   updateConnectionProximity(ctx);
 
-  layoutBubbleColumns(
-    ctx.stage,
-    ctx.options.preview === true || ctx.options.solo === true ? [ctx.self] : [ctx.self, ...ctx.peers.values()],
-    ctx.self.x,
-    layoutConfigFor(ctx.options.layout, ctx.expanded),
-  );
+  const presences = ctx.options.preview === true || ctx.options.solo === true
+    ? [ctx.self]
+    : [ctx.self, ...ctx.peers.values()];
+  const layoutCfg = layoutConfigFor(ctx.options.layout, ctx.expanded);
+  layoutBubbleColumns(ctx.stage, presences, ctx.self.x, layoutCfg);
+  layoutNameLabels(ctx.stage, presences, ctx.self.x, layoutCfg);
 
   ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
 }

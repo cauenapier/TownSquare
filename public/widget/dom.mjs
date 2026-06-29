@@ -21,12 +21,15 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLElement} tray Hover surface listing recent history.
  * @property {HTMLElement} trayList Container the history rows render into.
  * @property {Array<{ text: string, at: number }>} history Recent messages, newest last.
+ * @property {import("./chat.mjs").ChatScope} chat Per-mount chat state shared by every avatar in the mount.
  * @property {number} [bubbleShift] Applied column nudge in px (see bubble-layout.mjs).
  * @property {number} [tailShift] Applied tail base counter-shift in px (see bubble-layout.mjs).
  * @property {number} [tailTip] Applied tail tip lean in px (see bubble-layout.mjs).
  * @property {number} [bubbleScale] Applied proximity scale (see bubble-layout.mjs).
  * @property {number} [bubbleFade] Applied proximity opacity (see bubble-layout.mjs).
  * @property {number} [trayShift] Applied history tray edge-clamping nudge in px.
+ * @property {number} [labelShift] Applied name-tag de-confliction nudge in px (see bubble-layout.mjs).
+ * @property {number} [labelFade] Applied name-tag proximity opacity (see bubble-layout.mjs).
  * @property {HTMLElement} [below] Container for the nameplate / composer.
  * @property {HTMLElement} [nameEl] Visible name label.
  * @property {HTMLElement} [crownEl] Verified site-owner badge.
@@ -80,13 +83,6 @@ const ENTER_ICON = `
   </svg>
 `;
 
-const QUIET_ICON = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M19 12.8A7.2 7.2 0 0 1 11.2 5 6.8 6.8 0 1 0 19 12.8Z"></path>
-  </svg>
-`;
-
 const EXPAND_ICON = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -120,7 +116,7 @@ const MAP_URL = "https://townsquare.cauenapier.com/map";
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, quietButton: HTMLButtonElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement, toolbar: HTMLElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, enableToggle: HTMLInputElement, enableToggleLabel: HTMLLabelElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement, toolbar: HTMLElement }}
  */
 export function renderShell(container) {
   const element = document.createElement("section");
@@ -137,13 +133,21 @@ export function renderShell(container) {
   expandButton.setAttribute("aria-pressed", "false");
   expandButton.title = "Expand";
 
-  const quietButton = document.createElement("button");
-  quietButton.className = "townsquare__control";
-  quietButton.type = "button";
-  quietButton.innerHTML = QUIET_ICON;
-  quietButton.setAttribute("aria-label", "Disable TownSquare");
-  quietButton.setAttribute("aria-pressed", "false");
-  quietButton.title = "Disable TownSquare";
+  const enableToggleLabel = document.createElement("label");
+  enableToggleLabel.className = "townsquare__enable-toggle";
+
+  const enableToggle = document.createElement("input");
+  enableToggle.className = "townsquare__enable-toggle-input";
+  enableToggle.type = "checkbox";
+  enableToggle.checked = true;
+  enableToggle.setAttribute("aria-label", "TownSquare enabled");
+  enableToggle.title = "Disable TownSquare";
+
+  const enableToggleTrack = document.createElement("span");
+  enableToggleTrack.className = "townsquare__enable-toggle-track";
+  enableToggleTrack.setAttribute("aria-hidden", "true");
+
+  enableToggleLabel.append(enableToggle, enableToggleTrack);
 
   const helpButton = document.createElement("button");
   helpButton.className = "townsquare__control townsquare__help-button";
@@ -200,7 +204,7 @@ export function renderShell(container) {
   helpPanel.append(helpTitle, description, instructions, links);
   helpScrim.appendChild(helpPanel);
 
-  controls.append(expandButton, quietButton, helpButton);
+  controls.append(expandButton, enableToggleLabel, helpButton);
 
   const actions = document.createElement("div");
   actions.className = "townsquare__actions";
@@ -248,7 +252,8 @@ export function renderShell(container) {
     stage: stageEl,
     statusRow,
     status,
-    quietButton,
+    enableToggle,
+    enableToggleLabel,
     expandButton,
     helpButton,
     helpScrim,
@@ -265,10 +270,10 @@ export function renderShell(container) {
  * @param {HTMLButtonElement} helpButton
  * @param {HTMLElement} helpScrim
  * @param {HTMLElement} helpPanel
- * @param {HTMLButtonElement} quietButton
+ * @param {HTMLElement} enableToggleLabel
  * @returns {() => void}
  */
-export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
+export function wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel) {
   const setHelpOpen = (open) => {
     helpScrim.hidden = !open;
     helpButton.setAttribute("aria-expanded", String(open));
@@ -280,7 +285,7 @@ export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
     const target = event.target;
     if (
       target instanceof Node
-      && (helpButton.contains(target) || helpPanel.contains(target) || quietButton.contains(target))
+      && (helpButton.contains(target) || helpPanel.contains(target) || enableToggleLabel.contains(target))
     ) return;
     setHelpOpen(false);
   };
@@ -315,7 +320,7 @@ export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
  * }} options
  * @returns {AvatarView}
  */
-export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChange, onSubmitChat, onTypingChange, toolbarHost }) {
+export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onProfileChange, onSubmitChat, onTypingChange, toolbarHost }) {
   const el = document.createElement("div");
   el.className = `townsquare-avatar ${isSelf ? "townsquare-avatar--self" : "townsquare-avatar--peer"}`;
   el.innerHTML = figureMarkup('aria-hidden="true"');
@@ -344,6 +349,9 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     tray,
     trayList,
     history: [],
+    // Per-mount chat state (expanded-view limits + speak-order counter). Falls
+    // back to a private scope so a lone avatar still renders coherently.
+    chat: chatScope || { expandedView: false, speakOrder: 1 },
   };
 
   if (!isSelf) {

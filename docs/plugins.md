@@ -29,7 +29,7 @@ module.exports = {
   adminModule: "/plus/owner-figure/admin.mjs",
   widgetModule: "/plus/owner-figure/widget.mjs",
 
-  isEnabled: ({ site }) => site?.supporter === true,
+  isEnabled: ({ site }) => site?.plus === true,
 
   adminActions: {
     update({ owners, setData }, input) {
@@ -56,7 +56,7 @@ module.exports = {
 
 `isEnabled` controls the plugin's hooks, actions, visitor data, and browser
 module descriptors for a site. Current site context includes `siteKey`, `name`,
-`origin`, and `supporter`.
+`origin`, `supporter`, and `plus`.
 
 ## Site-owner activation toggle
 
@@ -80,11 +80,13 @@ globally as before.
 A plugin's own `isEnabled` layers on top of the owner's choice as an
 *entitlement* gate. The toggle is only offered to a site when its `isEnabled`
 passes, and the plugin runs only when both the entitlement holds **and** the
-owner has switched it on. For example, `owner-figure` keeps
-`isEnabled: ({ site }) => site?.plus === true`, so its switch appears only on Plus
-sites and activates only once that owner turns it on. The same toggle framework
-covers core and Plus plugins alike — a Plus plugin opts in purely by adding a
-`label`; no toggle code lives in the Plus repo.
+owner has switched it on. For example, `telegram-notifications` keeps its own
+entitlement `isEnabled`, so its switch appears only on entitled sites and
+activates only once that owner turns it on. The same toggle framework covers
+core and Plus plugins alike — a Plus plugin opts in purely by adding a `label`;
+no toggle code lives in the Plus repo. A Plus plugin that omits `label` (like
+`owner-figure` and `scene-cat`) instead runs automatically on every site its
+`isEnabled` entitles.
 
 ## Plugin storage and admin actions
 
@@ -122,6 +124,13 @@ are synchronous; the returned promise represents the browser request.
 join, movement, profile, and admin visitor snapshots. Its return value is
 placed under `visitor.plugins[pluginName]`; plugins cannot replace core visitor
 fields or another plugin's namespace.
+
+The server-side `visitor` context passed to `extendVisitor` exposes `id`,
+`browserId`, `displayName`, `color`, `isOwner`, `ownerHandle` (owners only), and
+`fp` — a stable per-visitor fingerprint (the same hash as `ownerHandle`) usable
+as a storage key without ever handling the raw `browserId`. The admin panel's
+`scene.visitors` carry the matching `fp`, so an admin action can target a
+specific present visitor (e.g. `visitor-figure` assigns a hat by `fp`).
 
 Widget modules are announced in the WebSocket hello payload, so enabling a
 plugin does not require owners to replace an existing embed snippet. A module

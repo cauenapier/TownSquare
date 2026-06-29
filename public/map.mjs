@@ -70,6 +70,22 @@ function structuralSnapshot(nextSites, nextWorld) {
   });
 }
 
+/**
+ * Tell the server a visitor followed a town's website link from the map, so the
+ * operator can see which towns the map sends traffic to. Fire-and-forget via
+ * sendBeacon so it survives the new-tab navigation; failures are ignored.
+ */
+function reportMapClick(siteKey) {
+  if (!siteKey || typeof navigator?.sendBeacon !== "function") return;
+  try {
+    // text/plain keeps this a CORS-simple request; the server parses it as JSON.
+    const payload = new Blob([JSON.stringify({ siteKey })], { type: "text/plain" });
+    navigator.sendBeacon("/api/map-click", payload);
+  } catch {
+    // Tracking is best-effort and must never block the visit.
+  }
+}
+
 function originLabel(origin) {
   try {
     return new URL(origin).hostname;
@@ -509,6 +525,10 @@ function wireControls() {
   document.querySelector("[data-map-reset]")?.addEventListener("click", resetView);
   detailClose?.addEventListener("click", closeDetail);
   detail.addEventListener("close", clearSelection);
+
+  for (const link of [detailOrigin, detailVisit]) {
+    link.addEventListener("click", () => reportMapClick(selectedSiteKey));
+  }
 }
 
 function normalizedMapWorld(raw) {

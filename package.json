@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Embeddable TownSquare slice: self-hostable realtime presence, walking, chat, and a default scene.",
+  "license": "MIT",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "eslint": "^9.39.4",
-    "globals": "^17.7.0"
+    "globals": "^17.7.0",
+    "playwright": "^1.61.1"
   }
 }

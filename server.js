@@ -108,6 +108,15 @@ const IP_MAX_IDENTITIES = readLimit("IP_MAX_IDENTITIES", 2);
 const IP_JOIN_LIMIT = readLimit("IP_JOIN_LIMIT", 30);
 const IP_STATE_EVENT_LIMIT = readLimit("IP_STATE_EVENT_LIMIT", 600);
 const IP_CHAT_EVENT_LIMIT = readLimit("IP_CHAT_EVENT_LIMIT", 20);
+// Behavioral flood ban: count rename + chat actions per IP over a rolling
+// window. Crossing FLOOD_BAN_LIMIT is non-human (the abuse bot renames several
+// times a second), so the IP is persistently blocked — but only when
+// FLOOD_BAN_ENFORCE is set. Unset (default) is dry-run: it logs `flood_detect`
+// with the rate it *would* ban and changes nothing, so the threshold can be
+// validated against real traffic before it can act. Owners are exempt.
+const FLOOD_BAN_LIMIT = readLimit("FLOOD_BAN_LIMIT", 30);
+const FLOOD_BAN_WINDOW_MS = readLimit("FLOOD_BAN_WINDOW_MS", 10000);
+const FLOOD_BAN_ENFORCE = process.env.FLOOD_BAN_ENFORCE === "1";
 const IP_SYNC_ACTION_ROUNDS = readLimit("IP_SYNC_ACTION_ROUNDS", 3);
 const IP_SYNC_ACTION_WINDOW_MS = readLimit("IP_SYNC_ACTION_WINDOW_MS", 10000);
 const IP_SYNC_ACTION_TOLERANCE_MS = readLimit("IP_SYNC_ACTION_TOLERANCE_MS", 250);
@@ -960,6 +969,55 @@ function allowIpEvent(client, type, limit) {
   return false;
 }
 
+// Behavioral flood detector: tally rename/chat actions per IP in a rolling
+// window. A human cannot rename or message dozens of times in 10s; the abuse bot
+// does. On crossing the threshold we persistently block the IP (reusing
+// blockedIps enforcement) and kick every connection on it. In dry-run
+// (FLOOD_BAN_ENFORCE unset) it only logs what it *would* ban. Returns true when
+// the caller's action should be dropped (i.e. the IP was just banned).
+function registerFloodAction(client, now = Date.now()) {
+  if (FLOOD_BAN_LIMIT <= 0 || !client.site) return false;
+  if (client.identity?.isOwner) return false; // never auto-ban a verified owner
+
+  const activity = getIpActivity(client.scene, client.ip, now);
+  let flood = activity.flood;
+  if (!flood || now - flood.startedAt >= FLOOD_BAN_WINDOW_MS) {
+    flood = { startedAt: now, count: 0, flagged: false };
+    activity.flood = flood;
+  }
+  flood.count += 1;
+  if (flood.count < FLOOD_BAN_LIMIT || flood.flagged) return false;
+
+  // Threshold crossed: log once per window either way (audit + dry-run signal).
+  flood.flagged = true;
+  console.log(JSON.stringify({
+    event: "flood_detect",
+    at: new Date(now).toISOString(),
+    enforce: FLOOD_BAN_ENFORCE,
+    site: client.site.siteKey,
+    ip: client.ip,
+    count: flood.count,
+    windowMs: FLOOD_BAN_WINDOW_MS,
+    name: client.identity?.displayName || "",
+  }));
+
+  if (!FLOOD_BAN_ENFORCE) return false; // dry-run: detect only
+
+  if (!Array.isArray(client.site.blockedIps)) client.site.blockedIps = [];
+  if (client.ip && client.ip !== "unknown" && !client.site.blockedIps.includes(client.ip)) {
+    client.site.blockedIps.push(client.ip);
+    logModeration(client.site, "auto-block-ip", client.ip);
+    touchSite(client.site);
+  }
+  // Kick every live connection from this IP in the scene, not just this one.
+  for (const peer of client.scene.clients.values()) {
+    if (peer.ip === client.ip && peer.ws.readyState === peer.ws.OPEN) {
+      peer.ws.close(4003, "blocked");
+    }
+  }
+  return true;
+}
+
 function isIpQuarantined(scene, ip, now = Date.now()) {
   const activity = activityByIpAndScene.get(`${scene.key}\0${ip}`);
   return Boolean(activity && activity.quarantinedUntil > now);
@@ -1208,6 +1266,38 @@ function handleStats(_req, res) {
   sendPublicJson(res, 200, getPublicStats());
 }
 
+/**
+ * Public, read-only presence count for one site's town square, used by the
+ * lightweight "N people here" counter widget. Reads the live scene count
+ * ({@link countActiveVisitors}) without opening a socket or creating an
+ * identity, so a page that only shows the counter never inflates the number
+ * or spawns a ghost avatar for visitors in the square. A missing `siteKey`
+ * reads the shared default (self-hosted) scene; an unknown or disabled site
+ * returns 404 so the counter can hide itself.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handleSitePresence(req, res) {
+  const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+  const siteKey = url.searchParams.get("siteKey") || "";
+
+  if (!siteKey) {
+    const scene = scenes.get("default");
+    sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+    return;
+  }
+
+  const site = sitesByKey.get(siteKey);
+  if (!site || site.disabled) {
+    sendPublicJson(res, 404, { error: "unknown site" });
+    return;
+  }
+
+  const scene = scenes.get(site.siteKey);
+  sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+}
+
 function loadMapWorld() {
   const readWorld = (filePath) => validateMapWorld(JSON.parse(fs.readFileSync(filePath, "utf8")));
   try {
@@ -1391,12 +1481,25 @@ const ADMIN_ACTIONS = {
   },
   blockVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
-    if (identity && !site.blockedBrowserIds.includes(identity.browserId)) {
+    if (!identity) return;
+    if (!site.blockedBrowserIds.includes(identity.browserId)) {
       site.blockedBrowserIds.push(identity.browserId);
-      logModeration(site, "block", visitorLogLabel(identity));
-      touchSite(site);
-      closeIdentityClients(identity, 4003, "blocked");
     }
+    // Also block the visitor's live source IP(s). The browserId is chosen by the
+    // client, so a reconnecting bot rotates it and a browserId-only block never
+    // sticks. The IP is far harder to rotate, so capturing it here is what makes
+    // Block actually hold across reconnects. Runs even when the browserId was
+    // already blocked, so re-blocking a rotated identity still catches its IP.
+    if (!Array.isArray(site.blockedIps)) site.blockedIps = [];
+    for (const peerClient of identity.clients) {
+      const peerIp = peerClient.ip;
+      if (peerIp && peerIp !== "unknown" && !site.blockedIps.includes(peerIp)) {
+        site.blockedIps.push(peerIp);
+      }
+    }
+    logModeration(site, "block", visitorLogLabel(identity));
+    touchSite(site);
+    closeIdentityClients(identity, 4003, "blocked");
   },
   muteVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -1630,6 +1733,7 @@ function isServiceAdminAuthorized(req, body, res) {
 function serviceAdminSite(site) {
   const scene = scenes.get(site.siteKey);
   const connectionClicks = isPlainObject(site.connectionClicks) ? site.connectionClicks : {};
+  const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
 
   return {
     ...publicSite(site),
@@ -1641,12 +1745,52 @@ function serviceAdminSite(site) {
       (sum, entry) => sum + (entry?.count || 0),
       0,
     ),
+    mapClickTotal: Number(mapClicks.count || 0),
+    mapClickLastAt: Number(mapClicks.lastAt || 0),
+  };
+}
+
+function buildServiceAdminPlatformStats(sites) {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  let onlineNow = 0;
+  let activeSitesNow = 0;
+  let seenToday = 0;
+  let activeSites7d = 0;
+  let activeSites30d = 0;
+  let visitorsWeekly = 0;
+  let chattingThisWeek = 0;
+
+  for (const site of sites) {
+    const active = site.activeVisitors ?? 0;
+    const weekly = site.visitorStats?.weekly ?? 0;
+    const monthly = site.visitorStats?.monthly ?? 0;
+    onlineNow += active;
+    if (active > 0) activeSitesNow += 1;
+    if (site.lastSeenAt && now - site.lastSeenAt < dayMs) seenToday += 1;
+    visitorsWeekly += weekly;
+    if (weekly > 0) activeSites7d += 1;
+    if (monthly > 0) activeSites30d += 1;
+    if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;
+  }
+
+  return {
+    onlineNow,
+    activeSitesNow,
+    seenToday,
+    activeSites7d,
+    activeSites30d,
+    visitorsWeekly,
+    chattingThisWeek,
+    dailySeries: visitorStats.getAggregateDailySeries(7),
   };
 }
 
 function sendServiceAdminSites(res) {
+  const sites = Array.from(sitesByKey.values()).map((site) => serviceAdminSite(site));
   sendJson(res, 200, {
-    sites: Array.from(sitesByKey.values()).map((site) => serviceAdminSite(site)),
+    sites,
+    platform: buildServiceAdminPlatformStats(sites),
   });
 }
 
@@ -2040,6 +2184,19 @@ function pickFreeBirdPerch(scene) {
   return free[Math.floor(Math.random() * free.length)];
 }
 
+function syncSceneBirdPerches(scene) {
+  const perchById = new Map(scene.birdPerches.map((perch) => [perch.id, perch]));
+  for (const [id, bird] of scene.birds) {
+    if (bird.state !== "perched") continue;
+    const perch = perchById.get(bird.perchId);
+    if (!perch) {
+      scene.birds.delete(id);
+      continue;
+    }
+    bird.x = perch.x;
+  }
+}
+
 function broadcastBird(scene, message, options = {}) {
   broadcast(scene, { type: MSG.BIRD, ...message }, options);
 }
@@ -2139,6 +2296,7 @@ function rebuildSceneProps(scene, site) {
   scene.propsById = propsById;
   scene.birdPerches = getSceneBirdPerches(site);
   scene.maxBirds = config.birds;
+  syncSceneBirdPerches(scene);
 
   // Hosted clients arbitrate settle requests against the scene's prop map.
   for (const client of scene.clients.values()) {
@@ -2186,9 +2344,11 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       messageCount: 0,
       lastMessageAt: null,
       connectionClicks: {},
+      mapClicks: { count: 0, lastAt: 0 },
       createdAt: now,
       updatedAt: now,
       blockedBrowserIds: [],
+      blockedIps: [],
       mutedBrowserIds: [],
       shadowBlockedBrowserIds: [],
       ownerBrowserIds: [],
@@ -2220,6 +2380,9 @@ function loadSites() {
       }
       if (!Array.isArray(site.blockedBrowserIds)) {
         site.blockedBrowserIds = [];
+      }
+      if (!Array.isArray(site.blockedIps)) {
+        site.blockedIps = [];
       }
       if (!Array.isArray(site.mutedBrowserIds)) {
         site.mutedBrowserIds = [];
@@ -2279,6 +2442,9 @@ function loadSites() {
       if (!isPlainObject(site.connectionClicks)) {
         site.connectionClicks = {};
       }
+      if (!isPlainObject(site.mapClicks)) {
+        site.mapClicks = { count: 0, lastAt: 0 };
+      }
       if (typeof site.supporter !== "boolean") {
         site.supporter = false;
       }
@@ -2336,6 +2502,7 @@ function touchSite(site) {
 // at most once per interval. Losing up to a minute of clicks on a crash is fine
 // for traffic analytics.
 let lastConnectionClicksSaveAt = 0;
+let lastMapClicksSaveAt = 0;
 
 // lastSeenUrl is refreshed on every navigation across every connected visitor.
 // Throttle the full sites.json rewrite the same way lastSeenAt is throttled so a
@@ -2382,6 +2549,43 @@ function handleConnectionClick(req, res) {
 
     if (now - lastConnectionClicksSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       lastConnectionClicksSaveAt = now;
+      saveSites();
+    }
+
+    respond(204);
+  });
+}
+
+/**
+ * Record one visitor click on a site's outbound website link from the public
+ * /map page. We only need a per-site tally (the map exposes a single website
+ * link per town), so a verified siteKey is enough to attribute the click.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handleMapClick(req, res) {
+  readJsonBody(req, res, (body) => {
+    // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
+    const respond = (status) => {
+      res.writeHead(status, { "access-control-allow-origin": "*" });
+      res.end();
+    };
+
+    const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
+    const site = sitesByKey.get(siteKey);
+    if (!site || site.disabled) {
+      respond(204);
+      return;
+    }
+
+    const now = Date.now();
+    const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : (site.mapClicks = { count: 0, lastAt: 0 });
+    mapClicks.count = (Number(mapClicks.count) || 0) + 1;
+    mapClicks.lastAt = now;
+
+    if (now - lastMapClicksSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+      lastMapClicksSaveAt = now;
       saveSites();
     }
 
@@ -2452,6 +2656,7 @@ function publicSite(site) {
     lastMessageAt: site.lastMessageAt || null,
     createdAt: site.createdAt,
     blockedCount: site.blockedBrowserIds.length,
+    blockedIpCount: Array.isArray(site.blockedIps) ? site.blockedIps.length : 0,
     mutedCount: Array.isArray(site.mutedBrowserIds) ? site.mutedBrowserIds.length : 0,
     hiddenCount: Array.isArray(site.shadowBlockedBrowserIds) ? site.shadowBlockedBrowserIds.length : 0,
     blockedWords: Array.isArray(site.blockedWords) ? site.blockedWords : [],
@@ -2478,13 +2683,18 @@ function pluginSite(site) {
 
 function pluginVisitor(identity) {
   const site = identity.scene?.site || null;
+  // Stable per-visitor fingerprint (same hash as ownerHandle), so plugins can
+  // key data on a visitor without ever seeing the raw browserId. Matches the
+  // `fp` exposed to the admin panel by getSceneStats.
+  const fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
   return Object.freeze({
     id: identity.id,
     browserId: identity.browserId,
     displayName: identity.displayName,
     color: identity.color,
     isOwner: identity.isOwner,
-    ownerHandle: identity.isOwner && site ? ownerHandle(site.siteKey, identity.browserId) : null,
+    ownerHandle: identity.isOwner ? fp : null,
+    fp,
   });
 }
 
@@ -2529,6 +2739,9 @@ function getSceneStats(scene, site = null) {
       const serialized = serializeIdentity(identity, { owner: true, messages: true, clientCount: true });
       serialized.muted = isMuted(site, identity.browserId);
       serialized.hidden = isShadowBlocked(site, identity.browserId);
+      // Stable fingerprint so the admin UI / plugin actions can target a
+      // specific visitor (e.g. assign a hat) without exposing the browserId.
+      serialized.fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
       return serialized;
     });
 
@@ -2650,6 +2863,11 @@ function handleHttpRequest(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/site-presence") {
+    handleSitePresence(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/sites") {
     handleRegisterSite(req, res);
     return;
@@ -2657,6 +2875,11 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/connection-click") {
     handleConnectionClick(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/map-click") {
+    handleMapClick(req, res);
     return;
   }
 
@@ -2721,7 +2944,7 @@ function handleHttpRequest(req, res) {
     return;
   }
 
-  staticFiles.serveCandidate(candidates, 0, res);
+  staticFiles.serveCandidate(candidates, 0, res, req);
 }
 
 // Wraps the request dispatcher so a single unhandled throw cannot crash the
@@ -2972,10 +3195,24 @@ function handleProfile(client, message) {
   const displayName = filterDisplayName(client.site, sanitizeDisplayName(message.displayName));
   const color = sanitizeCharacterColor(message.color);
   if (displayName === client.identity.displayName && color === client.identity.color) return;
+  if (registerFloodAction(client)) return;
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.identity.displayName = displayName;
   client.identity.color = color;
+  // Log renames: the abusive bot joins blank then renames to slurs, so this is
+  // where its IP + fingerprint become visible for a targeted IP block.
+  if (LOG_JOINS && displayName) {
+    console.log(JSON.stringify({
+      event: "rename",
+      at: new Date().toISOString(),
+      site: client.site ? client.site.siteKey : null,
+      name: displayName,
+      ip: client.ip,
+      fp: client.site ? ownerHandle(client.site.siteKey, client.identity.browserId) : null,
+      origin: client.origin || null,
+    }));
+  }
   touchIdentityActivity(client.identity);
   // Owners keep their look across resets: persist their own edits too.
   rememberOwnerProfile(client.site, client.identity);
@@ -3066,6 +3303,7 @@ function handleSay(client, message) {
   let text = sanitizeMessage(message.text);
   if (site) text = applyWordFilter(text, site.blockedWords);
   if (!text) return;
+  if (registerFloodAction(client)) return;
   if (!allowIpEvent(client, "chat", IP_CHAT_EVENT_LIMIT)) return;
 
   client.lastChatAt = now;
@@ -3245,6 +3483,15 @@ wss.on("connection", (ws, req) => {
   const ip = getRequestIp(req);
   if (isIpQuarantined(access.scene, ip)) {
     ws.close(1008, "rate limited");
+    return;
+  }
+
+  // Per-site IP block (set when an admin blocks a visitor). Rejected here, before
+  // the connection can join or pick a fresh browserId, so a reconnecting bot
+  // cannot evade the block by rotating its client-chosen identity.
+  if (access.site && Array.isArray(access.site.blockedIps) && access.site.blockedIps.includes(ip)) {
+    console.log(JSON.stringify({ event: "block_ip_reject", at: new Date().toISOString(), site: access.site.siteKey, ip }));
+    ws.close(4003, "blocked");
     return;
   }
 

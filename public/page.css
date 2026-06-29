@@ -31,6 +31,19 @@ body {
   padding: 0 12px 18px;
 }
 
+/* Live preview for the presence-counter snippet builder. The counter brings its
+   own styles; this is just a framed area to show it against. */
+.counter-preview {
+  display: flex;
+  align-items: center;
+  min-height: 3.25rem;
+  margin-bottom: 12px;
+  padding: 16px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  border-radius: 10px;
+  background: var(--surface, Canvas);
+}
+
 :root {
   --hosted-preview-dock-height: 13.75rem;
   --hosted-preview-dock-chrome: 2rem;
@@ -1297,7 +1310,8 @@ body {
 }
 
 /* The first section in a tab sits right under the nav, so drop its divider. */
-.hosted-tabpanel > .hosted-section:first-child {
+.hosted-tabpanel > .hosted-section:first-child,
+.hosted-tabpanel > .service-sites:first-child {
   margin-top: 22px;
   border-top: none;
 }
@@ -1731,8 +1745,73 @@ body {
 
 .service-filter-meta {
   margin: 0;
+  flex: 1 1 100%;
   color: var(--ink-soft);
   font-size: 0.86rem;
+}
+
+.service-column-picker {
+  position: relative;
+  flex: none;
+}
+
+.service-column-picker > summary {
+  list-style: none;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 0.9rem var(--font);
+  cursor: pointer;
+}
+
+.service-column-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.service-column-picker[open] > summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.service-column-picker-panel {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  min-width: min(320px, calc(100vw - 48px));
+  max-height: min(420px, 70vh);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--hair-2);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  background: var(--surface);
+  box-shadow: 0 14px 30px -18px rgba(42, 41, 38, 0.35);
+}
+
+.service-column-picker-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.service-column-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.service-column-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair-2);
 }
 
 .service-table-wrap {
@@ -1899,6 +1978,124 @@ body {
 
 .service-row-menu-panel .service-danger {
   color: #a8431f;
+}
+
+.service-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.service-stats-card {
+  padding: 14px 16px;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.service-stats-card__value {
+  font-size: 1.55rem;
+  font-weight: 750;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.service-stats-card__label {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.service-stats-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-height: 168px;
+  padding: 8px 2px 0;
+}
+
+.service-stats-chart__bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.service-stats-chart__value {
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+
+.service-stats-chart__bar {
+  width: 100%;
+  max-width: 52px;
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--you-deep) 88%, white) 0%, var(--you-deep) 100%);
+  min-height: 4px;
+}
+
+.service-stats-chart__bar--growth {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 88%, white) 0%, var(--accent) 100%);
+}
+
+.service-stats-chart__label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.service-stats-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.service-stats-panel-title {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.service-stats-mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.service-stats-mini-table th,
+.service-stats-mini-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hair-2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.service-stats-mini-table th {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.service-stats-mini-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.service-stats-mini-table td:last-child,
+.service-stats-mini-table th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.service-traffic {
+  overflow-x: auto;
 }
 
 .map-page {
@@ -2338,6 +2535,9 @@ body {
   }
   .map-editor__canvas {
     min-height: 260px;
+  }
+  .service-stats-columns {
+    grid-template-columns: 1fr;
   }
   .townsquare-host { margin-top: 32px; }
   .dev-toolbar {

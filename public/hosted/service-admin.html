@@ -57,6 +57,13 @@
           </div>
         </section>
 
+        <nav class="hosted-tabs" id="service-admin-tabs" role="tablist" aria-label="Service admin sections">
+          <button type="button" class="hosted-tab" data-tab="map" role="tab" aria-selected="false" aria-controls="tab-map">Map</button>
+          <button type="button" class="hosted-tab is-active" data-tab="sites" role="tab" aria-selected="true" aria-controls="tab-sites">Sites</button>
+          <button type="button" class="hosted-tab" data-tab="statistics" role="tab" aria-selected="false" aria-controls="tab-statistics">Statistics</button>
+        </nav>
+
+        <div class="hosted-tabpanel" id="tab-map" role="tabpanel" data-tab="map" hidden>
         <section class="hosted-section map-editor" aria-labelledby="map-editor-title">
           <div class="hosted-section-head">
             <div>
@@ -70,8 +77,7 @@
             <div class="map-editor__tools">
               <button type="button" data-map-tool="tree" aria-pressed="true">Tree brush</button>
               <button type="button" data-map-tool="mountain" aria-pressed="false">Mountain</button>
-              <button type="button" data-map-tool="lake" aria-pressed="false">Lake brush</button>
-              <button type="button" data-map-tool="river" aria-pressed="false">River</button>
+              <button type="button" data-map-tool="water" aria-pressed="false">Water brush</button>
               <button type="button" data-map-tool="erase" aria-pressed="false">Eraser</button>
             </div>
             <div class="map-editor__brush-controls">
@@ -99,21 +105,13 @@
             hidden
           ></div>
         </section>
+        </div>
 
-        <section class="hosted-section" aria-labelledby="traffic-title">
-          <div class="hosted-section-head">
-            <div>
-              <h2 id="traffic-title">Traffic flows</h2>
-              <p class="hosted-note">Clicks on connected-town signposts, showing which towns lead visitors where.</p>
-            </div>
-          </div>
-          <div class="service-traffic" id="traffic-flows" aria-live="polite"></div>
-        </section>
-
+        <div class="hosted-tabpanel" id="tab-sites" role="tabpanel" data-tab="sites">
         <section class="service-sites" id="site-list" aria-live="polite">
           <div class="service-toolbar">
             <label class="service-filter">
-              <span class="service-filter-label">Filter</span>
+              <span class="service-filter-label">Search</span>
               <input
                 type="search"
                 id="site-filter"
@@ -122,6 +120,10 @@
                 spellcheck="false"
               />
             </label>
+            <details class="service-column-picker" id="site-column-picker">
+              <summary>Columns</summary>
+              <div class="service-column-picker-panel" id="site-column-picker-panel"></div>
+            </details>
             <p class="service-filter-meta" id="site-filter-meta" hidden></p>
           </div>
           <div class="service-table-wrap" id="site-table-wrap" hidden>
@@ -133,6 +135,68 @@
           <p class="hosted-note" id="site-empty" hidden>No registered websites yet.</p>
           <p class="hosted-note" id="site-no-matches" hidden>No websites match this filter.</p>
         </section>
+        </div>
+
+        <div class="hosted-tabpanel" id="tab-statistics" role="tabpanel" data-tab="statistics" hidden>
+        <section class="hosted-section" aria-labelledby="platform-stats-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="platform-stats-title">Overview</h2>
+              <p class="hosted-note">Live usage across all registered websites.</p>
+            </div>
+          </div>
+          <div class="service-stats-cards" id="platform-stats-cards" aria-live="polite"></div>
+        </section>
+
+        <section class="hosted-section" aria-labelledby="visitor-trend-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="visitor-trend-title">Visitors over the last 7 days</h2>
+              <p class="hosted-note">Unique visitors per site per day. The same person on two sites counts twice.</p>
+            </div>
+          </div>
+          <div class="service-stats-chart" id="visitor-trend-chart" role="img" aria-label="Visitor trend chart"></div>
+        </section>
+
+        <section class="hosted-section" aria-labelledby="verified-trend-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="verified-trend-title">Verified sites over time</h2>
+              <p class="hosted-note">Total verified websites at the end of each week for the last 90 days.</p>
+            </div>
+          </div>
+          <div class="service-stats-chart" id="verified-trend-chart" role="img" aria-label="Verified sites trend chart"></div>
+        </section>
+
+        <section class="hosted-section" aria-labelledby="site-health-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="site-health-title">Site activity</h2>
+              <p class="hosted-note">Who is drawing traffic this week, and which verified towns are quiet.</p>
+            </div>
+          </div>
+          <div class="service-stats-columns">
+            <div class="service-stats-panel">
+              <h3 class="service-stats-panel-title">Most active (7 days)</h3>
+              <div id="top-sites-list" aria-live="polite"></div>
+            </div>
+            <div class="service-stats-panel">
+              <h3 class="service-stats-panel-title">Quiet towns</h3>
+              <div id="dormant-sites-list" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="hosted-section" aria-labelledby="traffic-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="traffic-title">Traffic flows</h2>
+              <p class="hosted-note">Clicks on connected-town signposts, showing which towns lead visitors where.</p>
+            </div>
+          </div>
+          <div class="service-traffic" id="traffic-flows" aria-live="polite"></div>
+        </section>
+        </div>
       </section>
     </main>
 

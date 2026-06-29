@@ -4,6 +4,7 @@ const net = require("net");
 const path = require("path");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
+const { handleSmokeSocketMessage, waitForClose, withTimeout } = require("./smoke-ws-helpers");
 
 // These are `let` so the self-contained harness (startManagedServer) can point
 // them at a server it spawns on a free port. When TOWNSQUARE_HTTP_ORIGIN is set,
@@ -14,7 +15,11 @@ let DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
 let SITES_FILE = path.join(DATA_DIR, "sites.json");
 let MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 let SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
-const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
+const CONNECT_TIMEOUT_MS = Number(process.env.SMOKE_CONNECT_TIMEOUT_MS || 15000);
+
+function authFailuresPerHour() {
+  return Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
+}
 
 // Ask the OS for an unused TCP port so concurrent runs don't collide (and so we
 // never accidentally talk to an unrelated server bound to a fixed port).
@@ -66,6 +71,9 @@ async function startManagedServer() {
       // disable the anti-bot "typed too fast after joining" guard so it doesn't
       // drop them (its behavior has dedicated TEST_IP_* coverage instead).
       MIN_HUMAN_SAY_MS: "0",
+      // Hosted sites default to bot protection; keep PoW cheap in this harness.
+      POW_DIFFICULTY_BITS: process.env.POW_DIFFICULTY_BITS || "1",
+      AUTH_FAILURES_PER_HOUR: process.env.AUTH_FAILURES_PER_HOUR || "5",
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
@@ -109,7 +117,8 @@ function socketOptions(origin, ip) {
 }
 
 function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", ip = "", displayName = "", color = "", readingLabel, readingUrl, readingActive }) {
-  return new Promise((resolve, reject) => {
+  const label = `connect ${browserId || "(ephemeral)"}`;
+  const promise = new Promise((resolve, reject) => {
     const ws = new WebSocket(siteSocketUrl(siteKey), socketOptions(origin, ip));
     const seen = [];
     let joined = false;
@@ -124,40 +133,62 @@ function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", 
     });
 
     ws.on("message", (buffer) => {
-      const message = JSON.parse(String(buffer));
-      seen.push(message);
-      if (message.type === "hello") {
-        joined = true;
-        resolve({ ws, seen, id: message.id, hello: message });
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen,
+          onHello: (hello) => {
+            joined = true;
+            resolve({ ws, seen, id: hello.id, hello });
+          },
+        });
+      } catch (error) {
+        reject(error);
       }
     });
 
     ws.on("error", reject);
     ws.on("close", (code, reason) => {
       if (!joined) {
-        reject(new Error(`connection ${browserId || "(ephemeral)"} closed before hello (${code}: ${String(reason)})`));
+        reject(new Error(`${label} closed before hello (${code}: ${String(reason)})`));
       }
     });
   });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
 function connectUntilClose({ x, browserId, siteKey = "", origin = "", ip = "" }) {
-  return new Promise((resolve, reject) => {
+  const label = `connectUntilClose ${browserId || "(ephemeral)"}`;
+  const promise = new Promise((resolve, reject) => {
     const ws = new WebSocket(siteSocketUrl(siteKey), socketOptions(origin, ip));
     ws.on("open", () => ws.send(JSON.stringify({ type: "init", x, browserId })));
     ws.on("message", (buffer) => {
-      const message = JSON.parse(String(buffer));
-      if (message.type === "hello") reject(new Error("rate-limited connection unexpectedly joined"));
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen: [],
+          onUnexpectedHello: () => reject(new Error("rate-limited connection unexpectedly joined")),
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
     ws.on("close", (code, reason) => resolve({ code, reason: String(reason) }));
     ws.on("error", reject);
   });
-}
-
-function waitForClose(ws) {
-  return new Promise((resolve) => {
-    ws.on("close", (code, reason) => resolve({ code, reason: String(reason) }));
-  });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
 async function createSite(name, options = {}) {
@@ -630,9 +661,10 @@ async function serviceAdminApi(pathname, payload = {}) {
 }
 
 async function assertAuthFailuresAreThrottled(hostedSite) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return;
+  const limit = authFailuresPerHour();
+  if (limit <= 0) return;
 
-  for (let attempt = 0; attempt < AUTH_FAILURES_PER_HOUR; attempt += 1) {
+  for (let attempt = 0; attempt < limit; attempt += 1) {
     const { response } = await postJson("/api/admin/login", { adminToken: `bad-token-${attempt}` });
     assert(response.status === 403, "admin auth failure throttled too early");
   }
@@ -645,14 +677,15 @@ async function assertAuthFailuresAreThrottled(hostedSite) {
 }
 
 async function assertServiceAdminFailuresAreThrottled() {
-  if (!SERVICE_ADMIN_PASSWORD || AUTH_FAILURES_PER_HOUR <= 0) return;
+  const limit = authFailuresPerHour();
+  if (!SERVICE_ADMIN_PASSWORD || limit <= 0) return;
 
-  for (let attempt = 0; attempt < AUTH_FAILURES_PER_HOUR; attempt += 1) {
+  for (let attempt = 0; attempt < limit; attempt += 1) {
     const { response } = await postJson("/api/service-admin/sites", { password: SERVICE_ADMIN_PASSWORD });
     assert(response.ok, "valid service admin auth did not clear prior auth failures");
   }
 
-  for (let attempt = 0; attempt < AUTH_FAILURES_PER_HOUR; attempt += 1) {
+  for (let attempt = 0; attempt < limit; attempt += 1) {
     const { response } = await postJson("/api/service-admin/sites", { password: `bad-password-${attempt}` });
     assert(response.status === 403, "service admin auth failure throttled too early");
   }
@@ -759,6 +792,19 @@ async function assertMapWorldSizingPolicy() {
 
   const tooLarge = validateMapWorld({ ...stored, width: 99999, height: MAP_WORLD_MIN_HEIGHT });
   assert(!tooLarge.ok, "a world above the maximum width should be rejected");
+
+  const legacyWater = validateMapWorld({
+    ...stored,
+    water: [
+      { type: "lake", width: 90, points: [{ x: 100, y: 100 }] },
+      { type: "river", width: 24, points: [{ x: 200, y: 200 }, { x: 300, y: 250 }] },
+    ],
+  });
+  assert(legacyWater.ok, "legacy lake and river strokes should still validate");
+  assert(
+    legacyWater.world.water.every((stroke) => stroke.type === "water"),
+    "legacy lake and river strokes should normalize to water",
+  );
 }
 
 async function assertServiceAdminCanEditMap() {
@@ -797,20 +843,27 @@ async function assertServiceAdminCanEditMap() {
     ...original,
     water: [
       ...original.water.slice(0, 198),
-      { type: "lake", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
-      { type: "river", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
+      { type: "water", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
+      { type: "water", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
     ],
   };
 
   try {
     const saved = await serviceAdminApi("/api/service-admin/map/save", { world: edited });
-    assert(saved.world.water.some((stroke) => stroke.type === "lake"), "service admin did not save a lake");
-    assert(saved.world.water.some((stroke) => stroke.type === "river"), "service admin did not save a river");
+    assert(saved.world.water.some((stroke) => stroke.type === "water"), "service admin did not save water");
+    assert(
+      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 90),
+      "service admin did not save a wide water stroke",
+    );
+    assert(
+      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 24),
+      "service admin did not save a narrow water stroke",
+    );
     const persisted = JSON.parse(fs.readFileSync(MAP_WORLD_FILE, "utf8"));
-    assert(persisted.water.some((stroke) => stroke.type === "lake"), "map world was not persisted to DATA_DIR");
+    assert(persisted.water.some((stroke) => stroke.type === "water"), "map world was not persisted to DATA_DIR");
 
     const publicAfter = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
-    assert(publicAfter.world.water.some((stroke) => stroke.type === "lake"), "saved world was not public");
+    assert(publicAfter.world.water.some((stroke) => stroke.type === "water"), "saved world was not public");
 
     for (const world of [
       { ...edited, props: [{ type: "castle", x: 10, y: 10 }] },
@@ -1492,6 +1545,10 @@ async function run() {
   // If an external server origin is provided, test against it (legacy behavior).
   // Otherwise spawn and manage our own so the script is self-contained.
   const external = Boolean(process.env.TOWNSQUARE_HTTP_ORIGIN);
+  if (!external) {
+    if (!process.env.POW_DIFFICULTY_BITS) process.env.POW_DIFFICULTY_BITS = "1";
+    if (!process.env.AUTH_FAILURES_PER_HOUR) process.env.AUTH_FAILURES_PER_HOUR = "5";
+  }
   const cleanup = external ? null : await startManagedServer();
   try {
     await main();

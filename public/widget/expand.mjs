@@ -13,12 +13,13 @@ import { setExpandedView } from "./chat.mjs";
  * @param {{
  *   app: HTMLElement,
  *   expandButton: HTMLButtonElement,
+ *   chatScope: import("./chat.mjs").ChatScope,
  *   getAvatars: () => import("./dom.mjs").AvatarView[],
  *   onChange?: (expanded: boolean) => void,
  * }} options
  * @returns {{ setExpanded: (expanded: boolean) => void, isExpanded: () => boolean, destroy: () => void }}
  */
-export function createExpandController({ app, expandButton, getAvatars, onChange }) {
+export function createExpandController({ app, expandButton, chatScope, getAvatars, onChange }) {
   let expanded = false;
   // Expanded mode overlays the host page, so lock its scroll while open and
   // restore whatever inline overflow it had before.
@@ -38,7 +39,7 @@ export function createExpandController({ app, expandButton, getAvatars, onChange
     expandButton.classList.toggle("townsquare__control--active", expanded);
     expandButton.setAttribute("aria-pressed", String(expanded));
     expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
-    setExpandedView(expanded, getAvatars());
+    setExpandedView(chatScope, expanded, getAvatars());
     onChange?.(expanded);
   };
 

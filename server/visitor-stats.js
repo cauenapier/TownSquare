@@ -103,6 +103,38 @@ function createVisitorStats(options = {}) {
     return seen.size;
   }
 
+  function countForDay(days, day) {
+    const bucket = days.get(day);
+    return bucket ? bucket.size : 0;
+  }
+
+  /** Per-day unique visitor counts for the last `windowDays` UTC days ending at `at`. */
+  function getDailySeries(siteKey, windowDays, at = now()) {
+    const days = bySite.get(siteKey);
+    const today = dayIndex(at);
+    const series = [];
+    for (let offset = windowDays - 1; offset >= 0; offset -= 1) {
+      const day = today - offset;
+      series.push({ day, count: days ? countForDay(days, day) : 0 });
+    }
+    return series;
+  }
+
+  /** Sum each site's daily unique visitors (same person on two sites counts twice). */
+  function getAggregateDailySeries(windowDays, at = now()) {
+    const today = dayIndex(at);
+    const series = [];
+    for (let offset = windowDays - 1; offset >= 0; offset -= 1) {
+      const day = today - offset;
+      let count = 0;
+      for (const days of bySite.values()) {
+        count += countForDay(days, day);
+      }
+      series.push({ day, count });
+    }
+    return series;
+  }
+
   /** @returns {{daily:number, weekly:number, monthly:number}} */
   function getStats(siteKey, at = now()) {
     const days = bySite.get(siteKey);
@@ -185,7 +217,7 @@ function createVisitorStats(options = {}) {
     }
   }
 
-  return { recordVisit, getStats, load, flush, start, stop };
+  return { recordVisit, getStats, getDailySeries, getAggregateDailySeries, load, flush, start, stop };
 }
 
 module.exports = { createVisitorStats, isStableBrowserId, RETENTION_DAYS };

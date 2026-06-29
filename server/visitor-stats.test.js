@@ -120,3 +120,26 @@ test("flush only writes when there are pending changes", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("daily series returns per-day counts for one site", () => {
+  const stats = createVisitorStats();
+  stats.recordVisit("site", "a", day(3));
+  stats.recordVisit("site", "b", day(3));
+  stats.recordVisit("site", "c", day(5));
+
+  const series = stats.getDailySeries("site", 3, day(5));
+  assert.equal(series.length, 3);
+  assert.deepEqual(series.map((entry) => entry.count), [2, 0, 1]);
+  assert.equal(series[2].day, Math.floor(day(5) / DAY_MS));
+});
+
+test("aggregate daily series sums per-site daily uniques", () => {
+  const stats = createVisitorStats();
+  stats.recordVisit("one", "a", day(5));
+  stats.recordVisit("two", "b", day(5));
+  stats.recordVisit("two", "c", day(5));
+
+  const series = stats.getAggregateDailySeries(3, day(5));
+  assert.equal(series.length, 3);
+  assert.deepEqual(series.map((entry) => entry.count), [0, 0, 3]);
+});

@@ -14,10 +14,14 @@ The goal is to make a site feel inhabited.
 
 - Not a social network
 - Not a full virtual world
-- Not an account system
-- Not a persistent identity layer
+- Not an account system (no login, no verification, no recovery)
 - Not a long-term chat archive
 - Not a moderation-heavy community platform in v1
+
+Visitors keep a lightweight nameplate they carry, not an identity they log into:
+a display name and colour that persist for recognition. It is unverified,
+non-unique, and never gates presence or chat. Today it persists per site;
+carrying one nameplate across different sites is a separate, explicit opt-in.
 
 ## Why it exists
 
@@ -91,4 +95,4 @@ This does not need to become a full platform story in v1, but the product should
 - How should neighbouring sites be chosen or discovered?
 - How should the map show local clusters without becoming cluttered?
 - What is the lightest way to connect different regions while keeping the world coherent?
-- How much shared identity between sites is useful before the system starts feeling too persistent?
+- What is the right opt-in for carrying one nameplate across different sites, given browser storage partitioning? (Per-site persistence is settled; cross-site sharing is the open part.)
