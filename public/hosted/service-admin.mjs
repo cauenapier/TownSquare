@@ -36,6 +36,11 @@ const siteTableBodyEl = document.getElementById("site-table-body");
 const siteEmptyEl = document.getElementById("site-empty");
 const siteNoMatchesEl = document.getElementById("site-no-matches");
 const trafficFlowsEl = document.getElementById("traffic-flows");
+const platformStatsCardsEl = document.getElementById("platform-stats-cards");
+const visitorTrendChartEl = document.getElementById("visitor-trend-chart");
+const verifiedTrendChartEl = document.getElementById("verified-trend-chart");
+const topSitesListEl = document.getElementById("top-sites-list");
+const dormantSitesListEl = document.getElementById("dormant-sites-list");
 const tokenResult = document.getElementById("token-result");
 const newAdminTokenEl = document.getElementById("new-admin-token");
 const newAdminLink = document.getElementById("new-admin-link");
@@ -52,10 +57,15 @@ const mapBrushSizeValueEl = document.getElementById("map-brush-size-value");
 const mapDensityControlEl = document.getElementById("map-density-control");
 const mapDensityEl = document.getElementById("map-density");
 const mapDensityValueEl = document.getElementById("map-density-value");
+const serviceAdminTabs = document.getElementById("service-admin-tabs");
+const tabButtons = serviceAdminTabs ? [...serviceAdminTabs.querySelectorAll("[data-tab]")] : [];
+const tabPanels = [...document.querySelectorAll(".hosted-tabpanel")];
 
 const STORAGE_KEY = "townsquare-service-admin-password";
 const REFRESH_INTERVAL_MS = 5000;
 const MAX_MAP_HISTORY_ITEMS = 20_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const VERIFIED_CHART_DAYS = 90;
 
 const TABLE_COLUMNS = [
   { key: "name", label: "Name" },
@@ -110,6 +120,22 @@ let mapTreeDensity = Number(mapDensityEl.value);
 const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
 const setStatus = createStatusSetter(statusEl);
 const autoRefresh = createAutoRefresh(() => loadSites({ silent: true }), REFRESH_INTERVAL_MS);
+
+function setActiveTab(name) {
+  if (!tabPanels.some((panel) => panel.dataset.tab === name)) return;
+  for (const button of tabButtons) {
+    const selected = button.dataset.tab === name;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+  }
+  for (const panel of tabPanels) {
+    panel.hidden = panel.dataset.tab !== name;
+  }
+}
+
+for (const button of tabButtons) {
+  button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+}
 
 // Every service-admin request carries the operator password.
 const api = (path, payload = {}) => postJson(path, { password, ...payload });
@@ -787,9 +813,247 @@ function renderTrafficFlows(sites) {
   trafficFlowsEl.appendChild(table);
 }
 
-function renderSites(sites) {
+function buildPlatformStats(sites, platform = null) {
+  if (platform) return platform;
+
+  const now = Date.now();
+  let onlineNow = 0;
+  let activeSitesNow = 0;
+  let seenToday = 0;
+  let activeThisWeek = 0;
+  let visitorsWeekly = 0;
+  let chattingThisWeek = 0;
+
+  for (const site of sites) {
+    const active = site.activeVisitors ?? 0;
+    const weekly = site.visitorStats?.weekly ?? 0;
+    onlineNow += active;
+    if (active > 0) activeSitesNow += 1;
+    if (site.lastSeenAt && now - site.lastSeenAt < DAY_MS) seenToday += 1;
+    visitorsWeekly += weekly;
+    if (weekly > 0) activeThisWeek += 1;
+    if (site.lastMessageAt && now - site.lastMessageAt < 7 * DAY_MS) chattingThisWeek += 1;
+  }
+
+  return {
+    onlineNow,
+    activeSitesNow,
+    seenToday,
+    activeThisWeek,
+    visitorsWeekly,
+    chattingThisWeek,
+    dailySeries: [],
+  };
+}
+
+function formatChartDay(dayIndex) {
+  const date = new Date(dayIndex * DAY_MS);
+  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function buildVerifiedSitesSeries(sites, windowDays = VERIFIED_CHART_DAYS) {
+  const verifiedAt = sites
+    .map((site) => site.verifiedAt)
+    .filter((at) => typeof at === "number" && at > 0);
+  if (verifiedAt.length === 0) return [];
+
+  const today = Math.floor(Date.now() / DAY_MS);
+  const startDay = today - windowDays + 1;
+  const series = [];
+
+  for (let day = startDay; day <= today; day += 7) {
+    const bucketEnd = Math.min(day + 6, today);
+    const cutoff = (bucketEnd + 1) * DAY_MS;
+    const count = verifiedAt.filter((at) => at < cutoff).length;
+    series.push({ day: bucketEnd, count });
+  }
+
+  if (series.length === 0 || series[series.length - 1].day !== today) {
+    const cutoff = (today + 1) * DAY_MS;
+    const count = verifiedAt.filter((at) => at < cutoff).length;
+    series.push({ day: today, count });
+  }
+
+  return series;
+}
+
+function renderStatsBarChart(container, series, {
+  emptyText,
+  ariaLabelPrefix,
+  barClass = "",
+  scaleFromZero = true,
+} = {}) {
+  if (!container) return;
+  container.replaceChildren();
+
+  if (!Array.isArray(series) || series.length === 0) {
+    container.setAttribute("aria-label", emptyText || "No data yet.");
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = emptyText || "No data yet.";
+    container.append(empty);
+    return;
+  }
+
+  const counts = series.map((entry) => entry.count ?? 0);
+  const maxCount = Math.max(...counts);
+  const minCount = scaleFromZero ? 0 : Math.min(...counts);
+  const range = Math.max(1, maxCount - minCount);
+  const summary = series.map((entry) => `${formatChartDay(entry.day)}: ${entry.count ?? 0}`).join(", ");
+  container.setAttribute("aria-label", `${ariaLabelPrefix}. ${summary}`);
+
+  const labelEvery = series.length > 14 ? Math.ceil(series.length / 7) : 1;
+
+  for (const [index, entry] of series.entries()) {
+    const count = entry.count ?? 0;
+    const wrap = document.createElement("div");
+    wrap.className = "service-stats-chart__bar-wrap";
+
+    const value = document.createElement("span");
+    value.className = "service-stats-chart__value";
+    value.textContent = String(count);
+
+    const bar = document.createElement("div");
+    bar.className = `service-stats-chart__bar${barClass ? ` ${barClass}` : ""}`;
+    bar.style.height = `${Math.max(4, Math.round(((count - minCount) / range) * 120))}px`;
+
+    const label = document.createElement("span");
+    label.className = "service-stats-chart__label";
+    label.textContent = index % labelEvery === 0 || index === series.length - 1
+      ? formatChartDay(entry.day)
+      : "";
+
+    wrap.append(value, bar, label);
+    container.append(wrap);
+  }
+}
+
+function renderPlatformStats(platform) {
+  if (!platformStatsCardsEl) return;
+  platformStatsCardsEl.replaceChildren();
+
+  const cards = [
+    { value: platform.onlineNow, label: "Online now" },
+    { value: platform.activeSitesNow, label: "Active sites now" },
+    { value: platform.seenToday, label: "Seen today" },
+    { value: platform.activeThisWeek, label: "Active this week" },
+    { value: platform.visitorsWeekly, label: "Unique visitors (7d)" },
+    { value: platform.chattingThisWeek, label: "Chatting this week" },
+  ];
+
+  for (const card of cards) {
+    const item = document.createElement("article");
+    item.className = "service-stats-card";
+
+    const value = document.createElement("p");
+    value.className = "service-stats-card__value";
+    value.textContent = String(card.value);
+
+    const label = document.createElement("p");
+    label.className = "service-stats-card__label";
+    label.textContent = card.label;
+
+    item.append(value, label);
+    platformStatsCardsEl.append(item);
+  }
+}
+
+function renderVisitorTrendChart(dailySeries) {
+  renderStatsBarChart(visitorTrendChartEl, dailySeries, {
+    emptyText: "No visitor history yet.",
+    ariaLabelPrefix: `Visitor trend for the last ${dailySeries?.length || 0} days`,
+    scaleFromZero: true,
+  });
+}
+
+function renderVerifiedSitesChart(sites) {
+  const series = buildVerifiedSitesSeries(sites);
+  renderStatsBarChart(verifiedTrendChartEl, series, {
+    emptyText: "No verified websites yet.",
+    ariaLabelPrefix: `Verified sites by week over the last ${VERIFIED_CHART_DAYS} days`,
+    barClass: "service-stats-chart__bar--growth",
+    scaleFromZero: false,
+  });
+}
+
+function renderSiteHealthTable(container, sites, emptyText) {
+  if (!container) return;
+  container.replaceChildren();
+
+  if (sites.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = emptyText;
+    container.append(empty);
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "service-stats-mini-table";
+
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Site", "Visitors", "Last seen"]) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.append(th);
+  }
+  head.append(headRow);
+
+  const body = document.createElement("tbody");
+  for (const site of sites) {
+    const row = document.createElement("tr");
+
+    const name = document.createElement("td");
+    name.textContent = site.name || site.origin || site.siteKey;
+
+    const visitors = document.createElement("td");
+    visitors.textContent = String(site.visitorStats?.weekly ?? 0);
+
+    const lastSeen = document.createElement("td");
+    lastSeen.textContent = site.lastSeenAt ? formatTime(site.lastSeenAt) : "Never";
+
+    row.append(name, visitors, lastSeen);
+    body.append(row);
+  }
+
+  table.append(head, body);
+  container.append(table);
+}
+
+function renderSiteHealthLists(sites) {
+  const verified = sites.filter((site) => site.verifiedAt && !site.disabled);
+
+  const topSites = [...verified]
+    .sort((left, right) => {
+      const weeklyOrder = (right.visitorStats?.weekly ?? 0) - (left.visitorStats?.weekly ?? 0);
+      if (weeklyOrder !== 0) return weeklyOrder;
+      return (right.messageCount ?? 0) - (left.messageCount ?? 0);
+    })
+    .filter((site) => (site.visitorStats?.weekly ?? 0) > 0)
+    .slice(0, 10);
+
+  const dormantSites = [...verified]
+    .filter((site) => (site.visitorStats?.weekly ?? 0) === 0)
+    .sort((left, right) => (left.lastSeenAt || 0) - (right.lastSeenAt || 0))
+    .slice(0, 10);
+
+  renderSiteHealthTable(topSitesListEl, topSites, "No active sites this week yet.");
+  renderSiteHealthTable(dormantSitesListEl, dormantSites, "All verified sites had visitors this week.");
+}
+
+function renderStatistics(sites, platform = null) {
+  const stats = buildPlatformStats(sites, platform);
+  renderPlatformStats(stats);
+  renderVisitorTrendChart(stats.dailySeries);
+  renderVerifiedSitesChart(sites);
+  renderSiteHealthLists(sites);
+}
+
+function renderSites(sites, platform = null) {
   allSites = sites;
   renderSitesTable();
+  renderStatistics(sites, platform);
   renderTrafficFlows(sites);
   const nextMapTownSnapshot = JSON.stringify(sites.map((site) => ({
     siteKey: site.siteKey,
@@ -843,7 +1107,7 @@ async function loadSites({ silent = false } = {}) {
   if (!silent) {
     tokenResult.hidden = true;
   }
-  renderSites(result.body.sites);
+  renderSites(result.body.sites, result.body.platform);
   void loadMapEditor();
   if (!silent) {
     const sites = result.body.sites;

@@ -1715,9 +1715,43 @@ function serviceAdminSite(site) {
   };
 }
 
+function buildServiceAdminPlatformStats(sites) {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  let onlineNow = 0;
+  let activeSitesNow = 0;
+  let seenToday = 0;
+  let activeThisWeek = 0;
+  let visitorsWeekly = 0;
+  let chattingThisWeek = 0;
+
+  for (const site of sites) {
+    const active = site.activeVisitors ?? 0;
+    const weekly = site.visitorStats?.weekly ?? 0;
+    onlineNow += active;
+    if (active > 0) activeSitesNow += 1;
+    if (site.lastSeenAt && now - site.lastSeenAt < dayMs) seenToday += 1;
+    visitorsWeekly += weekly;
+    if (weekly > 0) activeThisWeek += 1;
+    if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;
+  }
+
+  return {
+    onlineNow,
+    activeSitesNow,
+    seenToday,
+    activeThisWeek,
+    visitorsWeekly,
+    chattingThisWeek,
+    dailySeries: visitorStats.getAggregateDailySeries(7),
+  };
+}
+
 function sendServiceAdminSites(res) {
+  const sites = Array.from(sitesByKey.values()).map((site) => serviceAdminSite(site));
   sendJson(res, 200, {
-    sites: Array.from(sitesByKey.values()).map((site) => serviceAdminSite(site)),
+    sites,
+    platform: buildServiceAdminPlatformStats(sites),
   });
 }
 
