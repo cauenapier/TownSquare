@@ -86,6 +86,14 @@ for (const [width, height, label] of VIEWPORTS) {
     });
   }
 
+  // Freeze the crowd so the layout settles: makes the overlap metric stable
+  // run-to-run and lets us aim a real pointer at a label for the tray check.
+  const walkingToggle = page.locator("#characters-walking");
+  if (await walkingToggle.count() && await walkingToggle.isChecked()) {
+    await walkingToggle.uncheck();
+    await page.waitForTimeout(400);
+  }
+
   // Name tags must not cover one another (incl. your own over a peer's): report
   // the worst horizontal overlap between any two visible tags.
   const labels = await page.evaluate(() => {
@@ -107,12 +115,6 @@ for (const [width, height, label] of VIEWPORTS) {
   // Hover the character nearest your figure and confirm its history tray opens
   // in front of everything (not painted over by neighbours or your own figure).
   let tray = null;
-  // Freeze the crowd so labels stop moving and we can aim a real pointer at one.
-  const walkingToggle = page.locator("#characters-walking");
-  if (await walkingToggle.count() && await walkingToggle.isChecked()) {
-    await walkingToggle.uncheck();
-    await page.waitForTimeout(400);
-  }
   const hoverPoint = await page.evaluate(() => {
     const self = document.querySelector(".townsquare-avatar--self")?.getBoundingClientRect();
     if (!self) return null;
