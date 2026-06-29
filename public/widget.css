@@ -997,10 +997,13 @@
   pointer-events: none;
 }
 
-/* reading a character's tray outranks any neighbour's speak-order stacking */
+/* Reading a character's tray outranks everything in the scene — neighbours'
+   speak-order stacking AND the self figure (2147483001), so the open tray is
+   never painted over by your own figure/bubbles. Stays below the overlay panels
+   (message board / connections, 2147483005) and the help modal. */
 .townsquare-avatar--has-history:hover,
 .townsquare-avatar--has-history:focus-within,
-.townsquare-avatar--tray-open { z-index: 2147483000; }
+.townsquare-avatar--tray-open { z-index: 2147483003; }
 .townsquare-avatar:is(.townsquare-avatar--walking, .townsquare-avatar--shaded, .townsquare-avatar--lit) {
   filter: var(--townsquare-avatar-shade-filter) var(--townsquare-avatar-walk-filter) var(--townsquare-avatar-light-filter);
 }
@@ -1609,7 +1612,9 @@
   position: absolute;
   left: 50%;
   top: calc(100% + 9px);
-  transform: translateX(-50%);
+  /* --label-shift de-conflicts overlapping name tags (see layoutNameLabels in
+     bubble-layout.mjs), so no tag — including your own — covers another. */
+  transform: translateX(calc(-50% + var(--label-shift, 0px)));
   display: flex;
   flex-direction: column;
   align-items: center;

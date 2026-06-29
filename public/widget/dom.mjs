@@ -27,6 +27,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {number} [bubbleScale] Applied proximity scale (see bubble-layout.mjs).
  * @property {number} [bubbleFade] Applied proximity opacity (see bubble-layout.mjs).
  * @property {number} [trayShift] Applied history tray edge-clamping nudge in px.
+ * @property {number} [labelShift] Applied name-tag de-confliction nudge in px (see bubble-layout.mjs).
  * @property {HTMLElement} [below] Container for the nameplate / composer.
  * @property {HTMLElement} [nameEl] Visible name label.
  * @property {HTMLElement} [crownEl] Verified site-owner badge.

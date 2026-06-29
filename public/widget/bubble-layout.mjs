@@ -60,6 +60,10 @@ export function layoutConfigFor(config, expanded = false) {
   return { ...base, fadeFloor: Math.max(base.fadeFloor, FADE_FLOOR_EXPANDED) };
 }
 
+/** Breathing room kept between neighbouring name tags. */
+const LABEL_GAP = 6;
+/** Name tags never get pushed closer than this to the stage edges. */
+const LABEL_EDGE = 6;
 /** The tail's base stays clear of the live bubble's rounded corners by this much. */
 const TAIL_INSET = 22;
 /** How far the tail's tip can lean past its base toward the speaker. */
@@ -323,5 +327,104 @@ export function layoutBubbleColumns(stage, presences, selfX, config) {
 
   for (const cluster of clusters) {
     placeCluster(cluster, minLeft, maxRight);
+  }
+}
+
+/**
+ * Push the resolved name-tag shift to the DOM, skipping sub-pixel-noise writes.
+ *
+ * @param {AvatarView} avatar
+ * @param {number} shift
+ */
+function setLabelShift(avatar, shift) {
+  if (!avatar.below) return;
+  if (Math.abs((avatar.labelShift ?? 0) - shift) <= SHIFT_EPSILON) return;
+  avatar.labelShift = shift;
+  avatar.below.style.setProperty("--label-shift", `${shift.toFixed(1)}px`);
+}
+
+/**
+ * Apply final shifts for one cluster of name tags. Mirrors placeCluster: a
+ * cluster that fits sits at its displacement-minimizing spot; one wider than the
+ * stage compresses so its edges land on the stage edges, trading partial overlap
+ * for keeping every tag on-screen and near its figure.
+ *
+ * @param {Cluster} cluster
+ * @param {number} minLeft
+ * @param {number} maxRight
+ */
+function placeLabelCluster(cluster, minLeft, maxRight) {
+  const left = clusterLeft(cluster, minLeft, maxRight);
+  const span = maxRight - minLeft;
+  if (cluster.width <= span) {
+    for (const item of cluster.items) {
+      setLabelShift(item.column.avatar, left + item.centerOffset - item.column.anchor);
+    }
+    return;
+  }
+  const { items } = cluster;
+  const firstHalf = items[0].column.width / 2;
+  const lastHalf = items[items.length - 1].column.width / 2;
+  const scale = (span - firstHalf - lastHalf) / Math.max(1, cluster.width - firstHalf - lastHalf);
+  for (const item of items) {
+    const center = minLeft + firstHalf + (item.centerOffset - firstHalf) * scale;
+    setLabelShift(item.column.avatar, center - item.column.anchor);
+  }
+}
+
+/**
+ * De-conflict the always-visible name tags so none — including your own —
+ * covers another. Same 1D cluster solver as the speech-bubble columns, but over
+ * the figures' name-tag widths, written as a `--label-shift` on each `below`.
+ *
+ * Run once per animation frame alongside layoutBubbleColumns.
+ *
+ * @param {HTMLElement} stage
+ * @param {Iterable<{ x: number, avatar: AvatarView }>} presences
+ */
+export function layoutNameLabels(stage, presences) {
+  const stageWidth = stage.clientWidth;
+  if (!stageWidth) return;
+
+  const minLeft = LABEL_EDGE;
+  const maxRight = stageWidth - LABEL_EDGE;
+
+  /** @type {Array<Column>} */
+  const columns = [];
+  for (const presence of presences) {
+    const { avatar } = presence;
+    // A tag hidden via CSS (display:none) measures 0 — leave it un-shifted.
+    const width = avatar.below ? avatar.below.offsetWidth : 0;
+    if (!width) {
+      setLabelShift(avatar, 0);
+      continue;
+    }
+    columns.push({ avatar, anchor: presence.x * stageWidth, width, scale: 1 });
+  }
+  if (columns.length === 0) return;
+
+  columns.sort((a, b) => a.anchor - b.anchor);
+
+  /** @type {Array<Cluster>} */
+  const clusters = [];
+  for (const column of columns) {
+    /** @type {Cluster} */
+    let cluster = {
+      width: column.width,
+      count: 1,
+      sumIdealLeft: column.anchor - column.width / 2,
+      items: [{ column, centerOffset: column.width / 2 }],
+    };
+    while (clusters.length > 0) {
+      const previous = clusters[clusters.length - 1];
+      const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
+      if (previousRight + LABEL_GAP <= clusterLeft(cluster, minLeft, maxRight)) break;
+      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster, LABEL_GAP);
+    }
+    clusters.push(cluster);
+  }
+
+  for (const cluster of clusters) {
+    placeLabelCluster(cluster, minLeft, maxRight);
   }
 }

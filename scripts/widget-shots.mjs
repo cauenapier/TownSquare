@@ -86,7 +86,65 @@ for (const [width, height, label] of VIEWPORTS) {
     });
   }
 
-  results.push({ label, viewport: width, overflow, composer, errs });
+  // Name tags must not cover one another (incl. your own over a peer's): report
+  // the worst horizontal overlap between any two visible tags.
+  const labels = await page.evaluate(() => {
+    const tags = [...document.querySelectorAll(".townsquare-avatar__below")]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width && r.height);
+    let worst = 0;
+    for (let i = 0; i < tags.length; i++) {
+      for (let j = i + 1; j < tags.length; j++) {
+        const a = tags[i], b = tags[j];
+        const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (ox > 0 && oy > 0) worst = Math.max(worst, ox);
+      }
+    }
+    return { count: tags.length, worstHorizontalOverlapPx: Math.round(worst) };
+  });
+
+  // Hover the character nearest your figure and confirm its history tray opens
+  // in front of everything (not painted over by neighbours or your own figure).
+  let tray = null;
+  const nearestIdx = await page.evaluate(() => {
+    const self = document.querySelector(".townsquare-avatar--self")?.getBoundingClientRect();
+    if (!self) return -1;
+    const sx = self.left + self.width / 2;
+    const peers = [...document.querySelectorAll(".townsquare-avatar--peer.townsquare-avatar--has-history")];
+    let best = -1, bestD = Infinity;
+    peers.forEach((el, i) => {
+      const r = el.getBoundingClientRect();
+      const d = Math.abs(r.left + r.width / 2 - sx);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  });
+  if (nearestIdx >= 0) {
+    // Hover the solid name label (a descendant), so :hover fires on the avatar.
+    await page.locator(".townsquare-avatar--peer.townsquare-avatar--has-history")
+      .nth(nearestIdx).locator(".townsquare-avatar__peer-label").hover();
+    await page.waitForTimeout(500);
+    await host.screenshot({ path: `${OUT}/widget-${label}-tray.png` });
+    tray = await page.evaluate(() => {
+      const el = [...document.querySelectorAll(".townsquare-avatar__tray")]
+        .find((t) => Number(getComputedStyle(t).opacity) > 0.5 && t.getBoundingClientRect().width);
+      if (!el) return { open: false };
+      const r = el.getBoundingClientRect();
+      // Sample interior points: every topmost element should belong to the tray.
+      let covered = 0, samples = 0;
+      for (let gx = 0.15; gx <= 0.85; gx += 0.175) {
+        for (let gy = 0.2; gy <= 0.8; gy += 0.2) {
+          const top = document.elementFromPoint(r.left + r.width * gx, r.top + r.height * gy);
+          samples++;
+          if (top && !el.contains(top)) covered++;
+        }
+      }
+      return { open: true, z: getComputedStyle(el.closest(".townsquare-avatar")).zIndex, coveredBySomethingElse: covered, samples };
+    });
+  }
+
+  results.push({ label, viewport: width, overflow, composer, labels, tray, errs });
   await ctx.close();
 }
 
