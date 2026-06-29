@@ -653,7 +653,10 @@
   z-index: 2147483000;
   width: 100vw;
   height: 100dvh;
-  padding: 0 18px 18px;
+  /* Reserve room at the bottom for the docked toolbar (absolute, bottom:7px) so
+     the flex stage — and the figures' name tags at its base — never sit under
+     the chat input. Mirrors --ts-toolbar-reserve in non-expanded mode. */
+  padding: 0 18px var(--ts-toolbar-reserve);
   border-top: 0;
   border-radius: 0;
   /* Expanded mode must cover the host even when its embedded palette uses

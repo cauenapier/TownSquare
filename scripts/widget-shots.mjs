@@ -167,7 +167,41 @@ for (const [width, height, label] of VIEWPORTS) {
     });
   }
 
-  results.push({ label, viewport: width, overflow, composer, labels, tray, errs });
+  // Expanded (fullscreen) view: the stage fills the viewport with the toolbar
+  // docked at the very bottom, so re-check that the chat input doesn't cover the
+  // figures' name tags (and that the tags still don't cover each other).
+  let expanded = null;
+  await page.mouse.move(1, 1); // drop any hover state before toggling
+  const expandBtn = page.locator(".townsquare__control--expand");
+  if (await expandBtn.count()) {
+    await expandBtn.click();
+    await page.waitForTimeout(600);
+    // Expanded is position:fixed over the whole viewport — capture the full page.
+    await page.screenshot({ path: `${OUT}/widget-${label}-expanded.png` });
+    expanded = await page.evaluate(() => {
+      const app = document.querySelector(".townsquare");
+      if (!app?.classList.contains("townsquare--expanded")) return { entered: false };
+      const c = document.querySelector(".townsquare-avatar__composer")?.getBoundingClientRect();
+      const tags = [...document.querySelectorAll(".townsquare-avatar__below")]
+        .map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
+      const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      const coversNameTags = c ? tags.filter((r) => intersects(c, r)).length : 0;
+      let worst = 0;
+      for (let i = 0; i < tags.length; i++) {
+        for (let j = i + 1; j < tags.length; j++) {
+          const a = tags[i], b = tags[j];
+          const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (ox > 0 && oy > 0) worst = Math.max(worst, ox);
+        }
+      }
+      return { entered: true, composerCoversNameTags: coversNameTags, worstHorizontalOverlapPx: Math.round(worst) };
+    });
+    await expandBtn.click(); // collapse back
+    await page.waitForTimeout(300);
+  }
+
+  results.push({ label, viewport: width, overflow, composer, labels, tray, expanded, errs });
   await ctx.close();
 }
 
