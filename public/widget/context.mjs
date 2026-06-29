@@ -65,6 +65,7 @@
  * @property {string} socketUrl
  * @property {string} browserId
  * @property {Map<string, PeerState>} peers
+ * @property {import("./chat.mjs").ChatScope} chat Per-mount chat state shared by all avatars.
  * @property {Array<import("../shared/scene-props.mjs").SceneProp>} sceneProps
  * @property {Map<string, import("../shared/scene-props.mjs").SceneProp>} propsById
  * @property {Map<string, import("../shared/bird-perches.mjs").BirdPerch>} birdPerchesById

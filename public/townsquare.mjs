@@ -6,7 +6,7 @@
  * new scene features can grow without turning the mount file into a monolith.
  */
 
-import { setLocalTyping, submitChat } from "./widget/chat.mjs";
+import { createChatScope, setLocalTyping, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds, syncBirdPerches } from "./widget/birds.mjs";
 import { initClouds, destroyClouds } from "./widget/clouds.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
@@ -201,6 +201,9 @@ export function mountTownSquare(root, options = {}) {
   const localOnly = preview || simulate;
   const spawnX = preview || solo || simulate ? PREVIEW_SPAWN_X : randomSpawnX();
   const peers = new Map();
+  // Per-mount chat state, shared by every avatar in this mount (and never across
+  // mounts), so two widgets on one page keep independent bubble limits.
+  const chatScope = createChatScope();
   const coarsePointer = typeof window.matchMedia === "function"
     && window.matchMedia("(pointer: coarse)").matches;
 
@@ -240,6 +243,7 @@ export function mountTownSquare(root, options = {}) {
     socketUrl,
     browserId,
     peers,
+    chat: chatScope,
     sceneProps,
     propsById: new Map(sceneProps.map((prop) => [prop.id, prop])),
     birdPerchesById: new Map(birdPerches.map((perch) => [perch.id, perch])),
@@ -281,6 +285,7 @@ export function mountTownSquare(root, options = {}) {
         isSelf: true,
         profile: { ...profile, readingLabel, readingUrl, readingActive },
         colors: CHARACTER_COLORS,
+        chatScope,
         onProfileChange: (nextProfile) => {
           const saved = saveStoredProfile(nextProfile);
           ctx.self.displayName = saved.displayName;
@@ -322,6 +327,7 @@ export function mountTownSquare(root, options = {}) {
   const expandController = createExpandController({
     app,
     expandButton,
+    chatScope,
     getAvatars: () => [ctx.self.avatar, ...Array.from(ctx.peers.values(), (peer) => peer.avatar)],
     onChange: (expanded) => {
       ctx.expanded = expanded;

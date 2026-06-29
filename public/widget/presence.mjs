@@ -66,7 +66,7 @@ export function getOrCreatePeer(ctx, peer) {
     return existing;
   }
 
-  const avatar = createAvatar({ isSelf: false, profile: peer });
+  const avatar = createAvatar({ isSelf: false, profile: peer, chatScope: ctx.chat });
   const nextPeer = {
     id: peer.id,
     x: 0,
@@ -195,7 +195,7 @@ function applyPresenceFields(ctx, state, fields) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {{ id: string, displayName?: string, color?: string, isOwner?: boolean }} profile
+ * @param {{ id: string, displayName?: string, color?: string, badgeColor?: string, isOwner?: boolean }} profile
  */
 export function applyProfileState(ctx, profile) {
   applyPresenceFields(ctx, profile, ["displayName", "color", "badgeColor", "isOwner"]);

@@ -14,6 +14,7 @@ import {
   GHOST_STACK_MAX_EXPANDED,
   MAX_RECENT_MESSAGES,
   MAX_RECENT_MESSAGES_EXPANDED,
+  MESSAGE_MAX,
 } from "./constants.mjs";
 import { createBubble, createTrayRow } from "./dom.mjs";
 import { MSG } from "../shared/protocol.mjs";
@@ -27,9 +28,19 @@ import { MSG } from "../shared/protocol.mjs";
 const FADE_MS = 320;
 const TYPING_IDLE_MS = 2500;
 
-// Monotonic speak order so overlapping bubble columns stack newest-on-top.
-let speakOrder = 1;
-let expandedView = false;
+/**
+ * Per-mount chat state. Kept off the module scope so two widgets on the same
+ * page never share expanded-mode limits or a single speak-order counter — each
+ * avatar holds a reference to its mount's scope via `avatar.chat`.
+ *
+ * @typedef {{ expandedView: boolean, speakOrder: number }} ChatScope
+ * @returns {ChatScope}
+ */
+export function createChatScope() {
+  // `speakOrder` is a monotonic counter so overlapping bubble columns stack
+  // newest-on-top across every avatar in this mount.
+  return { expandedView: false, speakOrder: 1 };
+}
 
 /**
  * Publish local composer activity, stopping automatically if input events cease.
@@ -50,29 +61,33 @@ export function setLocalTyping(ctx, typing) {
   }
 }
 
-function bubbleTtl() {
-  return expandedView ? BUBBLE_TTL_EXPANDED_MS : BUBBLE_TTL_MS;
+/** @param {ChatScope} scope */
+function bubbleTtl(scope) {
+  return scope.expandedView ? BUBBLE_TTL_EXPANDED_MS : BUBBLE_TTL_MS;
 }
 
-function ghostStackMax() {
-  return expandedView ? GHOST_STACK_MAX_EXPANDED : GHOST_STACK_MAX;
+/** @param {ChatScope} scope */
+function ghostStackMax(scope) {
+  return scope.expandedView ? GHOST_STACK_MAX_EXPANDED : GHOST_STACK_MAX;
 }
 
-function maxRecentMessages() {
-  return expandedView ? MAX_RECENT_MESSAGES_EXPANDED : MAX_RECENT_MESSAGES;
+/** @param {ChatScope} scope */
+function maxRecentMessages(scope) {
+  return scope.expandedView ? MAX_RECENT_MESSAGES_EXPANDED : MAX_RECENT_MESSAGES;
 }
 
 /**
  * Switch chat linger/stack limits for expanded mode and refresh live bubbles.
  *
+ * @param {ChatScope} scope This mount's chat state.
  * @param {boolean} expanded
  * @param {AvatarView[]} [avatars]
  */
-export function setExpandedView(expanded, avatars = []) {
-  expandedView = expanded;
-  const ttl = bubbleTtl();
-  const stackMax = ghostStackMax();
-  const recentMax = maxRecentMessages();
+export function setExpandedView(scope, expanded, avatars = []) {
+  scope.expandedView = expanded;
+  const ttl = bubbleTtl(scope);
+  const stackMax = ghostStackMax(scope);
+  const recentMax = maxRecentMessages(scope);
 
   for (const avatar of avatars) {
     for (const message of avatar.messages) {
@@ -112,7 +127,7 @@ function renderGhostStack(avatar) {
     let className = "townsquare-avatar__bubble";
     if (!(distance === 0 && message.solid)) {
       className += " townsquare-avatar__bubble--ghost";
-      const farDistance = expandedView ? 3 : 2;
+      const farDistance = avatar.chat.expandedView ? 3 : 2;
       if (distance >= farDistance) className += " townsquare-avatar__bubble--far";
     }
     message.el.className = className;
@@ -146,7 +161,7 @@ export function recordMessage(avatar, message) {
     text: message.text,
     at: typeof message.at === "number" ? message.at : Date.now(),
   });
-  avatar.history = avatar.history.slice(-maxRecentMessages());
+  avatar.history = avatar.history.slice(-maxRecentMessages(avatar.chat));
 
   avatar.trayList.replaceChildren(...avatar.history.map(createTrayRow));
   avatar.el.classList.toggle("townsquare-avatar--has-history", avatar.history.length > 0);
@@ -163,7 +178,7 @@ export function sayMessage(avatar, message) {
   recordMessage(avatar, message);
 
   for (const existing of avatar.messages) existing.solid = false;
-  avatar.el.style.setProperty("--speak-order", String(speakOrder++));
+  avatar.el.style.setProperty("--speak-order", String(avatar.chat.speakOrder++));
 
   const el = createBubble(message.text);
   avatar.above.appendChild(el);
@@ -173,14 +188,14 @@ export function sayMessage(avatar, message) {
   avatar.messages.push(entry);
 
   // If lines pile up faster than they fade, cap the stack by dropping the oldest.
-  while (avatar.messages.length > ghostStackMax()) {
+  while (avatar.messages.length > ghostStackMax(avatar.chat)) {
     const dropped = avatar.messages.shift();
     if (!dropped) break;
     clearTimeout(dropped.timer);
     dropped.el.remove();
   }
 
-  entry.timer = setTimeout(() => expire(avatar, entry), bubbleTtl());
+  entry.timer = setTimeout(() => expire(avatar, entry), bubbleTtl(avatar.chat));
   renderGhostStack(avatar);
 }
 
@@ -226,7 +241,10 @@ export function submitChat(ctx) {
   const { input } = ctx.self.avatar;
   if (!input) return false;
 
-  const text = input.value.trim();
+  // Mirror the server's cap (sanitizeMessage: trim + slice to MESSAGE_MAX) so
+  // the optimistic local echo matches exactly what the server stores and
+  // re-broadcasts, instead of briefly showing an over-length line we sent.
+  const text = input.value.trim().slice(0, MESSAGE_MAX);
   if (!text) return false;
 
   // Local-only modes (preview/dev simulate) have no server to echo the line

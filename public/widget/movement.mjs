@@ -109,10 +109,11 @@ export function maybeRequestPropSettle(ctx, now) {
 
 /**
  * @param {WidgetContext} ctx
+ * @param {number} now Frame timestamp (`performance.now()`), shared with the loop
+ *   so send-throttle timing uses the same clock as prop-settle and frame timing.
  */
-export function maybeSendMove(ctx) {
+export function maybeSendMove(ctx, now) {
   const { self, socket } = ctx;
-  const now = Date.now();
   const movedEnough = Math.abs(self.x - self.lastSentX) > 0.002;
   const waitedLongEnough = now - self.lastSendAt > SEND_INTERVAL_MS;
 
@@ -264,7 +265,7 @@ export function tick(ctx, now) {
     setFacing(ctx.self.avatar, direction < 0);
     updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
     setWalking(ctx.self.avatar, true);
-    maybeSendMove(ctx);
+    maybeSendMove(ctx, now);
   } else {
     setWalking(ctx.self.avatar, false);
     updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);

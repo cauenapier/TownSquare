@@ -21,6 +21,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLElement} tray Hover surface listing recent history.
  * @property {HTMLElement} trayList Container the history rows render into.
  * @property {Array<{ text: string, at: number }>} history Recent messages, newest last.
+ * @property {import("./chat.mjs").ChatScope} chat Per-mount chat state shared by every avatar in the mount.
  * @property {number} [bubbleShift] Applied column nudge in px (see bubble-layout.mjs).
  * @property {number} [tailShift] Applied tail base counter-shift in px (see bubble-layout.mjs).
  * @property {number} [tailTip] Applied tail tip lean in px (see bubble-layout.mjs).
@@ -317,7 +318,7 @@ export function wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton) {
  * }} options
  * @returns {AvatarView}
  */
-export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChange, onSubmitChat, onTypingChange, toolbarHost }) {
+export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onProfileChange, onSubmitChat, onTypingChange, toolbarHost }) {
   const el = document.createElement("div");
   el.className = `townsquare-avatar ${isSelf ? "townsquare-avatar--self" : "townsquare-avatar--peer"}`;
   el.innerHTML = figureMarkup('aria-hidden="true"');
@@ -346,6 +347,9 @@ export function createAvatar({ isSelf, profile = {}, colors = [], onProfileChang
     tray,
     trayList,
     history: [],
+    // Per-mount chat state (expanded-view limits + speak-order counter). Falls
+    // back to a private scope so a lone avatar still renders coherently.
+    chat: chatScope || { expandedView: false, speakOrder: 1 },
   };
 
   if (!isSelf) {

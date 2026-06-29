@@ -178,8 +178,7 @@
   <p>
     The implementation is split by concern under <code class="inline">public/widget/</code>; the mount file is just an
     orchestrator. All per-mount state lives in a single <b>context object</b> (<code class="inline">ctx</code>) that is
-    threaded through every module — there is no hidden per-mount state hiding in module scope (the few
-    that used to exist are now on <code class="inline">ctx</code> / refcounted; see <a href="#gotchas">§6</a>).
+    threaded through every module — there is no hidden per-mount state hiding in module scope.
   </p>
   <table>
     <tr><th>Run mode</th><th>Socket?</th><th>Peers/birds?</th><th>Use</th></tr>
@@ -216,22 +215,22 @@ flowchart TD
   <div class="mermaid">
 sequenceDiagram
     autonumber
-    participant U as User input<br/>(keys / pointer)
-    participant L as tick() loop<br/>movement.mjs
+    participant U as User input
+    participant L as tick loop
     participant S as WebSocket
     participant SRV as Server
-    participant P as Peers / DOM
+    participant P as Peers and DOM
 
-    U->>L: ArrowKeys / tap / swipe set movingLeft/Right/targetX
+    U->>L: keys, tap or swipe set movingLeft, movingRight, targetX
     loop every animation frame
-        L->>L: integrate x, clamp, set pose=null
-        L->>S: MOVE {x} (if moved & >45ms since last)
-        L->>L: maybeRequestPropSettle → SETTLE {propId}
-        L->>P: layoutBubbleColumns + layoutNameLabels
+        L->>L: integrate x, clamp, clear pose
+        L->>S: MOVE x  - only if moved and over 45ms since last
+        L->>L: maybeRequestPropSettle then SETTLE propId
+        L->>P: layoutBubbleColumns and layoutNameLabels
     end
-    SRV-->>S: MOVE / JOIN / LEAVE / SAY / ACTION / READING
-    S->>P: applyPeerState / sayMessage / playJump …
-    Note over S,SRV: SAY/ACTION for self are echoed back;<br/>self bubble shows immediately on submit (optimistic)
+    SRV-->>S: MOVE, JOIN, LEAVE, SAY, ACTION, READING
+    S->>P: applyPeerState, sayMessage, playJump
+    Note over S,SRV: SAY and ACTION for self are echoed back - the self bubble shows immediately on submit (optimistic)
   </div>
 </section>
 
@@ -423,85 +422,7 @@ socket.addEventListener(<span class="s">"close"</span>, (event) =&gt; {
 <!-- ───────────────────────── GOTCHAS ───────────────────────── -->
 <section id="gotchas">
   <h2>6 · Gotchas, limits &amp; refactor targets</h2>
-  <div class="lede">
-    <b>Status:</b> all seven items below were fixed in the same pass that produced this doc. Each card keeps the
-    original problem for context and adds the resolution. Verified with <code class="inline">npm run check</code>,
-    <code class="inline">npm run lint</code>, and <code class="inline">npm test</code> (47 passing).
-  </div>
-
-  <div class="gotcha done">
-    <h4>Module-level state breaks multiple mounts on one page <span class="sev fixed">fixed</span></h4>
-    <p><code class="inline">chat.mjs</code> kept <code class="inline">expandedView</code> and <code class="inline">speakOrder</code> as module-level
-    globals, not on <code class="inline">ctx</code>. Two widgets mounted on the same page would share expanded-mode bubble TTL/stack
-    limits and a single speak-order counter — the second mount could flip the first's chat behavior.</p>
-    <p class="fix"><b>Fix:</b> introduced <code class="inline">createChatScope()</code> returning a per-mount
-    <code class="inline">{ expandedView, speakOrder }</code>. It's stored as <code class="inline">ctx.chat</code> and handed to every avatar
-    (self in <code class="inline">townsquare.mjs</code>, peers in <code class="inline">presence.mjs</code>) via
-    <code class="inline">createAvatar({ chatScope })</code>; all chat helpers now read <code class="inline">avatar.chat</code> and
-    <code class="inline">setExpandedView</code> takes the scope explicitly.</p>
-    <p class="where">public/widget/chat.mjs · dom.mjs · expand.mjs · presence.mjs · townsquare.mjs</p>
-  </div>
-
-  <div class="gotcha done">
-    <h4>Global <code class="inline">history</code> patch is not refcounted <span class="sev fixed">fixed</span></h4>
-    <p><code class="inline">page-watch.mjs</code> monkey-patched <code class="inline">history.pushState/replaceState</code> per mount.
-    Two mounts nested wrappers (firing the navigation event twice) and teardown could strand a wrapper.</p>
-    <p class="fix"><b>Fix:</b> a single module-level wrapper backed by <code class="inline">installHistoryPatch()</code> /
-    <code class="inline">uninstallHistoryPatch()</code> with a reference count. The first mount installs it, later mounts just
-    increment, and only the last teardown restores the host's originals (and only if the wrapper is still the active method).</p>
-    <p class="where">public/widget/page-watch.mjs</p>
-  </div>
-
-  <div class="gotcha done">
-    <h4>Proof-of-work runs on the main thread <span class="sev fixed">fixed</span></h4>
-    <p>The hand-rolled SHA-256 search yielded every 16,384 nonces but still competed with rendering on the main thread, so a
-    high server <code class="inline">difficulty</code> meant a visibly stalled join on slow devices.</p>
-    <p class="fix"><b>Fix:</b> the search now runs in a <b>Web Worker</b> built from a blob whose body is generated by stringifying
-    the very same <code class="inline">sha256</code>/<code class="inline">rotr</code>/<code class="inline">leadingZeroBits</code> primitives
-    (single source of truth — no duplicated crypto). The inline, event-loop-yielding loop remains as a fallback when Workers or
-    <code class="inline">blob:</code> workers are unavailable (e.g. strict CSP), caught and degraded gracefully.</p>
-    <p class="where">public/widget/pow.mjs · solveChallenge / solveInWorker / solveInline</p>
-  </div>
-
-  <div class="gotcha done">
-    <h4>Mixed time sources <span class="sev fixed">fixed</span></h4>
-    <p>The loop used <code class="inline">performance.now()</code> for frame timing and prop-settle, but
-    <code class="inline">maybeSendMove</code> reached for <code class="inline">Date.now()</code> — a footgun if the two were ever compared.</p>
-    <p class="fix"><b>Fix:</b> <code class="inline">maybeSendMove(ctx, now)</code> now receives the frame timestamp from
-    <code class="inline">tick</code>, so all frame-driven timing (<code class="inline">lastSendAt</code>,
-    <code class="inline">propZoneEnteredAt</code>, <code class="inline">lastFrameAt</code>) shares one clock. Event-driven cooldowns
-    (jump/high-five/slow-mode) intentionally stay on wall-clock <code class="inline">Date.now()</code> and are never compared to frame time.</p>
-    <p class="where">public/widget/movement.mjs</p>
-  </div>
-
-  <div class="gotcha done">
-    <h4>No client-side chat length cap <span class="sev fixed">fixed</span></h4>
-    <p><code class="inline">submitChat</code> only trimmed and checked non-empty, so an over-length line was optimistically echoed
-    locally before the server's truncation could disagree with it.</p>
-    <p class="fix"><b>Fix:</b> the input is now <code class="inline">.trim().slice(0, MESSAGE_MAX)</code> — mirroring the server's
-    <code class="inline">sanitizeMessage</code> (<code class="inline">trim().slice(0, 140)</code>) exactly, so the optimistic echo equals
-    what the server stores and re-broadcasts.</p>
-    <p class="where">public/widget/chat.mjs · submitChat()</p>
-  </div>
-
-  <div class="gotcha done">
-    <h4>Redundant write in the SHA-256 finalizer <span class="sev fixed">fixed</span></h4>
-    <p><code class="inline">sha256</code> wrote <code class="inline">h[0]</code> into the output, then immediately re-wrote all eight words in the
-    following loop — the first write was dead, and a fresh <code class="inline">DataView</code> was allocated per iteration.</p>
-    <p class="fix"><b>Fix:</b> dropped the dead <code class="inline">setUint32(0, h[0])</code> and hoisted a single
-    <code class="inline">outView</code> out of the loop.</p>
-    <p class="where">public/widget/pow.mjs</p>
-  </div>
-
-  <div class="gotcha done">
-    <h4>Doc/field drift in presence apply <span class="sev fixed">fixed</span></h4>
-    <p><code class="inline">applyProfileState</code> copied <code class="inline">badgeColor</code> but its JSDoc listed only
-    <code class="inline">displayName/color/isOwner</code>.</p>
-    <p class="fix"><b>Fix:</b> the JSDoc param now includes <code class="inline">badgeColor</code>. The deliberate degrade-quietly behavior
-    of <code class="inline">applyPresenceFields</code> (ignoring non-string/boolean values) is left intact — it's a defensive choice,
-    now correctly documented rather than a silent mismatch.</p>
-    <p class="where">public/widget/presence.mjs</p>
-  </div>
+  <p>No gotchas or refactor targets found as of today.</p>
 
   <h3>Deliberate limits (by design — see <code class="inline">docs/architecture.md</code>)</h3>
   <table>
@@ -514,9 +435,8 @@ socket.addEventListener(<span class="s">"close"</span>, (event) =&gt; {
 </section>
 
 <footer>
-  Generated from a read of <code>public/townsquare.mjs</code> and <code>public/widget/*</code> (+ <code>shared/protocol.mjs</code>),
-  then updated after the §6 fixes were applied and verified (check + lint + 47 tests).
-  Source is the source of truth — file references reflect the post-fix state.
+  Generated from a read of <code>public/townsquare.mjs</code> and <code>public/widget/*</code> (+ <code>shared/protocol.mjs</code>).
+  Source is the source of truth — file references reflect the current code.
 </footer>
 
 </div>
