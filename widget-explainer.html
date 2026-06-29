@@ -147,6 +147,22 @@
   td code { font: 12.5px ui-monospace, Menlo, monospace; color: #324; }
   .mermaid { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 16px 0; text-align: center; }
   footer { margin-top: 60px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+  /* product view */
+  .feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin: 16px 0; }
+  .feat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .feat .t { font-weight: 700; font-size: 14.5px; }
+  .feat .d { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .two-col .panel { margin: 0; }
+  .two-col h4 { margin: 0 0 8px; font-size: 15px; }
+  .two-col ul { margin: 0; padding-left: 18px; }
+  .two-col li { margin: 5px 0; font-size: 14.5px; }
+  .journey { counter-reset: step; list-style: none; padding: 0; margin: 16px 0; }
+  .journey li { position: relative; padding: 8px 0 8px 40px; border-top: 1px solid var(--line); font-size: 14.5px; }
+  .journey li:first-child { border-top: none; }
+  .journey li::before { counter-increment: step; content: counter(step); position: absolute; left: 4px; top: 8px; width: 24px; height: 24px; border-radius: 50%; background: #ece7ff; color: #5b3ed6; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+  @media (max-width: 680px) { .two-col { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -157,6 +173,7 @@
   <p class="sub">How the embeddable widget mounts, animates, and talks to the realtime server — read top to bottom.</p>
   <nav class="toc">
     <a href="#overview">Overview</a>
+    <a href="#product">Product view</a>
     <a href="#flow">Flow diagram</a>
     <a href="#modules">Module map</a>
     <a href="#snippets">Key code</a>
@@ -187,6 +204,90 @@
     <tr><td><code>preview</code></td><td>stub (closed)</td><td>no birds, local settle</td><td>admin/registration palette preview</td></tr>
     <tr><td><code>simulate</code></td><td>stub (closed)</td><td>yes, caller-driven</td><td><code>/dev</code> scene harness</td></tr>
   </table>
+</section>
+
+<!-- ───────────────────────── PRODUCT VIEW ───────────────────────── -->
+<section id="product" class="pm">
+  <h2>Product view</h2>
+  <div class="lede">
+    <b>In one line:</b> TownSquare turns a normally-empty web page into a shared, real-time space where visitors
+    appear as little characters, see who else is reading the same page right now, walk around, and chat — making a
+    solitary visit feel social and alive.
+  </div>
+
+  <h3>The visitor experience, start to finish</h3>
+  <ol class="journey">
+    <li><b>Arrival.</b> A small "town square" scene sits on the page (e.g. a strip along the bottom). The visitor's
+      own character appears and a brief "Connecting…" status shows while it joins.</li>
+    <li><b>"I'm not alone."</b> Other people on the same page show up as characters, each with a name and a
+      <b>"visiting &lt;page&gt;"</b> tag that follows them as they move between pages of the site.</li>
+    <li><b>Moving around.</b> Walk with arrow keys, by clicking/tapping where you want to go, or by swiping on mobile.
+      Standing still next to a bench, the character sits down on its own.</li>
+    <li><b>Talking.</b> Press a key (or tap your character) to type; your message pops as a speech bubble above you,
+      then gently fades. Recent lines are recoverable in a hover tray. An owner-set "slow mode" can space out messages.</li>
+    <li><b>Playing.</b> Quick gestures — jump, and raise-hand / high-five (you high-five a nearby person who also raised
+      their hand) — add lightweight, low-stakes interaction.</li>
+    <li><b>Going deeper.</b> Expand to a fullscreen view for more room, follow a signpost at the edge to a
+      "neighbouring town" (a linked site), or open the owner's message board.</li>
+    <li><b>Stepping back.</b> A "quiet" toggle mutes/hides the experience for visitors who'd rather just read; switching
+      tabs fades the character to an "away" state so presence stays honest.</li>
+  </ol>
+
+  <h3>What it does — functionality at a glance</h3>
+  <div class="feat-grid">
+    <div class="feat"><div class="t">Live presence</div><div class="d">See who else is on the page in real time, as characters that move and react.</div></div>
+    <div class="feat"><div class="t">"Currently reading" tags</div><div class="d">Each visitor shows the page they're on; it updates as they navigate, even on single-page sites.</div></div>
+    <div class="feat"><div class="t">Ephemeral chat</div><div class="d">Speech bubbles that fade, with a recent-history tray. Conversation feels ambient, not a logged chat room.</div></div>
+    <div class="feat"><div class="t">Expressive gestures</div><div class="d">Walk, sit, jump, raise hand, high-five — body language without words.</div></div>
+    <div class="feat"><div class="t">Identity, lightweight</div><div class="d">Pick a display name and color; remembered on the device. No account or sign-up.</div></div>
+    <div class="feat"><div class="t">Verified owner badge</div><div class="d">Site owners get an anti-spoofed crown so visitors know who runs the space.</div></div>
+    <div class="feat"><div class="t">Customizable scene</div><div class="d">Owners set props (benches, trees, lamps), birds, clouds, colors and light/dark theme — changes apply live.</div></div>
+    <div class="feat"><div class="t">Neighbouring towns</div><div class="d">Edge signposts link to other TownSquare sites, so spaces can form a small network.</div></div>
+    <div class="feat"><div class="t">Owner message board</div><div class="d">A clickable prop that shows a note from the owner — announcements, welcome, rules.</div></div>
+    <div class="feat"><div class="t">Mobile-ready</div><div class="d">Touch walking/swiping and on-screen-keyboard handling so it works on phones.</div></div>
+    <div class="feat"><div class="t">Drop-in embed</div><div class="d">Added to any page with a small snippet; works self-hosted or via a hosted site key.</div></div>
+    <div class="feat"><div class="t">Quiet / focus mode</div><div class="d">Visitors can mute the experience entirely; a "solo" mode hides others while staying connected.</div></div>
+  </div>
+
+  <h3>Who controls what</h3>
+  <div class="two-col">
+    <div class="panel">
+      <h4>The visitor decides</h4>
+      <ul>
+        <li>Display name &amp; character color</li>
+        <li>Where to walk, sit, and what to say</li>
+        <li>Whether to expand, go quiet, or ignore it</li>
+        <li>Whether to follow a signpost to another site</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h4>The site owner controls (live, no re-embed)</h4>
+      <ul>
+        <li>Scene look: props, birds, clouds, palette, theme</li>
+        <li>Chat "slow mode" cooldown &amp; blocked words</li>
+        <li>Message board content</li>
+        <li>Neighbour links to other towns</li>
+        <li>Moderation: remove/kick or block disruptive visitors</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Why it matters &amp; where it fits</h3>
+  <table>
+    <tr><th>Good fit</th><th>The product bet</th></tr>
+    <tr><td>Blogs, docs, landing &amp; launch pages, event/stream pages, personal sites</td>
+        <td>The web is full of pages people visit <em>at the same time</em> but experience <em>alone</em>. Showing that shared presence — cheaply, with no sign-up — creates connection and stickiness a static page can't.</td></tr>
+  </table>
+
+  <h3>Limitations to set expectations on</h3>
+  <div class="feat-grid">
+    <div class="feat"><div class="t">Ephemeral by design</div><div class="d">Chat isn't a persistent history; bubbles fade and a refresh won't replay the room. Great for "now," not a record.</div></div>
+    <div class="feat"><div class="t">Presence, not messaging</div><div class="d">No DMs, threads, or notifications when you're away — it's about being together in the moment on a page.</div></div>
+    <div class="feat"><div class="t">Capacity per square</div><div class="d">A space can fill up; very high concurrency on one page isn't the current target.</div></div>
+    <div class="feat"><div class="t">Per-device identity</div><div class="d">No accounts: identity lives in the browser, so it doesn't follow a person across devices.</div></div>
+    <div class="feat"><div class="t">Single-site focus today</div><div class="d">Built first for self-hosted, single-site use; multi-site hosting and a wider town network are the growth path, not finished products.</div></div>
+    <div class="feat"><div class="t">Light-touch moderation</div><div class="d">Slow mode, blocked words, and owner kick/block exist; rich moderation tooling is still early.</div></div>
+  </div>
 </section>
 
 <!-- ───────────────────────── FLOW DIAGRAM ───────────────────────── -->
