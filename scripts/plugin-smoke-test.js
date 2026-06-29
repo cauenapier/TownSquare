@@ -6,11 +6,13 @@ const net = require("net");
 const path = require("path");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
+const { handleSmokeSocketMessage, withTimeout } = require("./smoke-ws-helpers");
 
 // `let` so the self-contained harness can repoint them at a spawned server.
 let HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
 let WS_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
 let DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
+const CONNECT_TIMEOUT_MS = Number(process.env.SMOKE_CONNECT_TIMEOUT_MS || 15000);
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -55,6 +57,7 @@ async function startManagedServer() {
       DATA_DIR: dataDir,
       ALLOWED_ORIGINS: httpOrigin,
       MIN_HUMAN_SAY_MS: "0",
+      POW_DIFFICULTY_BITS: process.env.POW_DIFFICULTY_BITS || "1",
       TOWNSQUARE_EXTRA_PLUGINS: fixture,
     },
     stdio: ["ignore", "inherit", "inherit"],
@@ -91,19 +94,42 @@ async function post(pathname, body) {
 }
 
 function connect(siteKey) {
-  return new Promise((resolve, reject) => {
+  const label = "connect plugin-smoke";
+  const promise = new Promise((resolve, reject) => {
     const url = new URL(WS_URL);
     url.searchParams.set("siteKey", siteKey);
     const ws = new WebSocket(url, { headers: { Origin: HTTP_ORIGIN } });
     const seen = [];
+    let joined = false;
     ws.on("open", () => ws.send(JSON.stringify({ type: "init", browserId: "plugin-smoke", x: 0.5 })));
     ws.on("message", (raw) => {
-      const message = JSON.parse(String(raw));
-      seen.push(message);
-      if (message.type === "hello") resolve({ ws, seen, hello: message });
+      let message;
+      try {
+        message = JSON.parse(String(raw));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen,
+          onHello: (hello) => {
+            joined = true;
+            resolve({ ws, seen, hello });
+          },
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
     ws.on("error", reject);
+    ws.on("close", (code, reason) => {
+      if (!joined) {
+        reject(new Error(`${label} closed before hello (${code}: ${String(reason)})`));
+      }
+    });
   });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
 function assert(condition, message) {
@@ -180,6 +206,7 @@ async function main() {
 
 async function run() {
   const external = Boolean(process.env.TOWNSQUARE_HTTP_ORIGIN);
+  if (!external && !process.env.POW_DIFFICULTY_BITS) process.env.POW_DIFFICULTY_BITS = "1";
   const cleanup = external ? null : await startManagedServer();
   try {
     await main();
