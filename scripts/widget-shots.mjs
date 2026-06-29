@@ -44,7 +44,8 @@ for (const [width, height, label] of VIEWPORTS) {
   // Let the crowd spread out and chat bubbles appear.
   await page.waitForTimeout(3500);
 
-  await page.locator(".dev-host").screenshot({ path: `${OUT}/widget-${label}.png` });
+  const host = page.locator(".dev-host");
+  await host.screenshot({ path: `${OUT}/widget-${label}.png` });
 
   // Geometry sanity: does the widget overflow horizontally?
   const overflow = await page.evaluate(() => {
@@ -57,7 +58,32 @@ for (const [width, height, label] of VIEWPORTS) {
     };
   });
 
-  results.push({ label, viewport: width, overflow, errs });
+  // Open the composer ("say something" → text input) and capture that state,
+  // then check whether the open composer covers any peer name tags.
+  const plate = page.locator(".townsquare-avatar__plate").first();
+  let composer = null;
+  if (await plate.count()) {
+    await plate.click();
+    await page.waitForTimeout(500);
+    await host.screenshot({ path: `${OUT}/widget-${label}-composer.png` });
+
+    composer = await page.evaluate(() => {
+      const form = document.querySelector(".townsquare-avatar__composer:not([hidden])")
+        || document.querySelector(".townsquare-avatar__input")?.closest(".townsquare-avatar__composer");
+      if (!form) return { open: false };
+      const c = form.getBoundingClientRect();
+      const intersects = (a, b) =>
+        a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      // Peer name tags that the open composer visually covers.
+      const covered = [...document.querySelectorAll(".townsquare-avatar__peer-label")]
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.width && r.height && intersects(c, r))
+        .map(({ el }) => el.textContent.trim());
+      return { open: true, coversNameTags: covered.length, covered };
+    });
+  }
+
+  results.push({ label, viewport: width, overflow, composer, errs });
   await ctx.close();
 }
 
