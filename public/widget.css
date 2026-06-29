@@ -85,6 +85,74 @@
   height: 16px;
 }
 
+.townsquare__enable-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 30px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.townsquare__enable-toggle-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.townsquare__enable-toggle-track {
+  position: relative;
+  display: block;
+  width: 36px;
+  height: 20px;
+  border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 78%, transparent);
+  box-shadow: 0 4px 12px -10px rgba(42, 41, 38, 0.38);
+  backdrop-filter: blur(8px);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.townsquare__enable-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  transform: translateY(-50%);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.townsquare__enable-toggle-input:checked + .townsquare__enable-toggle-track {
+  background: color-mix(in oklab, var(--you) 32%, var(--surface));
+  border-color: color-mix(in oklab, var(--you) 48%, var(--hair-2));
+}
+
+.townsquare__enable-toggle-input:checked + .townsquare__enable-toggle-track::after {
+  transform: translate(16px, -50%);
+  background: var(--you-deep);
+}
+
+.townsquare__enable-toggle-input:focus-visible + .townsquare__enable-toggle-track {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .townsquare__enable-toggle-track,
+  .townsquare__enable-toggle-track::after {
+    transition: none;
+  }
+}
+
 .townsquare__actions {
   position: absolute;
   z-index: 2147483001;

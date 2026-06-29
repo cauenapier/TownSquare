@@ -215,7 +215,8 @@ export function mountTownSquare(root, options = {}) {
     stage,
     statusRow,
     status: statusEl,
-    quietButton,
+    enableToggle,
+    enableToggleLabel,
     expandButton,
     helpButton,
     helpScrim,
@@ -251,7 +252,7 @@ export function mountTownSquare(root, options = {}) {
     stage,
     statusRowEl: statusRow,
     statusEl,
-    quietButton,
+    enableToggle,
     expandButton,
     // Chat cooldown (slow mode); the server sends the live value in `hello` and
     // again whenever an owner changes it.
@@ -343,10 +344,9 @@ export function mountTownSquare(root, options = {}) {
     if (quiet) setLocalTyping(ctx, false);
     if (quiet) setExpanded(false);
     ctx.app.classList.toggle("townsquare--quiet", quiet);
-    ctx.quietButton.classList.toggle("townsquare__control--active", quiet);
-    ctx.quietButton.setAttribute("aria-pressed", String(quiet));
-    ctx.quietButton.setAttribute("aria-label", quiet ? "Enable TownSquare" : "Disable TownSquare");
-    ctx.quietButton.title = quiet ? "Enable TownSquare" : "Disable TownSquare";
+    ctx.enableToggle.checked = !quiet;
+    ctx.enableToggle.setAttribute("aria-label", quiet ? "TownSquare disabled" : "TownSquare enabled");
+    ctx.enableToggle.title = quiet ? "Enable TownSquare" : "Disable TownSquare";
     ctx.self.movingLeft = false;
     ctx.self.movingRight = false;
     ctx.self.avatar.composer?.reset();
@@ -356,7 +356,7 @@ export function mountTownSquare(root, options = {}) {
     }
   };
 
-  quietButton.addEventListener("click", () => setQuiet(!ctx.quiet));
+  enableToggle.addEventListener("change", () => setQuiet(!enableToggle.checked));
   expandButton.addEventListener("click", () => {
     setExpanded(!expandController.isExpanded());
   });
@@ -368,7 +368,7 @@ export function mountTownSquare(root, options = {}) {
   // and pencil (createAvatar already placed those). Moving the nodes keeps their
   // click listeners intact. Final bar order: input, pencil, jump, hi5.
   toolbar.append(jumpButton, highFiveButton);
-  const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton);
+  const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel);
 
   const unwatchPage = watchCurrentPage(ctx);
 

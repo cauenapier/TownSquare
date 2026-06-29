@@ -78,7 +78,7 @@
  * @property {HTMLElement} stage
  * @property {HTMLElement} statusRowEl
  * @property {HTMLElement} statusEl
- * @property {HTMLButtonElement} quietButton
+ * @property {HTMLInputElement} enableToggle
  * @property {HTMLButtonElement} expandButton
  * @property {SelfState} self
  * @property {WebSocket} socket
