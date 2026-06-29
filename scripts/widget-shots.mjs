@@ -95,11 +95,12 @@ for (const [width, height, label] of VIEWPORTS) {
   }
 
   // Name tags must not cover one another (incl. your own over a peer's): report
-  // the worst horizontal overlap between any two visible tags.
+  // the worst horizontal overlap between any two visible tags, plus how far the
+  // farthest tag fades — distant tags recede so crowded narrow stages stay legible.
   const labels = await page.evaluate(() => {
-    const tags = [...document.querySelectorAll(".townsquare-avatar__below")]
-      .map((el) => el.getBoundingClientRect())
-      .filter((r) => r.width && r.height);
+    const els = [...document.querySelectorAll(".townsquare-avatar__below")]
+      .filter((el) => { const r = el.getBoundingClientRect(); return r.width && r.height; });
+    const tags = els.map((el) => el.getBoundingClientRect());
     let worst = 0;
     for (let i = 0; i < tags.length; i++) {
       for (let j = i + 1; j < tags.length; j++) {
@@ -109,7 +110,13 @@ for (const [width, height, label] of VIEWPORTS) {
         if (ox > 0 && oy > 0) worst = Math.max(worst, ox);
       }
     }
-    return { count: tags.length, worstHorizontalOverlapPx: Math.round(worst) };
+    const opacities = els.map((el) => Number(getComputedStyle(el).opacity));
+    return {
+      count: tags.length,
+      worstHorizontalOverlapPx: Math.round(worst),
+      minTagOpacity: Number(Math.min(...opacities).toFixed(2)),
+      fadedTags: opacities.filter((o) => o < 0.6).length,
+    };
   });
 
   // Hover the character nearest your figure and confirm its history tray opens

@@ -276,8 +276,9 @@ export function tick(ctx, now) {
   const presences = ctx.options.preview === true || ctx.options.solo === true
     ? [ctx.self]
     : [ctx.self, ...ctx.peers.values()];
-  layoutBubbleColumns(ctx.stage, presences, ctx.self.x, layoutConfigFor(ctx.options.layout, ctx.expanded));
-  layoutNameLabels(ctx.stage, presences);
+  const layoutCfg = layoutConfigFor(ctx.options.layout, ctx.expanded);
+  layoutBubbleColumns(ctx.stage, presences, ctx.self.x, layoutCfg);
+  layoutNameLabels(ctx.stage, presences, ctx.self.x, layoutCfg);
 
   ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
 }

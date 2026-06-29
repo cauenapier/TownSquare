@@ -1615,11 +1615,21 @@
   /* --label-shift de-conflicts overlapping name tags (see layoutNameLabels in
      bubble-layout.mjs), so no tag — including your own — covers another. */
   transform: translateX(calc(-50% + var(--label-shift, 0px)));
+  /* --label-fade recedes distant tags so crowded narrow stages stay legible;
+     near 1 on wide stages (see layoutNameLabels). */
+  opacity: var(--label-fade, 1);
+  transition: opacity 140ms ease;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 7px;
   white-space: nowrap;
+}
+
+/* Hovering or focusing a faded distant character restores its tag to full. */
+.townsquare-avatar:hover .townsquare-avatar__below,
+.townsquare-avatar:focus-within .townsquare-avatar__below {
+  opacity: 1;
 }
 
 .townsquare-avatar__below[hidden] { display: none; }
