@@ -1967,20 +1967,27 @@
   .townsquare-avatar__composer { min-width: min(260px, 80cqw); }
 }
 
-/* ── Touch: bottom toolbar ──
-   On coarse pointers chat moves off the (moving) figure into a fixed bar at the
-   bottom of the widget: an always-visible input, the rename pencil, and the
-   jump / high-five actions. The figure keeps a compact identity label, and the
-   virtual keyboard can't clip any of it. */
+/* ── Bottom toolbar ──
+   Chat lives in a fixed bar at the bottom of the widget — for every pointer
+   type — instead of floating under the (moving) figure: an always-visible
+   input, the rename pencil, and the jump / high-five actions. The figure keeps
+   a compact identity label, peer name tags are never covered, and the virtual
+   keyboard can't clip any of it. The space is reserved via --ts-toolbar-reserve. */
 .townsquare__toolbar {
   position: absolute;
   z-index: 2147483002;
   left: 10px;
   right: 10px;
   bottom: 7px;
-  display: none;
+  display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Actions (jump / high-five) are docked into the toolbar, so the floating
+   container that once held them bottom-right is always empty. */
+.townsquare__actions {
+  display: none;
 }
 
 /* The docked composer fills the bar instead of floating on its own. */
@@ -2027,16 +2034,6 @@
 }
 
 @media (pointer: coarse) {
-  .townsquare__toolbar {
-    display: flex;
-  }
-
-  /* Touch mounts move the jump / high-five buttons into the toolbar, so the
-     absolute-positioned actions container is empty here — hide it. */
-  .townsquare__actions {
-    display: none;
-  }
-
   .townsquare__control {
     width: 40px;
     height: 40px;
