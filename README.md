@@ -21,6 +21,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 
 - `server.js` — Node server for static assets, health checks, and WebSocket presence
 - `public/townsquare.mjs` — reusable embeddable widget mount API (public embed URL `/townsquare.mjs`)
+- `public/townsquare-counter.mjs` — lightweight "N people here" counter embed (public URL `/townsquare-counter.mjs`); reads `/api/site-presence`
 - `public/widget/` — widget implementation modules (DOM, chat, presence, protocol, movement)
 - `public/shared/` — protocol, scene, style, and map definitions shared with the server
 - `public/widget.css` — embeddable widget styling (scoped to `#townsquare-root`)
@@ -152,6 +153,45 @@ Notes:
   styles, so your CSS wins. See [Customization](#customization).
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
+
+### Presence counter
+
+For pages where the full square is too heavy, embed the lightweight counter — a
+self-contained "N people here" pill that links to the square. It loads no
+stylesheet and opens no socket, so showing it never adds a visitor to the square:
+
+```html
+<div id="townsquare-count"></div>
+<script type="module">
+  import { mountTownSquareCounter } from "https://your-townsquare-host/townsquare-counter.mjs";
+
+  mountTownSquareCounter(document.getElementById("townsquare-count"), {
+    serverOrigin: "https://your-townsquare-host",
+    // siteKey: "…",                       // only for multi-site hosted servers
+    townSquareUrl: "https://your-site/townsquare"
+  });
+</script>
+```
+
+Notes:
+
+- A town square is keyed per **site**, not per page (everyone with the widget
+  open on any page of the site shares one square). So the counter's "here" count
+  is the whole site's live presence — the same number whether the counter sits on
+  the same page as the square or a different one.
+- The count is read from `GET /api/site-presence?siteKey=…`, a public, read-only
+  endpoint that reports the live scene count without joining it. A counter-only
+  page therefore never inflates the number or appears as a ghost to people in the
+  square.
+- Clicking the counter takes the visitor to the square: it scrolls to a full
+  widget already on the same page (`#townsquare-root`) if one exists, otherwise it
+  navigates to `townSquareUrl`. With neither, it renders as plain text.
+- Options can also be set via data attributes on the mount node:
+  `data-townsquare-server-origin`, `data-townsquare-site-key`,
+  `data-townsquare-url`. `pollMs` defaults to 20s (floored at 5s).
+- Theme it by overriding `--ts-counter-bg`, `--ts-counter-ink`, and
+  `--ts-counter-dot` on the `.ts-counter` element; by default it uses system
+  colors and follows light/dark automatically.
 
 ## Hosted registration
 

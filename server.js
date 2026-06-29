@@ -1263,6 +1263,38 @@ function handleStats(_req, res) {
   sendPublicJson(res, 200, getPublicStats());
 }
 
+/**
+ * Public, read-only presence count for one site's town square, used by the
+ * lightweight "N people here" counter widget. Reads the live scene count
+ * ({@link countActiveVisitors}) without opening a socket or creating an
+ * identity, so a page that only shows the counter never inflates the number
+ * or spawns a ghost avatar for visitors in the square. A missing `siteKey`
+ * reads the shared default (self-hosted) scene; an unknown or disabled site
+ * returns 404 so the counter can hide itself.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handleSitePresence(req, res) {
+  const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+  const siteKey = url.searchParams.get("siteKey") || "";
+
+  if (!siteKey) {
+    const scene = scenes.get("default");
+    sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+    return;
+  }
+
+  const site = sitesByKey.get(siteKey);
+  if (!site || site.disabled) {
+    sendPublicJson(res, 404, { error: "unknown site" });
+    return;
+  }
+
+  const scene = scenes.get(site.siteKey);
+  sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+}
+
 function loadMapWorld() {
   const readWorld = (filePath) => validateMapWorld(JSON.parse(fs.readFileSync(filePath, "utf8")));
   try {
@@ -2815,6 +2847,11 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "GET" && url.pathname === "/api/stats") {
     handleStats(req, res);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/site-presence") {
+    handleSitePresence(req, res);
     return;
   }
 
