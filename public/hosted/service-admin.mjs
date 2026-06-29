@@ -30,6 +30,7 @@ const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const siteFilterEl = document.getElementById("site-filter");
 const siteFilterMetaEl = document.getElementById("site-filter-meta");
+const siteColumnPickerPanelEl = document.getElementById("site-column-picker-panel");
 const siteTableWrapEl = document.getElementById("site-table-wrap");
 const siteTableHeadEl = document.getElementById("site-table-head");
 const siteTableBodyEl = document.getElementById("site-table-body");
@@ -62,6 +63,7 @@ const tabButtons = serviceAdminTabs ? [...serviceAdminTabs.querySelectorAll("[da
 const tabPanels = [...document.querySelectorAll(".hosted-tabpanel")];
 
 const STORAGE_KEY = "townsquare-service-admin-password";
+const TABLE_PREFS_KEY = "townsquare-service-admin-table";
 const REFRESH_INTERVAL_MS = 5000;
 const MAX_MAP_HISTORY_ITEMS = 20_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -90,6 +92,29 @@ const TABLE_COLUMNS = [
   { key: "blockedCount", label: "Blocked", render: (site) => String(site.blockedCount ?? 0) },
 ];
 
+function loadTablePrefs() {
+  try {
+    const raw = localStorage.getItem(TABLE_PREFS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTablePrefs() {
+  localStorage.setItem(TABLE_PREFS_KEY, JSON.stringify({
+    visibleColumns: [...visibleColumnKeys],
+  }));
+}
+
+const tablePrefs = loadTablePrefs();
+const defaultVisibleColumnKeys = TABLE_COLUMNS.map((column) => column.key);
+let visibleColumnKeys = new Set(
+  Array.isArray(tablePrefs?.visibleColumns) && tablePrefs.visibleColumns.length > 0
+    ? tablePrefs.visibleColumns.filter((key) => TABLE_COLUMNS.some((column) => column.key === key))
+    : defaultVisibleColumnKeys,
+);
+
 const credentialStore = createCredentialStore(STORAGE_KEY);
 
 const stored = credentialStore.read();
@@ -100,7 +125,8 @@ let allSites = [];
 let filterQuery = "";
 let sortKey = "name";
 let sortAsc = true;
-let tableHeadReady = false;
+let columnPickerReady = false;
+let tableHeadSignature = "";
 let savedMapWorld = null;
 let draftMapWorld = null;
 let mapEditorSvg = null;
@@ -511,6 +537,10 @@ function compareSites(a, b, key) {
   return a.siteKey.localeCompare(b.siteKey);
 }
 
+function visibleColumns() {
+  return TABLE_COLUMNS.filter((column) => visibleColumnKeys.has(column.key));
+}
+
 function siteMatchesFilter(site, query) {
   if (!query) return true;
   const haystack = [site.name, site.origin, site.siteKey, site.email]
@@ -530,11 +560,74 @@ function visibleSites() {
     });
 }
 
-function ensureTableHead() {
-  if (tableHeadReady) return;
+function setColumnVisible(key, visible) {
+  if (visible) {
+    visibleColumnKeys.add(key);
+  } else if (visibleColumnKeys.size > 1) {
+    visibleColumnKeys.delete(key);
+  } else {
+    return;
+  }
+  saveTablePrefs();
+  renderSitesTable({ rebuildHead: true });
+}
 
-  const row = document.createElement("tr");
+function resetTableColumns() {
+  visibleColumnKeys = new Set(defaultVisibleColumnKeys);
+  saveTablePrefs();
+  renderSitesTable({ rebuildHead: true });
+}
+
+function ensureColumnPicker() {
+  if (columnPickerReady || !siteColumnPickerPanelEl) return;
+
+  const list = document.createElement("div");
+  list.className = "service-column-picker-list";
+
   for (const column of TABLE_COLUMNS) {
+    const label = document.createElement("label");
+    label.className = "service-column-picker-item";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = visibleColumnKeys.has(column.key);
+    input.addEventListener("change", () => {
+      setColumnVisible(column.key, input.checked);
+      input.checked = visibleColumnKeys.has(column.key);
+    });
+
+    const text = document.createElement("span");
+    text.textContent = column.label;
+
+    label.append(input, text);
+    list.append(label);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "service-column-picker-actions";
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "hosted-quiet-button";
+  reset.textContent = "Reset columns";
+  reset.addEventListener("click", () => {
+    resetTableColumns();
+    columnPickerReady = false;
+    siteColumnPickerPanelEl.replaceChildren();
+    ensureColumnPicker();
+  });
+
+  actions.append(reset);
+  siteColumnPickerPanelEl.append(list, actions);
+  columnPickerReady = true;
+}
+
+function renderTableHead() {
+  const columns = visibleColumns();
+  const sortRow = document.createElement("tr");
+  sortRow.className = "service-table-sort-row";
+
+  for (const column of columns) {
     const header = document.createElement("th");
     header.scope = "col";
 
@@ -550,20 +643,20 @@ function ensureTableHead() {
         sortKey = column.key;
         sortAsc = true;
       }
-      renderSitesTable();
+      renderSitesTableBody();
+      updateSortIndicators();
     });
     header.append(button);
-    row.append(header);
+    sortRow.append(header);
   }
 
   const actionsHeader = document.createElement("th");
   actionsHeader.scope = "col";
   actionsHeader.className = "service-table-actions-head";
   actionsHeader.textContent = "Actions";
-  row.append(actionsHeader);
+  sortRow.append(actionsHeader);
 
-  siteTableHeadEl.replaceChildren(row);
-  tableHeadReady = true;
+  siteTableHeadEl.replaceChildren(sortRow);
 }
 
 function updateSortIndicators() {
@@ -694,17 +787,13 @@ function renderCell(site, column) {
   return cell;
 }
 
-function renderSitesTable() {
-  ensureTableHead();
-  updateSortIndicators();
-
+function renderSitesTableBody() {
   const sites = visibleSites();
-  const query = filterQuery.trim();
-  const filtered = Boolean(query);
+  const filtered = Boolean(filterQuery.trim());
 
   siteEmptyEl.hidden = allSites.length > 0;
   siteNoMatchesEl.hidden = allSites.length === 0 || sites.length > 0;
-  siteTableWrapEl.hidden = sites.length === 0;
+  siteTableWrapEl.hidden = allSites.length === 0;
 
   if (filtered && allSites.length > 0) {
     siteFilterMetaEl.hidden = false;
@@ -719,7 +808,7 @@ function renderSitesTable() {
   for (const site of sites) {
     const row = document.createElement("tr");
 
-    for (const column of TABLE_COLUMNS) {
+    for (const column of visibleColumns()) {
       row.append(renderCell(site, column));
     }
 
@@ -730,6 +819,19 @@ function renderSitesTable() {
 
     siteTableBodyEl.append(row);
   }
+}
+
+function renderSitesTable({ rebuildHead = false } = {}) {
+  ensureColumnPicker();
+
+  const headSignature = [...visibleColumnKeys].sort().join(",");
+  if (rebuildHead || headSignature !== tableHeadSignature) {
+    renderTableHead();
+    tableHeadSignature = headSignature;
+  }
+
+  updateSortIndicators();
+  renderSitesTableBody();
 }
 
 function hostOf(url) {
@@ -1153,7 +1255,7 @@ async function deleteSite(site) {
 
 siteFilterEl.addEventListener("input", () => {
   filterQuery = siteFilterEl.value;
-  renderSitesTable();
+  renderSitesTableBody();
 });
 
 for (const button of mapToolButtons) {

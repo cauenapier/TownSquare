@@ -111,7 +111,7 @@
         <section class="service-sites" id="site-list" aria-live="polite">
           <div class="service-toolbar">
             <label class="service-filter">
-              <span class="service-filter-label">Filter</span>
+              <span class="service-filter-label">Search</span>
               <input
                 type="search"
                 id="site-filter"
@@ -120,6 +120,10 @@
                 spellcheck="false"
               />
             </label>
+            <details class="service-column-picker" id="site-column-picker">
+              <summary>Columns</summary>
+              <div class="service-column-picker-panel" id="site-column-picker-panel"></div>
+            </details>
             <p class="service-filter-meta" id="site-filter-meta" hidden></p>
           </div>
           <div class="service-table-wrap" id="site-table-wrap" hidden>
