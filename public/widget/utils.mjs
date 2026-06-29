@@ -73,7 +73,7 @@ export function saveBrowserSecret(browserSecret) {
  * @returns {string}
  */
 export function messageBoardSignature(title = "", body = "") {
-  const input = `${title} ${body}`;
+  const input = `${title}${String.fromCharCode(0)}${body}`;
   let hash = 5381;
   for (let index = 0; index < input.length; index += 1) {
     hash = ((hash << 5) + hash + input.charCodeAt(index)) | 0;
