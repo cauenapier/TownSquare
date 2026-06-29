@@ -107,23 +107,37 @@ for (const [width, height, label] of VIEWPORTS) {
   // Hover the character nearest your figure and confirm its history tray opens
   // in front of everything (not painted over by neighbours or your own figure).
   let tray = null;
-  const nearestIdx = await page.evaluate(() => {
+  // Freeze the crowd so labels stop moving and we can aim a real pointer at one.
+  const walkingToggle = page.locator("#characters-walking");
+  if (await walkingToggle.count() && await walkingToggle.isChecked()) {
+    await walkingToggle.uncheck();
+    await page.waitForTimeout(400);
+  }
+  const hoverPoint = await page.evaluate(() => {
     const self = document.querySelector(".townsquare-avatar--self")?.getBoundingClientRect();
-    if (!self) return -1;
+    if (!self) return null;
     const sx = self.left + self.width / 2;
-    const peers = [...document.querySelectorAll(".townsquare-avatar--peer.townsquare-avatar--has-history")];
-    let best = -1, bestD = Infinity;
-    peers.forEach((el, i) => {
-      const r = el.getBoundingClientRect();
-      const d = Math.abs(r.left + r.width / 2 - sx);
-      if (d < bestD) { bestD = d; best = i; }
-    });
-    return best;
+    const peers = [...document.querySelectorAll(".townsquare-avatar--peer.townsquare-avatar--has-history")]
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        const label = el.querySelector(".townsquare-avatar__peer-label");
+        const lr = label?.getBoundingClientRect();
+        return { el, d: Math.abs(r.left + r.width / 2 - sx), lr };
+      })
+      .filter((p) => p.lr?.width && p.lr.height)
+      .sort((a, b) => a.d - b.d);
+    for (const { el, lr } of peers) {
+      const x = lr.left + lr.width / 2;
+      const y = lr.top + lr.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      if (hit && el.contains(hit)) return { x, y };
+    }
+    return null;
   });
-  if (nearestIdx >= 0) {
-    // Hover the solid name label (a descendant), so :hover fires on the avatar.
-    await page.locator(".townsquare-avatar--peer.townsquare-avatar--has-history")
-      .nth(nearestIdx).locator(".townsquare-avatar__peer-label").hover();
+  if (hoverPoint) {
+    // Real mouse position triggers CSS :hover; locator.hover() fails when avatars
+    // walk or a neighbour's label sits on top of the target.
+    await page.mouse.move(hoverPoint.x, hoverPoint.y);
     await page.waitForTimeout(500);
     await host.screenshot({ path: `${OUT}/widget-${label}-tray.png` });
     tray = await page.evaluate(() => {
