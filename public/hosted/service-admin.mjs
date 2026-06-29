@@ -922,18 +922,21 @@ function buildPlatformStats(sites, platform = null) {
   let onlineNow = 0;
   let activeSitesNow = 0;
   let seenToday = 0;
-  let activeThisWeek = 0;
+  let activeSites7d = 0;
+  let activeSites30d = 0;
   let visitorsWeekly = 0;
   let chattingThisWeek = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
     const weekly = site.visitorStats?.weekly ?? 0;
+    const monthly = site.visitorStats?.monthly ?? 0;
     onlineNow += active;
     if (active > 0) activeSitesNow += 1;
     if (site.lastSeenAt && now - site.lastSeenAt < DAY_MS) seenToday += 1;
     visitorsWeekly += weekly;
-    if (weekly > 0) activeThisWeek += 1;
+    if (weekly > 0) activeSites7d += 1;
+    if (monthly > 0) activeSites30d += 1;
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * DAY_MS) chattingThisWeek += 1;
   }
 
@@ -941,7 +944,8 @@ function buildPlatformStats(sites, platform = null) {
     onlineNow,
     activeSitesNow,
     seenToday,
-    activeThisWeek,
+    activeSites7d,
+    activeSites30d,
     visitorsWeekly,
     chattingThisWeek,
     dailySeries: [],
@@ -1038,7 +1042,8 @@ function renderPlatformStats(platform) {
     { value: platform.onlineNow, label: "Online now" },
     { value: platform.activeSitesNow, label: "Active sites now" },
     { value: platform.seenToday, label: "Seen today" },
-    { value: platform.activeThisWeek, label: "Active this week" },
+    { value: platform.activeSites7d, label: "Active sites (7d)" },
+    { value: platform.activeSites30d, label: "Active sites (30d)" },
     { value: platform.visitorsWeekly, label: "Unique visitors (7d)" },
     { value: platform.chattingThisWeek, label: "Chatting this week" },
   ];
