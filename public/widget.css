@@ -1433,6 +1433,16 @@
   transition: opacity 140ms ease, transform 160ms ease;
 }
 
+/* Narrow stages (phones / small embeds): cap bubbles tighter so a long line
+   wraps to more rows (taller) instead of eating the width — that lets the
+   column solver pack more speakers side by side. Short lines are unaffected
+   (width: max-content). Container query, so it tracks the widget's own width. */
+@container (max-width: 460px) {
+  .townsquare-avatar__above {
+    max-width: min(190px, 52cqw);
+  }
+}
+
 .townsquare-avatar__above:empty { display: none; }
 
 /* hovering to read history yields the live stack to the tray */
