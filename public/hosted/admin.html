@@ -334,6 +334,52 @@
           </p>
         </section>
 
+        <!-- Presence counter — a lightweight "N people here" badge for other pages. -->
+        <section class="hosted-section" id="counter-section">
+          <h2>Presence counter</h2>
+          <p class="hosted-note">
+            A small "N people here" badge for pages where the full square is too much. It loads no scene and opens no connection, so showing it never adds a visitor. Clicking it scrolls to a square on the same page, or sends visitors to the page you choose below. Pick a look, then paste the snippet.
+          </p>
+          <form class="hosted-form" id="counter-form">
+            <div class="hosted-grid">
+              <label>
+                <span>Style</span>
+                <select id="counter-variant" name="counter-variant">
+                  <option value="pill">Pill</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="solid">Solid</option>
+                  <option value="outline">Outline</option>
+                </select>
+              </label>
+              <label>
+                <span>Accent color</span>
+                <input id="counter-accent" name="counter-accent" type="color" value="#2faa4f" />
+              </label>
+              <label>
+                <span>Town square page <small>where clicks go</small></span>
+                <input id="counter-url" name="counter-url" type="url" inputmode="url" maxlength="320" placeholder="https://your-site/townsquare" />
+              </label>
+            </div>
+            <label class="hosted-toggle">
+              <input id="counter-accent-default" name="counter-accent-default" type="checkbox" checked />
+              <span>Use the default accent color</span>
+            </label>
+          </form>
+
+          <div class="hosted-section-head">
+            <h3 class="hosted-subhead">Preview</h3>
+          </div>
+          <div class="counter-preview" id="counter-preview"></div>
+
+          <textarea id="counter-snippet" readonly rows="9" spellcheck="false"></textarea>
+          <div class="hosted-actions">
+            <button type="button" id="copy-counter">Copy snippet</button>
+          </div>
+          <p class="hosted-note hosted-footnote">
+            Want full control of the look? Every value is a CSS variable — override <code>--ts-counter-accent</code>, <code>--ts-counter-bg</code>, <code>--ts-counter-ink</code>, <code>--ts-counter-radius</code>, and more on the <code>.ts-counter</code> element in your own stylesheet.
+          </p>
+        </section>
+
         <section class="hosted-section" id="style-section">
           <h2>Customization CSS (colors)</h2>
           <p class="hosted-note">Colors are the one thing delivered as CSS so your own stylesheet can override them. Paste this into your site's stylesheet, and re-copy it after changing colors above. (Scene, links, and the message board don't need this — they're live.)</p>

@@ -168,10 +168,16 @@ stylesheet and opens no socket, so showing it never adds a visitor to the square
   mountTownSquareCounter(document.getElementById("townsquare-count"), {
     serverOrigin: "https://your-townsquare-host",
     // siteKey: "…",                       // only for multi-site hosted servers
+    variant: "pill",                       // pill | minimal | solid | outline
+    accent: "#c8641f",                     // optional; sets --ts-counter-accent
     townSquareUrl: "https://your-site/townsquare"
   });
 </script>
 ```
+
+Hosted owners don't have to write this by hand: the admin page (Appearance tab →
+**Presence counter**) has a style picker with a live preview that generates the
+snippet for you.
 
 Notes:
 
@@ -186,12 +192,17 @@ Notes:
 - Clicking the counter takes the visitor to the square: it scrolls to a full
   widget already on the same page (`#townsquare-root`) if one exists, otherwise it
   navigates to `townSquareUrl`. With neither, it renders as plain text.
+- `variant` picks one of four built-in looks (`pill`, `minimal`, `solid`,
+  `outline`); each is just a class painted from CSS variables.
 - Options can also be set via data attributes on the mount node:
   `data-townsquare-server-origin`, `data-townsquare-site-key`,
-  `data-townsquare-url`. `pollMs` defaults to 20s (floored at 5s).
-- Theme it by overriding `--ts-counter-bg`, `--ts-counter-ink`, and
-  `--ts-counter-dot` on the `.ts-counter` element; by default it uses system
-  colors and follows light/dark automatically.
+  `data-townsquare-url`, `data-townsquare-variant`, `data-townsquare-accent`.
+  `pollMs` defaults to 20s (floored at 5s).
+- For full control, override the CSS variables on the `.ts-counter` element:
+  `--ts-counter-accent`, `--ts-counter-bg`, `--ts-counter-ink`,
+  `--ts-counter-radius`, `--ts-counter-font-size`, `--ts-counter-pad-x`,
+  `--ts-counter-pad-y`. By default it uses system colors and follows light/dark
+  automatically.
 
 ## Hosted registration
 

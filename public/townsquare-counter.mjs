@@ -25,24 +25,34 @@ const DEFAULT_POLL_MS = 20000;
 const MIN_POLL_MS = 5000;
 const WIDGET_ROOT_SELECTOR = "#townsquare-root";
 
+/** Built-in looks. Each is just a class; every value behind them is a CSS var. */
+export const COUNTER_VARIANTS = Object.freeze(["pill", "minimal", "solid", "outline"]);
+const DEFAULT_VARIANT = "pill";
+
+// Every visible value is a CSS custom property, so a host can restyle any
+// variant by overriding these on `.ts-counter` (or one mount node). The variant
+// classes only decide which of these vars they paint with.
 const STYLES = `
 .ts-counter {
+  --ts-counter-accent: #2faa4f;
   --ts-counter-bg: color-mix(in oklab, Canvas 92%, CanvasText 8%);
   --ts-counter-ink: CanvasText;
-  --ts-counter-dot: #2faa4f;
+  --ts-counter-radius: 999px;
+  --ts-counter-font-size: 0.875rem;
+  --ts-counter-pad-y: 0.4em;
+  --ts-counter-pad-x: 0.75em;
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
   margin: 0;
-  padding: 0.4em 0.75em;
-  border: 0;
-  border-radius: 999px;
+  padding: var(--ts-counter-pad-y) var(--ts-counter-pad-x);
+  border: 1px solid transparent;
+  border-radius: var(--ts-counter-radius);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--ts-counter-font-size);
   line-height: 1.2;
   color: var(--ts-counter-ink);
-  background: var(--ts-counter-bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  background: transparent;
   white-space: nowrap;
 }
 .ts-counter[data-interactive="true"] {
@@ -52,7 +62,7 @@ const STYLES = `
   filter: brightness(1.04);
 }
 .ts-counter[data-interactive="true"]:focus-visible {
-  outline: 2px solid var(--ts-counter-dot);
+  outline: 2px solid var(--ts-counter-accent);
   outline-offset: 2px;
 }
 .ts-counter[hidden] {
@@ -62,17 +72,43 @@ const STYLES = `
   width: 0.55em;
   height: 0.55em;
   border-radius: 50%;
-  background: var(--ts-counter-dot);
+  background: var(--ts-counter-accent);
   flex: none;
 }
 .ts-counter[data-empty="true"] .ts-counter__dot {
-  background: color-mix(in oklab, CanvasText 35%, transparent);
+  opacity: 0.4;
 }
 .ts-counter__label {
   font-variant-numeric: tabular-nums;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .ts-counter__dot { transition: background-color 200ms ease; }
+  .ts-counter__dot { transition: opacity 200ms ease, background-color 200ms ease; }
+}
+
+/* pill — filled neutral badge with a soft shadow (the default). */
+.ts-counter--pill {
+  background: var(--ts-counter-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* minimal — text and dot only, no chrome. */
+.ts-counter--minimal {
+  --ts-counter-pad-y: 0.1em;
+  --ts-counter-pad-x: 0.1em;
+}
+
+/* solid — accent-filled with contrasting ink; the dot rides on currentColor. */
+.ts-counter--solid {
+  background: var(--ts-counter-accent);
+  color: #fff;
+}
+.ts-counter--solid .ts-counter__dot {
+  background: currentColor;
+}
+
+/* outline — accent border, transparent fill. */
+.ts-counter--outline {
+  border-color: var(--ts-counter-accent);
 }
 `;
 
@@ -119,6 +155,8 @@ function labelFor(count) {
  * @property {string} [serverOrigin] TownSquare server origin. Defaults to the data attribute or the current page origin.
  * @property {string} [siteKey] Hosted site key. Omit for a self-hosted default scene.
  * @property {string} [townSquareUrl] Where to send the visitor when the full widget is not on this page.
+ * @property {"pill"|"minimal"|"solid"|"outline"} [variant="pill"] Built-in look. Every variant is fully CSS-customizable via the `--ts-counter-*` variables.
+ * @property {string} [accent] Accent color for the dot/fill/border. Written inline as `--ts-counter-accent`; omit to keep the stylesheet default.
  * @property {number} [pollMs=20000] Poll interval in ms (floored at 5000).
  * @property {string} [label] Accessible verb for the action, e.g. "Visit the town square".
  */
@@ -150,6 +188,9 @@ export function mountTownSquareCounter(root, options = {}) {
   const townSquareUrl = safeUrl(options.townSquareUrl || root.dataset.townsquareUrl || "");
   const pollMs = Math.max(MIN_POLL_MS, Number(options.pollMs) || DEFAULT_POLL_MS);
   const actionLabel = options.label || "Go to the town square";
+  const requestedVariant = options.variant || root.dataset.townsquareVariant || DEFAULT_VARIANT;
+  const variant = COUNTER_VARIANTS.includes(requestedVariant) ? requestedVariant : DEFAULT_VARIANT;
+  const accent = options.accent || root.dataset.townsquareAccent || "";
 
   injectStyles();
 
@@ -165,9 +206,10 @@ export function mountTownSquareCounter(root, options = {}) {
   const canAct = () => Boolean(onPageWidget()) || Boolean(townSquareUrl);
 
   const el = document.createElement(canAct() ? "button" : "span");
-  el.className = "ts-counter";
+  el.className = `ts-counter ts-counter--${variant}`;
   if (el instanceof HTMLButtonElement) el.type = "button";
   el.dataset.interactive = String(el instanceof HTMLButtonElement);
+  if (accent) el.style.setProperty("--ts-counter-accent", accent);
 
   const dot = document.createElement("span");
   dot.className = "ts-counter__dot";

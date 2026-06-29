@@ -31,6 +31,19 @@ body {
   padding: 0 12px 18px;
 }
 
+/* Live preview for the presence-counter snippet builder. The counter brings its
+   own styles; this is just a framed area to show it against. */
+.counter-preview {
+  display: flex;
+  align-items: center;
+  min-height: 3.25rem;
+  margin-bottom: 12px;
+  padding: 16px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  border-radius: 10px;
+  background: var(--surface, Canvas);
+}
+
 :root {
   --hosted-preview-dock-height: 13.75rem;
   --hosted-preview-dock-chrome: 2rem;

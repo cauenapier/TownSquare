@@ -26,6 +26,7 @@ import {
   sanitizeSiteStyle,
 } from "../shared/site-config.mjs";
 import { getMatchingWwwOrigin } from "../shared/url.mjs";
+import { mountTownSquareCounter, COUNTER_VARIANTS } from "../townsquare-counter.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../shared/shared-constants.mjs";
 
@@ -68,6 +69,14 @@ const snippetEl = document.getElementById("embed-snippet");
 const styleSnippetEl = document.getElementById("style-snippet");
 const copyButton = document.getElementById("copy-snippet");
 const copyStyleButton = document.getElementById("copy-style");
+const counterForm = document.getElementById("counter-form");
+const counterVariantSelect = document.getElementById("counter-variant");
+const counterAccentInput = document.getElementById("counter-accent");
+const counterAccentDefaultInput = document.getElementById("counter-accent-default");
+const counterUrlInput = document.getElementById("counter-url");
+const counterPreview = document.getElementById("counter-preview");
+const counterSnippetEl = document.getElementById("counter-snippet");
+const copyCounterButton = document.getElementById("copy-counter");
 const connectionsList = document.getElementById("connections-list");
 const addConnectionButton = document.getElementById("add-connection");
 const saveConnectionsButton = document.getElementById("save-connections");
@@ -892,6 +901,16 @@ function render(data) {
   if (document.activeElement !== styleSnippetEl) {
     styleSnippetEl.value = data.styleSnippet;
   }
+  // Suggest the site's own address as the click destination once we know it.
+  if (currentSite.origin && !counterUrlInput.placeholder.startsWith("http")) {
+    counterUrlInput.placeholder = currentSite.origin;
+  }
+  // The counter's look lives only in this form, so build it once we know the
+  // siteKey; later background polls leave the picker and its preview alone.
+  if (!counterInitialized) {
+    counterInitialized = true;
+    renderCounter();
+  }
   chatDisabledInput.checked = currentSite.chatDisabled;
   botProtectionInput.checked = Boolean(currentSite.botProtection);
   disableSiteButton.textContent = currentSite.disabled ? "Enable site" : "Disable site";
@@ -963,6 +982,67 @@ function render(data) {
   }
 }
 
+/**
+ * The counter is a copy-once embed whose look is baked into the snippet, so its
+ * style lives entirely in this form (no server round-trip). Read the current
+ * picker state into a config the preview and snippet both use.
+ */
+function readCounterConfig() {
+  const requested = counterVariantSelect.value;
+  return {
+    variant: COUNTER_VARIANTS.includes(requested) ? requested : "pill",
+    accent: counterAccentDefaultInput.checked ? "" : counterAccentInput.value,
+    townSquareUrl: counterUrlInput.value.trim(),
+  };
+}
+
+function buildCounterSnippet(config) {
+  const serverOrigin = window.location.origin;
+  const siteKey = currentSite?.siteKey || "";
+  const lines = [`    serverOrigin: ${JSON.stringify(serverOrigin)}`];
+  if (siteKey) lines.push(`    siteKey: ${JSON.stringify(siteKey)}`);
+  lines.push(`    variant: ${JSON.stringify(config.variant)}`);
+  if (config.accent) lines.push(`    accent: ${JSON.stringify(config.accent)}`);
+  if (config.townSquareUrl) lines.push(`    townSquareUrl: ${JSON.stringify(config.townSquareUrl)}`);
+  return `<div id="townsquare-count"></div>
+<script type="module">
+  import { mountTownSquareCounter } from ${JSON.stringify(`${serverOrigin}/townsquare-counter.mjs`)};
+
+  mountTownSquareCounter(document.getElementById("townsquare-count"), {
+${lines.join(",\n")}
+  });
+</script>`;
+}
+
+let counterPreviewHandle = null;
+let counterInitialized = false;
+function renderCounter() {
+  const config = readCounterConfig();
+  counterAccentInput.disabled = counterAccentDefaultInput.checked;
+
+  if (document.activeElement !== counterSnippetEl) {
+    counterSnippetEl.value = buildCounterSnippet(config);
+  }
+
+  // The preview is the real widget pointed at this site, so it shows the live
+  // count. Remount on every change since variant/accent are set at mount time.
+  counterPreviewHandle?.destroy();
+  counterPreviewHandle = mountTownSquareCounter(counterPreview, {
+    serverOrigin: window.location.origin,
+    siteKey: currentSite?.siteKey || "",
+    variant: config.variant,
+    accent: config.accent || undefined,
+    townSquareUrl: config.townSquareUrl || undefined,
+  });
+}
+
+counterForm.addEventListener("input", (event) => {
+  // Picking a colour means the owner wants a custom accent, not the default.
+  if (event.target === counterAccentInput) counterAccentDefaultInput.checked = false;
+  renderCounter();
+});
+
+bindCopy(copyCounterButton, { text: () => counterSnippetEl.value, source: counterSnippetEl });
 bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
 bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnippetEl });
 
