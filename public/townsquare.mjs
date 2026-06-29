@@ -7,7 +7,7 @@
  */
 
 import { setLocalTyping, submitChat } from "./widget/chat.mjs";
-import { initBirds, destroyBirds } from "./widget/birds.mjs";
+import { initBirds, destroyBirds, syncBirdPerches } from "./widget/birds.mjs";
 import { initClouds, destroyClouds } from "./widget/clouds.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
 import { setupMessageBoard, teardownMessageBoard } from "./widget/message-board.mjs";
@@ -147,6 +147,7 @@ function refreshScene(ctx, sceneConfig) {
   for (const peer of ctx.peers.values()) {
     updatePropEffects(peer.avatar, peer.x, peer.propId, ctx.sceneProps);
   }
+  syncBirdPerches(ctx);
 }
 
 /**

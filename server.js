@@ -2104,6 +2104,19 @@ function pickFreeBirdPerch(scene) {
   return free[Math.floor(Math.random() * free.length)];
 }
 
+function syncSceneBirdPerches(scene) {
+  const perchById = new Map(scene.birdPerches.map((perch) => [perch.id, perch]));
+  for (const [id, bird] of scene.birds) {
+    if (bird.state !== "perched") continue;
+    const perch = perchById.get(bird.perchId);
+    if (!perch) {
+      scene.birds.delete(id);
+      continue;
+    }
+    bird.x = perch.x;
+  }
+}
+
 function broadcastBird(scene, message, options = {}) {
   broadcast(scene, { type: MSG.BIRD, ...message }, options);
 }
@@ -2203,6 +2216,7 @@ function rebuildSceneProps(scene, site) {
   scene.propsById = propsById;
   scene.birdPerches = getSceneBirdPerches(site);
   scene.maxBirds = config.birds;
+  syncSceneBirdPerches(scene);
 
   // Hosted clients arbitrate settle requests against the scene's prop map.
   for (const client of scene.clients.values()) {
