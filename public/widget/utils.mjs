@@ -330,11 +330,20 @@ export function readCurrentPage(root, options = {}) {
 }
 
 /**
+ * The visitor's nameplate (display name + color), persisted in `localStorage` so
+ * it follows them back across visits to this site. Recognition, not an account:
+ * unverified, not unique, and scoped to this origin (sharing one nameplate across
+ * different sites is a separate, opt-in step). Falls back to a legacy
+ * `sessionStorage` value once so anyone mid-session keeps their name.
+ *
  * @returns {{ displayName: string, color: string }}
  */
 export function getStoredProfile() {
   try {
-    const parsed = JSON.parse(sessionStorage.getItem(PROFILE_STORAGE_KEY) || "{}");
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY)
+      || sessionStorage.getItem(PROFILE_STORAGE_KEY)
+      || "{}";
+    const parsed = JSON.parse(raw);
     const data = parsed && typeof parsed === "object" ? parsed : {};
     return {
       displayName: normalizeDisplayName(data.displayName),
@@ -355,7 +364,7 @@ export function saveStoredProfile(profile) {
     color: normalizeCharacterColor(profile.color),
   };
   try {
-    sessionStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalized));
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalized));
   } catch {
     // The server still keeps the in-memory profile for the connected session.
   }
