@@ -291,7 +291,10 @@ export function mountTownSquare(root, options = {}) {
         },
         onSubmitChat: () => submitChat(ctx),
         onTypingChange: (typing) => setLocalTyping(ctx, typing),
-        toolbarHost: coarsePointer ? toolbar : undefined,
+        // Chat always lives in the fixed bottom bar, never floating under the
+        // (moving) figure: that float overlapped peer name tags and clipped at
+        // screen edges. The bar's space is already reserved (--ts-toolbar-reserve).
+        toolbarHost: toolbar,
       }),
       walkTimer: null,
     },
@@ -355,12 +358,10 @@ export function mountTownSquare(root, options = {}) {
   const onHighFiveClick = () => triggerHighFive(ctx);
   jumpButton.addEventListener("click", onJumpClick);
   highFiveButton.addEventListener("click", onHighFiveClick);
-  // Touch: gather the action buttons into the bottom toolbar beside the docked
-  // composer and pencil (createAvatar already placed those). Moving the nodes
-  // keeps their click listeners intact. Final bar order: input, pencil, jump, hi5.
-  if (coarsePointer) {
-    toolbar.append(jumpButton, highFiveButton);
-  }
+  // Gather the action buttons into the bottom toolbar beside the docked composer
+  // and pencil (createAvatar already placed those). Moving the nodes keeps their
+  // click listeners intact. Final bar order: input, pencil, jump, hi5.
+  toolbar.append(jumpButton, highFiveButton);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, quietButton);
 
   const unwatchPage = watchCurrentPage(ctx);

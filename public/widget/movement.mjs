@@ -3,7 +3,7 @@
  */
 
 import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } from "./connections.mjs";
-import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
+import { layoutBubbleColumns, layoutNameLabels, layoutConfigFor } from "./bubble-layout.mjs";
 import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
 import { MSG, GESTURE } from "../shared/protocol.mjs";
@@ -273,12 +273,12 @@ export function tick(ctx, now) {
 
   updateConnectionProximity(ctx);
 
-  layoutBubbleColumns(
-    ctx.stage,
-    ctx.options.preview === true || ctx.options.solo === true ? [ctx.self] : [ctx.self, ...ctx.peers.values()],
-    ctx.self.x,
-    layoutConfigFor(ctx.options.layout, ctx.expanded),
-  );
+  const presences = ctx.options.preview === true || ctx.options.solo === true
+    ? [ctx.self]
+    : [ctx.self, ...ctx.peers.values()];
+  const layoutCfg = layoutConfigFor(ctx.options.layout, ctx.expanded);
+  layoutBubbleColumns(ctx.stage, presences, ctx.self.x, layoutCfg);
+  layoutNameLabels(ctx.stage, presences, ctx.self.x, layoutCfg);
 
   ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
 }

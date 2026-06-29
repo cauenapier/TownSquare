@@ -4,7 +4,7 @@ const js = require("@eslint/js");
 const globals = require("globals");
 
 module.exports = [
-  { ignores: ["node_modules/**", ".data/**"] },
+  { ignores: ["node_modules/**", ".data/**", ".claude/**", "tmp/**"] },
 
   js.configs.recommended,
 
@@ -26,6 +26,17 @@ module.exports = [
       sourceType: "module",
       ecmaVersion: 2023,
       globals: { ...globals.browser },
+    },
+  },
+
+  // Node ES-module tooling (e.g. the Playwright screenshot harness) that also
+  // contains browser-context callbacks (page.evaluate), so it needs both.
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      sourceType: "module",
+      ecmaVersion: 2023,
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 
