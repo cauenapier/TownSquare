@@ -26,6 +26,12 @@ function isSolo(ctx) {
   return ctx.options.solo === true;
 }
 
+// Livestream overlay: a passive viewer with no self identity. It still renders
+// peers, birds, and the scene, so only the self-identity setup is skipped.
+function isWatch(ctx) {
+  return ctx.options.watch === true;
+}
+
 const WALK_BUMP_MS = 120;
 const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 8000;
@@ -37,6 +43,7 @@ const PERMANENT_CLOSE_MESSAGES = new Map([
   ["site disabled", "This TownSquare isn't available right now."],
   ["site disabled or unknown", "This TownSquare isn't available right now."],
   ["origin not allowed", "This page isn't registered to TownSquare yet."],
+  ["plus required", "Livestream overlays are available with TownSquare Plus."],
   ["rate limited", "Too many visitors are connecting from this network. Try again later."],
 ]);
 
@@ -99,20 +106,23 @@ export function wireSocket(ctx) {
 
     socket.addEventListener("open", () => {
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
-      const init = {
-        type: MSG.INIT,
-        browserId,
-        browserSecret: getBrowserSecret(),
-        x: self.x,
-        displayName: self.displayName,
-        color: self.color,
-        readingLabel: self.readingLabel,
-        readingUrl: self.readingUrl,
-        readingActive: self.readingActive,
-      };
+      const watch = isWatch(ctx);
+      const init = watch
+        ? { type: MSG.INIT }
+        : {
+            type: MSG.INIT,
+            browserId,
+            browserSecret: getBrowserSecret(),
+            x: self.x,
+            displayName: self.displayName,
+            color: self.color,
+            readingLabel: self.readingLabel,
+            readingUrl: self.readingUrl,
+            readingActive: self.readingActive,
+          };
       socket.send(JSON.stringify(init));
       const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
-      if (!siteKey && ctx.options.scene) {
+      if (!watch && !siteKey && ctx.options.scene) {
         socket.send(JSON.stringify({ type: MSG.SCENE_CONFIG, sceneConfig: ctx.options.scene }));
       }
     });
@@ -148,15 +158,19 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === MSG.HELLO) {
-        self.id = message.id;
-        saveBrowserSecret(message.browserSecret);
+        const watch = isWatch(ctx);
         ctx.widgetPlugins?.setModules(message.pluginModules || ctx.options.pluginModules || []);
         if (typeof message.chatThrottleMs === "number") ctx.chatThrottleMs = message.chatThrottleMs;
-        applySelfState(ctx, message);
-        // Backlog seeds the hover tray only — it never pops a live bubble, so a
-        // refresh doesn't replay everyone's last messages into the scene.
-        for (const recent of message.messages || []) {
-          recordMessage(self.avatar, recent);
+        // A spectator hello carries no self identity, so skip own-avatar setup.
+        if (!watch) {
+          self.id = message.id;
+          saveBrowserSecret(message.browserSecret);
+          applySelfState(ctx, message);
+          // Backlog seeds the hover tray only — it never pops a live bubble, so a
+          // refresh doesn't replay everyone's last messages into the scene.
+          for (const recent of message.messages || []) {
+            recordMessage(self.avatar, recent);
+          }
         }
         if (!isSolo(ctx)) {
           for (const peer of message.peers) {
@@ -169,6 +183,10 @@ export function wireSocket(ctx) {
         // inside applyLiveConfig.
         ctx.applyLiveConfig?.({
           scene: message.scene,
+          // Overlays receive the site appearance (plus any overlay-only
+          // overrides) over the socket; on-page embeds theme via their pasted
+          // snippet and omit this.
+          styleConfig: message.styleConfig,
           connections: message.connections,
           messageBoard: message.messageBoard,
         });

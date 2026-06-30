@@ -391,13 +391,17 @@ export function normalizeOrigin(origin) {
  * @param {string} serverOrigin
  * @param {string} socketPath
  * @param {string} [siteKey]
+ * @param {{ watch?: boolean }} [options] `watch` connects read-only (livestream overlay).
  * @returns {string}
  */
-export function buildSocketUrl(serverOrigin, socketPath, siteKey = "") {
+export function buildSocketUrl(serverOrigin, socketPath, siteKey = "", { watch = false } = {}) {
   const url = new URL(socketPath, `${serverOrigin}/`);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   if (siteKey) {
     url.searchParams.set("siteKey", siteKey);
+  }
+  if (watch) {
+    url.searchParams.set("watch", "1");
   }
   return url.toString();
 }

@@ -867,7 +867,7 @@ function renderPluginToggles(list) {
   }
 }
 
-function render(data) {
+function render(data, { background = false } = {}) {
   currentSite = data.site;
   const scene = data.scene;
 
@@ -919,7 +919,7 @@ function render(data) {
   syncModerationFromServer();
   renderModerationLog(currentSite.moderationLog);
   renderPluginToggles(data.plugins);
-  adminPlugins.render(data);
+  adminPlugins.render(data, { background });
 
   visitorList.replaceChildren();
   if (scene.visitors.length === 0) {

@@ -27,6 +27,7 @@ const ALIASES = new Map([
   ["/admin/chat", "/hosted/chat.html"],
   ["/service-admin", "/hosted/service-admin.html"],
   ["/map", "/map.html"],
+  ["/overlay", "/overlay.html"],
   ["/dev", "/dev/dev.html"],
   ["/walk-sandbox", "/dev/walk-sandbox.html"],
   ["/staging", "/staging.html"],

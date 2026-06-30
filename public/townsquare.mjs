@@ -68,6 +68,7 @@ import {
  * @property {"auto" | "light" | "dark" | "host"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; `host` follows common host-page dark mode signals.
  * @property {boolean} [preview=false] Static customization preview: fixed spawn, local prop settle, no socket, in-place scene/style updates via the mount handle.
  * @property {boolean} [solo=false] Live socket, but hide other visitors on the client.
+ * @property {boolean} [watch=false] Livestream-overlay mode: live socket, render the real crowd (peers, birds, scene), but do not place or move a self avatar and send nothing. The Plus overlay page uses this mode.
  * @property {boolean} [simulate=false] Dev simulation harness: no socket and local prop settle (like `preview`), but peers and birds stay visible so the scene matches production. The caller drives simulated peers through the exposed `ctx`.
  * @property {import("./widget/bubble-layout.mjs").LayoutConfig} [layout] Live reading-experience dials read by the loop every frame. Omit in production to run on the defaults; the dev scene passes a mutable object its sliders edit in place.
  * @property {Array<{ side: "left"|"right", label?: string, url: string }>} [connections] Neighbouring towns linked at the stage edges. Each grows a signpost on its side that opens a "walk over" modal.
@@ -133,6 +134,21 @@ function revealAppAboveKeyboard(app, viewport, expanded) {
  * @param {import("./widget/context.mjs").WidgetContext} ctx
  * @param {ReturnType<typeof sanitizeSceneConfig>} sceneConfig
  */
+// Resolve the concrete light/dark palette to write inline for a socket-delivered
+// site palette (overlay mode). `applySiteStyle` writes one flat palette, so
+// `auto`/`host` themes — which normally switch via CSS — are collapsed to a
+// concrete mode here, following the theme attribute or `prefers-color-scheme`.
+function resolveStyleMode(root, options) {
+  const theme = resolveWidgetTheme(root, options);
+  if (theme === "light" || theme === "dark") return theme;
+  const attr = root.dataset.townsquareTheme;
+  if (attr === "light" || attr === "dark") return attr;
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  return "dark";
+}
+
 function refreshScene(ctx, sceneConfig) {
   const sceneProps = buildSceneProps(sceneConfig);
   const birdPerches = buildBirdPerches(sceneProps);
@@ -171,12 +187,16 @@ export function mountTownSquare(root, options = {}) {
     || window.location.origin,
   );
   const siteKey = options.siteKey || root.dataset.townsquareSiteKey || "";
-  const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey);
+  // Livestream overlay: connect read-only. The widget renders the live crowd but
+  // never places the viewer in the scene, and the server never counts it.
+  const watch = options.watch === true;
+  const socketUrl = buildSocketUrl(serverOrigin, options.socketPath || "/live", siteKey, { watch });
   // Which config fields the host declared inline. The dashboard delivers scene /
   // connections / message board live by siteKey, but any field declared here is a
   // deliberate power-user override that wins and is never overwritten live.
   const inlineConfig = {
     scene: options.scene !== undefined,
+    style: options.style !== undefined,
     connections: options.connections !== undefined,
     messageBoard: options.messageBoard !== undefined,
   };
@@ -401,9 +421,13 @@ export function mountTownSquare(root, options = {}) {
     initBirds(ctx);
     initClouds(ctx);
   }
-  stage.appendChild(ctx.self.avatar.el);
-  renderAvatar(ctx.self.avatar, ctx.self.x);
-  updatePose(ctx.self.avatar, ctx.self.pose);
+  // Watch (overlay) mode is a passive viewer: it renders the real crowd but
+  // never shows or moves a self avatar.
+  if (!watch) {
+    stage.appendChild(ctx.self.avatar.el);
+    renderAvatar(ctx.self.avatar, ctx.self.x);
+    updatePose(ctx.self.avatar, ctx.self.pose);
+  }
   ctx.widgetPlugins.setModules(options.pluginModules || []);
   if (localOnly) {
     setStatusMessage(ctx, null);
@@ -414,11 +438,23 @@ export function mountTownSquare(root, options = {}) {
   // Apply config the server pushes live (in `hello` and on owner edits). Each
   // field is honoured only when the host did not pin it inline — an inline value
   // is a power-user override that stays in the host's control.
-  ctx.applyLiveConfig = ({ scene, connections, messageBoard } = {}) => {
+  ctx.applyLiveConfig = ({ scene, styleConfig, connections, messageBoard } = {}) => {
     if (scene !== undefined && !ctx.inlineConfig.scene) {
       const sceneConfig = sanitizeSceneConfig(scene);
       ctx.options = { ...ctx.options, scene: sceneConfig };
       refreshScene(ctx, sceneConfig);
+    }
+    // Livestream overlay: the site's appearance palette (with any overlay-only
+    // overrides already merged server-side) arrives over the socket, since the
+    // overlay page carries no pasted style snippet. Pick the palette for the
+    // active theme and write it inline. A power-user inline `style` still wins.
+    if (styleConfig && !ctx.inlineConfig.style) {
+      const mode = resolveStyleMode(root, ctx.options);
+      const palette = styleConfig[mode] || styleConfig.dark || styleConfig.light;
+      if (palette) {
+        ctx.options = { ...ctx.options, style: palette };
+        applySiteStyle(root, palette);
+      }
     }
     if (connections !== undefined && !ctx.inlineConfig.connections) {
       ctx.options = { ...ctx.options, connections };
@@ -435,8 +471,11 @@ export function mountTownSquare(root, options = {}) {
   }
   setupConnections(ctx);
   setupMessageBoard(ctx);
-  wireKeyboard(ctx);
-  wireStagePointer(ctx);
+  // Overlay viewers take no input; the game loop still runs to animate peers.
+  if (!watch) {
+    wireKeyboard(ctx);
+    wireStagePointer(ctx);
+  }
   startGameLoop(ctx);
 
   return {
