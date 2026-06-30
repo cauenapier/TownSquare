@@ -9,15 +9,25 @@ export function createAdminPluginRuntime({ container, action }) {
   let latestSnapshot = null;
   let active = new Map();
 
-  function render(snapshot) {
+  /**
+   * @param {object} snapshot
+   * @param {{ background?: boolean }} [options]
+   *   `background` marks a poll-driven refresh. Plugin admin UIs are stateful
+   *   editors, so a background tick must not push a fresh snapshot into an
+   *   already-mounted plugin — doing so resets in-progress form edits (and, for
+   *   plugins that act during render, drives an action/poll request storm). The
+   *   snapshot is still cached and used to mount/unmount plugins; mounted ones
+   *   only re-render on an action-driven (foreground) refresh.
+   */
+  function render(snapshot, { background = false } = {}) {
     latestSnapshot = snapshot;
     active = new Map(validModules(snapshot.pluginModules).map((descriptor) => [descriptor.name, descriptor]));
 
     for (const [name, entry] of mounted) {
-      if (active.has(name)) {
-        entry.instance?.render?.(snapshot);
-      } else {
+      if (!active.has(name)) {
         destroyEntry(name, entry);
+      } else if (!background) {
+        entry.instance?.render?.(snapshot);
       }
     }
 

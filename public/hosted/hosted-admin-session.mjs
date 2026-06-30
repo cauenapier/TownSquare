@@ -17,7 +17,9 @@ const REFRESH_INTERVAL_MS = 5000;
  * @param {object} options
  * @param {string} options.redirectPath Path to clean URL credentials back to.
  * @param {object} options.elements Login/admin view DOM nodes.
- * @param {(data: any) => void} options.onRender Called with each site snapshot.
+ * @param {(data: any, meta: { background: boolean }) => void} options.onRender
+ *   Called with each site snapshot. `meta.background` is true for poll-driven
+ *   refreshes so stateful UIs can avoid clobbering in-progress edits.
  * @param {(message: string) => void} [options.onError] Called when a load or
  *   action request fails while the admin view is visible.
  * @param {() => void} [options.onBeforeShowLogin] Tear-down before login shows.
@@ -135,7 +137,9 @@ export function createAdminSession({
 
     storeCredentials();
     showAdmin();
-    onRender(result.body);
+    // `silent` marks the background poll; pass it through so stateful UIs (e.g.
+    // plugin admin editors) can skip clobbering in-progress edits on a tick.
+    onRender(result.body, { background: silent });
   }
 
   async function action(name, data = {}) {
