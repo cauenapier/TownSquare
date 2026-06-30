@@ -233,6 +233,34 @@ function connectSpectator({ siteKey = "", origin = "", ip = "", initPayload = { 
   return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
+function connectSpectatorUntilClose({ siteKey = "", origin = "", ip = "" } = {}) {
+  const label = `connectSpectatorUntilClose ${siteKey || "default"}`;
+  const promise = new Promise((resolve, reject) => {
+    const ws = new WebSocket(siteSocketUrl(siteKey, { watch: true }), socketOptions(origin, ip));
+    ws.on("open", () => ws.send(JSON.stringify({ type: "init" })));
+    ws.on("message", (buffer) => {
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen: [],
+          onUnexpectedHello: () => reject(new Error("non-Plus spectator unexpectedly joined")),
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+    ws.on("close", (code, reason) => resolve({ code, reason: String(reason) }));
+    ws.on("error", reject);
+  });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
+}
+
 async function createSite(name, options = {}) {
   const { origin = HTTP_ORIGIN, includeMatchingWww = false } = options;
   const response = await fetch(`${HTTP_ORIGIN}/api/sites`, {
@@ -644,6 +672,19 @@ async function assertSpectatorOverlay() {
 
   const beforePresence = await getSitePresence(siteKey);
   assert(beforePresence.activeVisitors === 1, "expected one active visitor before spectator joins");
+
+  const nonPlusSpectator = await connectSpectatorUntilClose({ siteKey, origin: HTTP_ORIGIN });
+  assert(nonPlusSpectator.code === 4003, `expected non-Plus overlay close code 4003, got ${nonPlusSpectator.code}`);
+  assert(nonPlusSpectator.reason === "plus required", `expected plus-required close reason, got ${nonPlusSpectator.reason}`);
+  const afterRejectedPresence = await getSitePresence(siteKey);
+  assert(afterRejectedPresence.activeVisitors === 1, "rejected non-Plus spectator changed the active visitor count");
+
+  const upgraded = await serviceAdminApi("/api/service-admin/action", {
+    action: "setSitePlus",
+    siteKey,
+    plus: true,
+  });
+  assert(upgraded.site.plus === true, "service admin did not mark spectator test site as Plus");
 
   const spectator = await connectSpectator({
     siteKey,

@@ -43,6 +43,7 @@ const PERMANENT_CLOSE_MESSAGES = new Map([
   ["site disabled", "This TownSquare isn't available right now."],
   ["site disabled or unknown", "This TownSquare isn't available right now."],
   ["origin not allowed", "This page isn't registered to TownSquare yet."],
+  ["plus required", "Livestream overlays are available with TownSquare Plus."],
   ["rate limited", "Too many visitors are connecting from this network. Try again later."],
 ]);
 

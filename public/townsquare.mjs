@@ -68,7 +68,7 @@ import {
  * @property {"auto" | "light" | "dark" | "host"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; `host` follows common host-page dark mode signals.
  * @property {boolean} [preview=false] Static customization preview: fixed spawn, local prop settle, no socket, in-place scene/style updates via the mount handle.
  * @property {boolean} [solo=false] Live socket, but hide other visitors on the client.
- * @property {boolean} [watch=false] Livestream-overlay mode: live socket, render the real crowd (peers, birds, scene), but do not place or move a self avatar and send nothing. Pairs with the chrome-free, transparent `/overlay` page.
+ * @property {boolean} [watch=false] Livestream-overlay mode: live socket, render the real crowd (peers, birds, scene), but do not place or move a self avatar and send nothing. The Plus overlay page uses this mode.
  * @property {boolean} [simulate=false] Dev simulation harness: no socket and local prop settle (like `preview`), but peers and birds stay visible so the scene matches production. The caller drives simulated peers through the exposed `ctx`.
  * @property {import("./widget/bubble-layout.mjs").LayoutConfig} [layout] Live reading-experience dials read by the loop every frame. Omit in production to run on the defaults; the dev scene passes a mutable object its sliders edit in place.
  * @property {Array<{ side: "left"|"right", label?: string, url: string }>} [connections] Neighbouring towns linked at the stage edges. Each grows a signpost on its side that opens a "walk over" modal.

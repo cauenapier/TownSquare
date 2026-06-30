@@ -2788,6 +2788,9 @@ function validateSiteAccess(reqUrl) {
   if (!site || site.disabled) {
     return { ok: false, status: 403, reason: "site disabled or unknown" };
   }
+  if (watch && !site.plus) {
+    return { ok: false, status: 403, reason: "plus required" };
+  }
 
   return { ok: true, scene: getScene(site.siteKey, site), site, watch };
 }
