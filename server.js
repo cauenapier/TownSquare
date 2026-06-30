@@ -3492,9 +3492,18 @@ wss.on("connection", (ws, req) => {
   }
 
   const origin = normalizeOrigin(req.headers.origin || "");
-  const originAllowed = access.site
-    ? isOriginAllowedForSite(req.headers.origin, access.site)
-    : isAllowedOrigin(req.headers.origin, req.headers.host);
+  // Read-only livestream overlays are served by /overlay on this host and
+  // connect back to it, so they legitimately carry the TownSquare host's own
+  // origin rather than the customer's allowed domains. Accept that same-host
+  // origin (in addition to the site's customer origins, for overlays embedded on
+  // an allowed page). Overlays stay read-only, uncounted, Plus-gated and
+  // PoW-gated, so this exposes nothing a normal site visitor can't already see.
+  const originAllowed = access.watch
+    ? isAllowedOrigin(req.headers.origin, req.headers.host)
+      || (access.site && isOriginAllowedForSite(req.headers.origin, access.site))
+    : access.site
+      ? isOriginAllowedForSite(req.headers.origin, access.site)
+      : isAllowedOrigin(req.headers.origin, req.headers.host);
 
   if (!originAllowed) {
     ws.close(4003, "origin not allowed");
