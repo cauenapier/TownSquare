@@ -183,6 +183,10 @@ export function wireSocket(ctx) {
         // inside applyLiveConfig.
         ctx.applyLiveConfig?.({
           scene: message.scene,
+          // Overlays receive the site appearance (plus any overlay-only
+          // overrides) over the socket; on-page embeds theme via their pasted
+          // snippet and omit this.
+          styleConfig: message.styleConfig,
           connections: message.connections,
           messageBoard: message.messageBoard,
         });

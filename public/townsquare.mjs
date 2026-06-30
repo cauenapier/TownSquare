@@ -134,6 +134,21 @@ function revealAppAboveKeyboard(app, viewport, expanded) {
  * @param {import("./widget/context.mjs").WidgetContext} ctx
  * @param {ReturnType<typeof sanitizeSceneConfig>} sceneConfig
  */
+// Resolve the concrete light/dark palette to write inline for a socket-delivered
+// site palette (overlay mode). `applySiteStyle` writes one flat palette, so
+// `auto`/`host` themes — which normally switch via CSS — are collapsed to a
+// concrete mode here, following the theme attribute or `prefers-color-scheme`.
+function resolveStyleMode(root, options) {
+  const theme = resolveWidgetTheme(root, options);
+  if (theme === "light" || theme === "dark") return theme;
+  const attr = root.dataset.townsquareTheme;
+  if (attr === "light" || attr === "dark") return attr;
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  return "dark";
+}
+
 function refreshScene(ctx, sceneConfig) {
   const sceneProps = buildSceneProps(sceneConfig);
   const birdPerches = buildBirdPerches(sceneProps);
@@ -181,6 +196,7 @@ export function mountTownSquare(root, options = {}) {
   // deliberate power-user override that wins and is never overwritten live.
   const inlineConfig = {
     scene: options.scene !== undefined,
+    style: options.style !== undefined,
     connections: options.connections !== undefined,
     messageBoard: options.messageBoard !== undefined,
   };
@@ -422,11 +438,23 @@ export function mountTownSquare(root, options = {}) {
   // Apply config the server pushes live (in `hello` and on owner edits). Each
   // field is honoured only when the host did not pin it inline — an inline value
   // is a power-user override that stays in the host's control.
-  ctx.applyLiveConfig = ({ scene, connections, messageBoard } = {}) => {
+  ctx.applyLiveConfig = ({ scene, styleConfig, connections, messageBoard } = {}) => {
     if (scene !== undefined && !ctx.inlineConfig.scene) {
       const sceneConfig = sanitizeSceneConfig(scene);
       ctx.options = { ...ctx.options, scene: sceneConfig };
       refreshScene(ctx, sceneConfig);
+    }
+    // Livestream overlay: the site's appearance palette (with any overlay-only
+    // overrides already merged server-side) arrives over the socket, since the
+    // overlay page carries no pasted style snippet. Pick the palette for the
+    // active theme and write it inline. A power-user inline `style` still wins.
+    if (styleConfig && !ctx.inlineConfig.style) {
+      const mode = resolveStyleMode(root, ctx.options);
+      const palette = styleConfig[mode] || styleConfig.dark || styleConfig.light;
+      if (palette) {
+        ctx.options = { ...ctx.options, style: palette };
+        applySiteStyle(root, palette);
+      }
     }
     if (connections !== undefined && !ctx.inlineConfig.connections) {
       ctx.options = { ...ctx.options, connections };

@@ -3001,7 +3001,7 @@ function sendSpectatorHello(client) {
     .filter((peer) => peer.joined && !isShadowBlocked(site, peer.browserId))
     .map(snapshotIdentity);
 
-  send(client.ws, {
+  const hello = {
     type: MSG.HELLO,
     id: null,
     spectator: true,
@@ -3009,10 +3009,27 @@ function sendSpectatorHello(client) {
     birds: snapshotBirds(scene),
     chatThrottleMs: getChatThrottle(site),
     pluginModules: plugins.browserModules("widget", pluginContext(site)),
-    // Hosted sites carry scene/connections/board over the socket so overlays
-    // track admin edits live, just like a normal embed.
-    ...(site ? { scene: getSceneConfig(site), connections: getConnections(site), messageBoard: getMessageBoard(site) } : {}),
-  });
+    // Hosted sites carry scene/connections/board/appearance over the socket so
+    // overlays track admin edits live, just like a normal embed. The overlay
+    // page has no pasted style snippet, so the palette ships here too.
+    ...(site
+      ? {
+          scene: getSceneConfig(site),
+          styleConfig: getStyleConfig(site),
+          connections: getConnections(site),
+          messageBoard: getMessageBoard(site),
+        }
+      : {}),
+  };
+
+  // Let plugins adjust the overlay payload — the Plus overlay add-on uses this to
+  // merge its per-token appearance overrides onto the inherited site palette.
+  // The `watch` flag tells plugins this is the read-only overlay surface.
+  const extended = site
+    ? plugins.extend("extendWidgetConfig", hello, pluginContext(site, { watch: true }))
+    : hello;
+
+  send(client.ws, isPlainObject(extended) ? extended : hello);
 }
 
 function handleInit(client, message) {
