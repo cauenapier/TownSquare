@@ -105,20 +105,23 @@ export function wireSocket(ctx) {
 
     socket.addEventListener("open", () => {
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
-      const init = {
-        type: MSG.INIT,
-        browserId,
-        browserSecret: getBrowserSecret(),
-        x: self.x,
-        displayName: self.displayName,
-        color: self.color,
-        readingLabel: self.readingLabel,
-        readingUrl: self.readingUrl,
-        readingActive: self.readingActive,
-      };
+      const watch = isWatch(ctx);
+      const init = watch
+        ? { type: MSG.INIT }
+        : {
+            type: MSG.INIT,
+            browserId,
+            browserSecret: getBrowserSecret(),
+            x: self.x,
+            displayName: self.displayName,
+            color: self.color,
+            readingLabel: self.readingLabel,
+            readingUrl: self.readingUrl,
+            readingActive: self.readingActive,
+          };
       socket.send(JSON.stringify(init));
       const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
-      if (!siteKey && ctx.options.scene) {
+      if (!watch && !siteKey && ctx.options.scene) {
         socket.send(JSON.stringify({ type: MSG.SCENE_CONFIG, sceneConfig: ctx.options.scene }));
       }
     });

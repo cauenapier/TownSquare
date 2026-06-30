@@ -102,10 +102,10 @@ async function startManagedServer() {
   };
 }
 
-function siteSocketUrl(siteKey) {
-  if (!siteKey) return SERVER_URL;
+function siteSocketUrl(siteKey, { watch = false } = {}) {
   const url = new URL(SERVER_URL);
-  url.searchParams.set("siteKey", siteKey);
+  if (siteKey) url.searchParams.set("siteKey", siteKey);
+  if (watch) url.searchParams.set("watch", "1");
   return url.toString();
 }
 
@@ -187,6 +187,48 @@ function connectUntilClose({ x, browserId, siteKey = "", origin = "", ip = "" })
     });
     ws.on("close", (code, reason) => resolve({ code, reason: String(reason) }));
     ws.on("error", reject);
+  });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
+}
+
+function connectSpectator({ siteKey = "", origin = "", ip = "", initPayload = { type: "init" } } = {}) {
+  const label = `connectSpectator ${siteKey || "default"}`;
+  const promise = new Promise((resolve, reject) => {
+    const ws = new WebSocket(siteSocketUrl(siteKey, { watch: true }), socketOptions(origin, ip));
+    const seen = [];
+    let initialized = false;
+
+    ws.on("open", () => {
+      ws.send(JSON.stringify(initPayload));
+    });
+
+    ws.on("message", (buffer) => {
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen,
+          onHello: (hello) => {
+            initialized = true;
+            resolve({ ws, seen, hello });
+          },
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    ws.on("error", reject);
+    ws.on("close", (code, reason) => {
+      if (!initialized) {
+        reject(new Error(`${label} closed before hello (${code}: ${String(reason)})`));
+      }
+    });
   });
   return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
@@ -586,6 +628,109 @@ async function assertHideVisitor() {
   newcomer.ws.close();
 }
 
+async function assertSpectatorOverlay() {
+  const hosted = await createSite("Spectator Overlay");
+  const { siteKey } = hosted.site;
+  const { adminToken } = hosted;
+
+  const visitor = await connect({
+    x: 0.3,
+    browserId: "spectator-visible",
+    siteKey,
+    origin: HTTP_ORIGIN,
+    displayName: "Visible",
+  });
+  await delay(80);
+
+  const beforePresence = await getSitePresence(siteKey);
+  assert(beforePresence.activeVisitors === 1, "expected one active visitor before spectator joins");
+
+  const spectator = await connectSpectator({
+    siteKey,
+    origin: HTTP_ORIGIN,
+    initPayload: {
+      type: "init",
+      browserId: "spectator-ignored",
+      browserSecret: "deadbeef",
+      x: 0.9,
+      displayName: "Should Not Join",
+      readingUrl: "https://attacker.example/private",
+    },
+  });
+
+  assert(spectator.hello.spectator === true, "spectator hello did not mark itself as passive");
+  assert(spectator.hello.id === null, "spectator received a self visitor id");
+  assert(!Object.hasOwn(spectator.hello, "browserSecret"), "spectator hello leaked a browser secret");
+  assert(
+    (spectator.hello.peers || []).some((peer) => peer.id === visitor.id && peer.displayName === "Visible"),
+    "spectator did not receive the visible visitor snapshot",
+  );
+
+  const afterPresence = await getSitePresence(siteKey);
+  assert(afterPresence.activeVisitors === 1, "spectator changed the active visitor count");
+
+  spectator.ws.send(JSON.stringify({ type: "init" }));
+  spectator.ws.send(JSON.stringify({ type: "profile", displayName: "Joined Anyway", color: "#3f7f63" }));
+  spectator.ws.send(JSON.stringify({ type: "move", x: 0.1 }));
+  spectator.ws.send(JSON.stringify({ type: "say", text: "spectator should be silent" }));
+  await delay(150);
+
+  assert(
+    spectator.seen.filter((message) => message.type === "hello").length === 1,
+    "repeated spectator init produced another hello snapshot",
+  );
+  assert(
+    !visitor.seen.some((message) => (
+      (message.type === "profile" && message.displayName === "Joined Anyway")
+      || (message.type === "move" && message.x === 0.1)
+      || (message.type === "say" && message.text === "spectator should be silent")
+    )),
+    "spectator produced a visitor event",
+  );
+  const afterMessagesPresence = await getSitePresence(siteKey);
+  assert(afterMessagesPresence.activeVisitors === 1, "spectator messages changed the active visitor count");
+
+  const hidden = await connect({
+    x: 0.6,
+    browserId: "spectator-hidden",
+    siteKey,
+    origin: HTTP_ORIGIN,
+    displayName: "Hidden",
+    ip: "192.0.2.70",
+  });
+  await delay(80);
+  assert(
+    spectator.seen.some((message) => message.type === "join" && message.peer?.id === hidden.id),
+    "spectator did not receive live join broadcasts",
+  );
+
+  const hid = await postJson("/api/admin/action", { siteKey, adminToken, action: "hideVisitor", visitorId: hidden.id });
+  assert(hid.response.ok, hid.body.error || "hideVisitor failed for spectator test");
+  await waitFor(
+    () => spectator.seen.some((message) => message.type === "leave" && message.id === hidden.id),
+    "hiding a visitor did not remove them from the spectator overlay",
+  );
+
+  const lateSpectator = await connectSpectator({ siteKey, origin: HTTP_ORIGIN, ip: "192.0.2.71" });
+  assert(
+    !(lateSpectator.hello.peers || []).some((peer) => peer.id === hidden.id),
+    "new spectator received a hidden visitor in hello peers",
+  );
+
+  await delay(1600);
+  hidden.ws.send(JSON.stringify({ type: "say", text: "hidden from overlay" }));
+  await delay(200);
+  assert(
+    !spectator.seen.some((message) => message.type === "say" && message.id === hidden.id),
+    "hidden visitor's chat reached the spectator overlay",
+  );
+
+  visitor.ws.close();
+  hidden.ws.close();
+  spectator.ws.close();
+  lateSpectator.ws.close();
+}
+
 async function assertPerSiteConnectionLimit() {
   const hosted = await createSite("Connection Limit");
   const { siteKey, origin } = hosted.site;
@@ -652,6 +797,15 @@ async function postJson(pathname, payload = {}) {
     body: JSON.stringify(payload),
   });
   return { response, body: await response.json() };
+}
+
+async function getSitePresence(siteKey = "") {
+  const url = new URL("/api/site-presence", HTTP_ORIGIN);
+  if (siteKey) url.searchParams.set("siteKey", siteKey);
+  const response = await fetch(url);
+  const body = await response.json();
+  assert(response.ok, body.error || "site presence request failed");
+  return body;
 }
 
 async function serviceAdminApi(pathname, payload = {}) {
@@ -1473,6 +1627,7 @@ async function main() {
   await assertOwnerProfilePersists();
   await assertModerationTools();
   await assertHideVisitor();
+  await assertSpectatorOverlay();
   await assertPerSiteConnectionLimit();
 
   const hostedA = await createSite("Smoke A");

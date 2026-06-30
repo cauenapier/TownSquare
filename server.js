@@ -303,7 +303,7 @@ const MESSAGE_HANDLERS = {
   typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,spectator:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,initialized:boolean,spectator:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown", spectator = false) {
   return {
     connectionId,
@@ -315,6 +315,7 @@ function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown"
     propsById: scene.propsById,
     identity: null,
     joined: false,
+    initialized: false,
     // Read-only livestream overlay: receives broadcasts but never joins as an
     // identity, so it isn't counted or shown to real visitors.
     spectator,
@@ -1107,6 +1108,19 @@ function allowIdentityInit(client, message) {
   }
 
   if ((!identity || !identity.joined) && !consumeIpBudget(client, "join", IP_JOIN_LIMIT, IP_JOIN_WINDOW_MS)) {
+    closeRateLimited(client);
+    return false;
+  }
+  return true;
+}
+
+function allowSpectatorInit(client) {
+  if (isIpQuarantined(client.scene, client.ip)) {
+    closeRateLimited(client);
+    return false;
+  }
+
+  if (!consumeIpBudget(client, "join", IP_JOIN_LIMIT, IP_JOIN_WINDOW_MS)) {
     closeRateLimited(client);
     return false;
   }
@@ -2030,11 +2044,15 @@ function broadcast(scene, message, options = {}) {
   const payload = JSON.stringify(message);
 
   for (const client of scene.clients.values()) {
-    if (!client.joined && !client.spectator) continue;
+    if (!canReceiveBroadcast(client)) continue;
     if (client.connectionId === exceptConnectionId) continue;
     if (client.ws.readyState !== client.ws.OPEN) continue;
     client.ws.send(payload);
   }
+}
+
+function canReceiveBroadcast(client) {
+  return client.joined || (client.spectator && client.initialized);
 }
 
 /** Whether `viewer` should receive presence/chat events from `target`. */
@@ -2055,7 +2073,7 @@ function broadcastIdentity(scene, message, sourceIdentity, options = {}) {
     if (client.ws.readyState !== client.ws.OPEN) continue;
     // Read-only overlays have no identity of their own: they see every visitor
     // except shadow-blocked ones.
-    if (client.spectator) {
+    if (client.spectator && client.initialized) {
       if (isShadowBlocked(site, sourceIdentity?.browserId)) continue;
       client.ws.send(payload);
       continue;
@@ -3008,9 +3026,12 @@ function handleInit(client, message) {
 
   // Livestream overlay: send a one-off snapshot of the live scene, then let the
   // normal broadcast fan-out keep it updated. The spectator never becomes an
-  // identity, so it is uncounted, invisible to real visitors, and consumes no
-  // join budget.
+  // identity, so it is uncounted and invisible to real visitors. It still spends
+  // the IP join budget because it consumes a live connection slot.
   if (client.spectator) {
+    if (client.initialized) return;
+    if (!allowSpectatorInit(client)) return;
+    client.initialized = true;
     sendSpectatorHello(client);
     return;
   }
@@ -3056,6 +3077,7 @@ function handleInit(client, message) {
 
   client.identity = identity;
   client.joined = true;
+  client.initialized = true;
   identity.clients.add(client);
   refreshIdentityReadingActive(identity);
 
@@ -3363,6 +3385,7 @@ function handleClientMessage(client, raw) {
 
   if (!isPlainObject(message)) return;
   if (typeof message.type !== "string") return;
+  if (client.spectator && client.initialized) return;
 
   const pluginMessage = { ...message };
   delete pluginMessage.browserSecret;
