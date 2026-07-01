@@ -318,6 +318,17 @@ async function assertCustomizationPersists() {
   assert(legacy.body.site.styleConfig?.light?.accent === "#112233", "legacy flat style did not become the light palette");
   assert(legacy.body.site.styleConfig?.dark?.accent === "#df8a43", "legacy flat style did not default the dark palette");
 
+  // A palette stored under the pre-rename `scene` key loads as the current `sky`
+  // token (see STYLE_FIELDS `legacyKey` in public/shared/site-config-core.mjs).
+  const legacySky = await postJson("/api/sites", {
+    name: "Legacy Sky",
+    origin: HTTP_ORIGIN,
+    styleConfig: { light: { scene: "#abcdef" }, dark: { scene: "#123456" } },
+  });
+  assert(legacySky.response.ok, legacySky.body.error || "legacy-sky site registration failed");
+  assert(legacySky.body.site.styleConfig?.light?.sky === "#abcdef", "legacy `scene` key did not load as light `sky`");
+  assert(legacySky.body.site.styleConfig?.dark?.sky === "#123456", "legacy `scene` key did not load as dark `sky`");
+
   const updated = await postJson("/api/admin/action", {
     siteKey: body.site.siteKey,
     adminToken: body.adminToken,

@@ -89,7 +89,10 @@ export const PROP_INK_MIX = "color-mix(in oklab, var(--text) 58%, var(--muted) 4
 // tokens in public/tokens.css so a brand-new site's dark palette matches the
 // stock dark theme out of the box.
 export const STYLE_FIELDS = Object.freeze([
-  Object.freeze({ key: "scene", label: "Background", defaultValue: "#e4e2dd", darkValue: "#242521", cssVar: "--scene", overrideUI: true }),
+  // The sky above the ground line. Renamed from "scene" → "sky" (clearer for
+  // owners); `legacyKey` keeps older stored palettes keyed "scene" loading, and
+  // `cssVar` stays `--scene` so CSS already pasted into hosted pages still wins.
+  Object.freeze({ key: "sky", legacyKey: "scene", label: "Sky", defaultValue: "#e4e2dd", darkValue: "#242521", cssVar: "--scene", overrideUI: true }),
   Object.freeze({ key: "page", label: "Ground", defaultValue: "#efede9", darkValue: "#181917", cssVar: "--page", overrideUI: true }),
   Object.freeze({ key: "surface", label: "Buttons and Tags", defaultValue: "#fdf8f4", darkValue: "#24231f", cssVar: "--surface", overrideUI: true }),
   Object.freeze({ key: "ink", label: "Ink", defaultValue: "#2a2926", darkValue: "#f2eee6", cssVar: "--ink", overrideUI: true }),
@@ -516,9 +519,17 @@ export function isTransparentStyleValue(value) {
 export function sanitizeStylePalette(input = {}, defaults = DEFAULT_SITE_STYLE_LIGHT) {
   const base = isPlainObject(input) ? input : {};
   const next = {};
-  for (const { key } of STYLE_FIELDS) {
+  for (const { key, legacyKey } of STYLE_FIELDS) {
     const fallback = defaults[key];
-    const value = typeof base[key] === "string" ? base[key].trim() : "";
+    // Read the current key; fall back to a renamed field's old key so palettes
+    // stored before the rename keep their colour. Re-saves emit only `key`.
+    const raw =
+      typeof base[key] === "string"
+        ? base[key]
+        : legacyKey && typeof base[legacyKey] === "string"
+          ? base[legacyKey]
+          : "";
+    const value = raw.trim();
     if (isTransparentStyleValue(value)) {
       next[key] = STYLE_TRANSPARENT;
       continue;
