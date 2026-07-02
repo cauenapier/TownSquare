@@ -21,7 +21,7 @@ import {
   setWalking,
   updatePose,
   updatePropEffects,
-} from "./dom.mjs";
+} from "./gestures.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext

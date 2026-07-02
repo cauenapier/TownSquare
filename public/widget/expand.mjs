@@ -15,7 +15,7 @@ import { isTypingTarget } from "./utils.mjs";
  *   app: HTMLElement,
  *   expandButton: HTMLButtonElement,
  *   chatScope: import("./chat.mjs").ChatScope,
- *   getAvatars: () => import("./dom.mjs").AvatarView[],
+ *   getAvatars: () => import("./avatar.mjs").AvatarView[],
  *   onChange?: (expanded: boolean) => void,
  * }} options
  * @returns {{ setExpanded: (expanded: boolean) => void, isExpanded: () => boolean, destroy: () => void }}

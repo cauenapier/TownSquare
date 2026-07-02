@@ -4,7 +4,8 @@
 
 import { recordMessage } from "./chat.mjs";
 import { OWNER_SETUP_HASH } from "./constants.mjs";
-import { createAvatar, destroyAvatar, renderAvatar, setAvatarProfile, setFacing, updatePose, updatePropEffects } from "./dom.mjs";
+import { createAvatar, destroyAvatar, setAvatarProfile } from "./avatar.mjs";
+import { renderAvatar, setFacing, updatePose, updatePropEffects } from "./gestures.mjs";
 
 /**
  * When the page URL carries the owner-setup hash, returns a hint telling the

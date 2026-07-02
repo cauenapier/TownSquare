@@ -230,6 +230,7 @@ let BIRD_PERCHES = [];
 let MSG;
 let GESTURE;
 let BIRD_ACTION;
+let CLOSE_REASON;
 // Assigned synchronously from site-config-core.mjs once loadSharedModules()
 // resolves — before server.listen(), so requests never see them unset. (No
 // stub re-implementations: those were a second, divergent source of truth.)
@@ -961,7 +962,7 @@ function pruneIpActivity(now = Date.now()) {
 }
 
 function closeRateLimited(client) {
-  client.ws.close(1008, "rate limited");
+  client.ws.close(1008, CLOSE_REASON.RATE_LIMITED);
 }
 
 function allowIpEvent(client, type, limit) {
@@ -1013,7 +1014,7 @@ function registerFloodAction(client, now = Date.now()) {
   // Kick every live connection from this IP in the scene, not just this one.
   for (const peer of client.scene.clients.values()) {
     if (peer.ip === client.ip && peer.ws.readyState === peer.ws.OPEN) {
-      peer.ws.close(4003, "blocked");
+      peer.ws.close(4003, CLOSE_REASON.BLOCKED);
     }
   }
   return true;
@@ -1514,7 +1515,7 @@ const ADMIN_ACTIONS = {
     if (identity) {
       logModeration(site, "kick", visitorLogLabel(identity));
       touchSite(site);
-      closeIdentityClients(identity, 4001, "kicked");
+      closeIdentityClients(identity, 4001, CLOSE_REASON.KICKED);
     }
   },
   blockVisitor(site, scene, body) {
@@ -1537,7 +1538,7 @@ const ADMIN_ACTIONS = {
     }
     logModeration(site, "block", visitorLogLabel(identity));
     touchSite(site);
-    closeIdentityClients(identity, 4003, "blocked");
+    closeIdentityClients(identity, 4003, CLOSE_REASON.BLOCKED);
   },
   muteVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -1649,7 +1650,7 @@ const ADMIN_ACTIONS = {
     touchSite(site);
     if (site.disabled) {
       for (const client of Array.from(scene.clients.values())) {
-        client.ws.close(4003, "site disabled");
+        client.ws.close(4003, CLOSE_REASON.SITE_DISABLED);
       }
     }
   },
@@ -1898,7 +1899,7 @@ const SERVICE_ADMIN_ACTIONS = {
     site.disabled = Boolean(body.disabled);
     touchSite(site);
     if (site.disabled) {
-      closeSiteScene(site.siteKey, 4003, "site disabled");
+      closeSiteScene(site.siteKey, 4003, CLOSE_REASON.SITE_DISABLED);
     }
     return { site: serviceAdminSite(site) };
   },
@@ -2037,7 +2038,7 @@ function disconnectInactiveIdentity(identity) {
   if (!identity.joined) return;
   clearLeaveTimer(identity);
   identity.inactiveKick = true;
-  closeIdentityClients(identity, 4001, "inactive");
+  closeIdentityClients(identity, 4001, CLOSE_REASON.INACTIVE);
 }
 
 function sweepInactiveIdentities(now = Date.now()) {
@@ -2820,10 +2821,10 @@ function validateSiteAccess(reqUrl) {
 
   const site = sitesByKey.get(siteKey);
   if (!site || site.disabled) {
-    return { ok: false, status: 403, reason: "site disabled or unknown" };
+    return { ok: false, status: 403, reason: CLOSE_REASON.SITE_DISABLED_OR_UNKNOWN };
   }
   if (watch && !site.plus) {
-    return { ok: false, status: 403, reason: "plus required" };
+    return { ok: false, status: 403, reason: CLOSE_REASON.PLUS_REQUIRED };
   }
 
   return { ok: true, scene: getScene(site.siteKey, site), site, watch };
@@ -3099,7 +3100,7 @@ function handleInit(client, message) {
   const { scene, site } = client;
 
   if (site && site.blockedBrowserIds.includes(sanitizeBrowserId(message.browserId))) {
-    client.ws.close(4003, "blocked");
+    client.ws.close(4003, CLOSE_REASON.BLOCKED);
     return;
   }
 
@@ -3557,18 +3558,18 @@ wss.on("connection", (ws, req) => {
       : isAllowedOrigin(req.headers.origin, req.headers.host);
 
   if (!originAllowed) {
-    ws.close(4003, "origin not allowed");
+    ws.close(4003, CLOSE_REASON.ORIGIN_NOT_ALLOWED);
     return;
   }
 
   if (access.scene.clients.size >= getConnectionLimit(access.site)) {
-    ws.close(1013, "full");
+    ws.close(1013, CLOSE_REASON.FULL);
     return;
   }
 
   const ip = getRequestIp(req);
   if (isIpQuarantined(access.scene, ip)) {
-    ws.close(1008, "rate limited");
+    ws.close(1008, CLOSE_REASON.RATE_LIMITED);
     return;
   }
 
@@ -3577,7 +3578,7 @@ wss.on("connection", (ws, req) => {
   // cannot evade the block by rotating its client-chosen identity.
   if (access.site && Array.isArray(access.site.blockedIps) && access.site.blockedIps.includes(ip)) {
     console.log(JSON.stringify({ event: "block_ip_reject", at: new Date().toISOString(), site: access.site.siteKey, ip }));
-    ws.close(4003, "blocked");
+    ws.close(4003, CLOSE_REASON.BLOCKED);
     return;
   }
 
@@ -3653,6 +3654,7 @@ async function loadSharedModules() {
   MSG = protocol.MSG;
   GESTURE = protocol.GESTURE;
   BIRD_ACTION = protocol.BIRD_ACTION;
+  CLOSE_REASON = protocol.CLOSE_REASON;
   // Fail loudly at boot if a handler key drifts from the shared vocabulary.
   for (const type of Object.keys(MESSAGE_HANDLERS)) {
     if (!Object.values(MSG).includes(type)) {

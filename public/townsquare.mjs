@@ -13,19 +13,18 @@ import { setupConnections, teardownConnections } from "./widget/connections.mjs"
 import { setupMessageBoard, teardownMessageBoard } from "./widget/message-board.mjs";
 import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
+import { wireKeyboardInset } from "./widget/keyboard-inset.mjs";
 import { MSG } from "./shared/protocol.mjs";
+import { createAvatar, destroyAvatar } from "./widget/avatar.mjs";
 import {
-  createAvatar,
-  destroyAvatar,
   renderAvatar,
   renderProps,
-  renderShell,
-  wireHelpPanel,
   updatePose,
   updatePropEffects,
-} from "./widget/dom.mjs";
+} from "./widget/gestures.mjs";
 import { watchCurrentPage } from "./widget/page-watch.mjs";
 import { createWidgetPluginRuntime } from "./widget/plugins.mjs";
+import { renderShell, wireHelpPanel } from "./widget/shell.mjs";
 import {
   closeTrays,
   startGameLoop,
@@ -39,6 +38,7 @@ import {
 } from "./widget/movement.mjs";
 import { setStatusMessage, updateStatus } from "./widget/presence.mjs";
 import { sendToServer, wireSocket } from "./widget/protocol.mjs";
+import { setQuiet } from "./widget/quiet.mjs";
 import {
   applySiteStyle,
   buildBirdPerches,
@@ -85,51 +85,11 @@ import {
  */
 
 const PREVIEW_SPAWN_X = (MIN_X + MAX_X) / 2;
-const MOBILE_KEYBOARD_SCROLL_GAP = 12;
-const MOBILE_KEYBOARD_MIN_HEIGHT = 60;
 
 // Hosted sites receive their scene from the server on connect, so we start them
 // empty rather than flashing the stock default props before the real scene
 // arrives. Self-hosted embeds with no server config keep the stock default.
 const EMPTY_SCENE_CONFIG = { benches: 0, trees: 0, lamps: 0, birds: 0 };
-
-/**
- * @param {VisualViewport | undefined} viewport
- */
-function getKeyboardInset(viewport) {
-  if (!viewport) return 0;
-  return Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-}
-
-/**
- * When a docked mobile input focuses near the bottom of a long page, browsers
- * keep the input reachable but may still leave the square's lower edge behind
- * the virtual keyboard. Scroll the page just enough to reveal the whole widget.
- *
- * @param {HTMLElement} app
- * @param {VisualViewport | undefined} viewport
- * @param {boolean} expanded
- */
-function revealAppAboveKeyboard(app, viewport, expanded) {
-  if (!(app instanceof HTMLElement) || !viewport) return;
-  if (!(document.activeElement instanceof HTMLElement) || !app.contains(document.activeElement)) return;
-  const keyboardInset = getKeyboardInset(viewport);
-  if (keyboardInset < MOBILE_KEYBOARD_MIN_HEIGHT) return;
-  if (expanded) {
-    const visibleBottom = viewport.offsetTop + viewport.height;
-    const overlap = app.getBoundingClientRect().bottom + MOBILE_KEYBOARD_SCROLL_GAP - visibleBottom;
-    if (overlap > 0) {
-      app.scrollBy({ top: overlap, behavior: "auto" });
-    }
-    return;
-  }
-  const appBottom = window.scrollY + app.getBoundingClientRect().bottom;
-  const visibleBottom = window.scrollY + viewport.offsetTop + viewport.height;
-  const overlap = appBottom + MOBILE_KEYBOARD_SCROLL_GAP - visibleBottom;
-  if (overlap > 0) {
-    window.scrollBy({ top: overlap, behavior: "auto" });
-  }
-}
 
 /**
  * @param {import("./widget/context.mjs").WidgetContext} ctx
@@ -268,10 +228,9 @@ export function mountTownSquare(root, options = {}) {
   // Per-mount chat state, shared by every avatar in this mount (and never across
   // mounts), so two widgets on one page keep independent bubble limits.
   const chatScope = createChatScope();
-  const coarsePointer = typeof window.matchMedia === "function"
-    && window.matchMedia("(pointer: coarse)").matches;
 
   const unwatchTheme = applyWidgetTheme(root, resolveWidgetTheme(root, options));
+  const disposers = [unwatchTheme];
   root.replaceChildren();
 
   const {
@@ -386,10 +345,12 @@ export function mountTownSquare(root, options = {}) {
   };
 
   ctx.widgetPlugins = createWidgetPluginRuntime(ctx);
+  disposers.push(() => ctx.widgetPlugins.destroy());
   // Initial scene/style setup uses the same path as later config updates. Run it
   // before appending the self avatar so prop rendering stays behind figures.
   applyConfig(ctx, { scene: initialScene, style: options.style });
 
+  let refreshKeyboardInset = () => {};
   const expandController = createExpandController({
     app,
     expandButton,
@@ -397,74 +358,47 @@ export function mountTownSquare(root, options = {}) {
     getAvatars: () => [ctx.self.avatar, ...Array.from(ctx.peers.values(), (peer) => peer.avatar)],
     onChange: (expanded) => {
       ctx.expanded = expanded;
-      if (coarsePointer && viewport) {
-        window.requestAnimationFrame(onViewportChange);
-      }
+      refreshKeyboardInset();
     },
   });
+  disposers.push(() => expandController.destroy());
   const setExpanded = expandController.setExpanded;
 
-  const setQuiet = (quiet) => {
-    ctx.quiet = quiet;
-    if (quiet) setLocalTyping(ctx, false);
-    if (quiet) setExpanded(false);
-    ctx.app.classList.toggle("townsquare--quiet", quiet);
-    ctx.enableToggle.checked = !quiet;
-    ctx.enableToggle.setAttribute("aria-label", quiet ? "TownSquare disabled" : "TownSquare enabled");
-    ctx.enableToggle.title = quiet ? "Enable TownSquare" : "Disable TownSquare";
-    ctx.self.movingLeft = false;
-    ctx.self.movingRight = false;
-    ctx.self.avatar.composer?.reset();
-    if (ctx.self.avatar.composer && ctx.self.avatar.plate) {
-      ctx.self.avatar.composer.hidden = true;
-      ctx.self.avatar.plate.hidden = false;
-    }
-  };
+  const disposeKeyboardInset = wireKeyboardInset(ctx, expandController);
+  refreshKeyboardInset = disposeKeyboardInset.refresh;
+  disposers.push(disposeKeyboardInset);
 
-  enableToggle.addEventListener("change", () => setQuiet(!enableToggle.checked));
-  expandButton.addEventListener("click", () => {
+  const onEnableToggleChange = () => setQuiet(ctx, !enableToggle.checked, setExpanded);
+  enableToggle.addEventListener("change", onEnableToggleChange);
+  disposers.push(() => enableToggle.removeEventListener("change", onEnableToggleChange));
+
+  const onExpandClick = () => {
     setExpanded(!expandController.isExpanded());
-  });
+  };
+  expandButton.addEventListener("click", onExpandClick);
+  disposers.push(() => expandButton.removeEventListener("click", onExpandClick));
+
   const onJumpClick = () => triggerJump(ctx);
   const onHighFiveClick = () => triggerHighFive(ctx);
   jumpButton.addEventListener("click", onJumpClick);
   highFiveButton.addEventListener("click", onHighFiveClick);
+  disposers.push(() => jumpButton.removeEventListener("click", onJumpClick));
+  disposers.push(() => highFiveButton.removeEventListener("click", onHighFiveClick));
   // Gather the action buttons into the bottom toolbar beside the docked composer
   // and pencil (createAvatar already placed those). Moving the nodes keeps their
   // click listeners intact. Final bar order: input, pencil, jump, hi5.
   toolbar.append(jumpButton, highFiveButton);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel);
+  disposers.push(unwireHelpPanel);
 
   const unwatchPage = watchCurrentPage(ctx);
-
-  // While the virtual keyboard is up, expose how much of the layout viewport it
-  // hides so the docked composer can ride above it in expanded mode. On long
-  // mobile pages, also nudge the document scroll so the square's lower edge is
-  // not left behind the keyboard while an input inside it is focused.
-  const viewport = window.visualViewport;
-  const onViewportChange = () => {
-    const hidden = getKeyboardInset(viewport);
-    const keyboardVisible = hidden >= MOBILE_KEYBOARD_MIN_HEIGHT;
-    app.style.setProperty("--ts-keyboard", `${Math.round(hidden)}px`);
-    app.style.setProperty(
-      "--ts-keyboard-scroll-room",
-      keyboardVisible && expandController.isExpanded() ? `${Math.round(hidden)}px` : "0px",
-    );
-    revealAppAboveKeyboard(app, viewport, expandController.isExpanded());
-  };
-  const onAppFocusIn = () => {
-    window.requestAnimationFrame(onViewportChange);
-  };
-  if (coarsePointer && viewport) {
-    viewport.addEventListener("resize", onViewportChange);
-    viewport.addEventListener("scroll", onViewportChange);
-    app.addEventListener("focusin", onAppFocusIn);
-    onViewportChange();
-  }
+  disposers.push(unwatchPage);
 
   if (!preview) {
     initBirds(ctx);
     initClouds(ctx);
+    disposers.push(() => destroyBirds(ctx));
+    disposers.push(() => destroyClouds(ctx));
   }
   // Watch (overlay) mode is a passive viewer: it renders the real crowd but
   // never shows or moves a self avatar.
@@ -488,13 +422,19 @@ export function mountTownSquare(root, options = {}) {
     wireSocket(ctx);
   }
   setupConnections(ctx);
+  disposers.push(() => teardownConnections(ctx));
   setupMessageBoard(ctx);
+  disposers.push(() => teardownMessageBoard(ctx));
   // Overlay viewers take no input; the game loop still runs to animate peers.
   if (!watch) {
     wireKeyboard(ctx);
     wireStagePointer(ctx);
+    disposers.push(() => unwireKeyboard(ctx));
+    disposers.push(() => unwireStagePointer(ctx));
   }
   startGameLoop(ctx);
+  disposers.push(() => stopGameLoop(ctx));
+  disposers.push(() => closeTrays(ctx));
 
   return {
     ctx,
@@ -503,26 +443,9 @@ export function mountTownSquare(root, options = {}) {
     },
     destroy() {
       ctx.disposed = true;
-      unwatchTheme();
-      stopGameLoop(ctx);
-      destroyBirds(ctx);
-      destroyClouds(ctx);
-      ctx.widgetPlugins.destroy();
-      unwireKeyboard(ctx);
-      unwireStagePointer(ctx);
-      unwireHelpPanel();
-      teardownConnections(ctx);
-      teardownMessageBoard(ctx);
-      jumpButton.removeEventListener("click", onJumpClick);
-      highFiveButton.removeEventListener("click", onHighFiveClick);
-      closeTrays(ctx);
-      unwatchPage();
-      if (coarsePointer && viewport) {
-        viewport.removeEventListener("resize", onViewportChange);
-        viewport.removeEventListener("scroll", onViewportChange);
-        app.removeEventListener("focusin", onAppFocusIn);
+      for (let i = disposers.length - 1; i >= 0; i -= 1) {
+        disposers[i]();
       }
-      expandController.destroy();
       clearTimeout(ctx.reconnectTimer);
       ctx.reconnectTimer = null;
       ctx.challenge?.cancel();

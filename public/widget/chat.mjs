@@ -16,13 +16,13 @@ import {
   MAX_RECENT_MESSAGES_EXPANDED,
   MESSAGE_MAX,
 } from "./constants.mjs";
-import { createBubble, createTrayRow } from "./dom.mjs";
+import { createBubble, createTrayRow } from "./avatar.mjs";
 import { sendToServer } from "./protocol.mjs";
 import { MSG } from "../shared/protocol.mjs";
 
 /**
- * @typedef {import("./dom.mjs").AvatarView} AvatarView
- * @typedef {import("./dom.mjs").GhostMessage} GhostMessage
+ * @typedef {import("./avatar.mjs").AvatarView} AvatarView
+ * @typedef {import("./avatar.mjs").GhostMessage} GhostMessage
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
  */
 

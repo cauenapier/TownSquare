@@ -18,7 +18,7 @@
 import { clamp } from "./math.mjs";
 
 /**
- * @typedef {import("./dom.mjs").AvatarView} AvatarView
+ * @typedef {import("./avatar.mjs").AvatarView} AvatarView
  */
 
 /**

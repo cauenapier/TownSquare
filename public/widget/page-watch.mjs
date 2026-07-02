@@ -5,7 +5,7 @@
  * pushes debounced reading updates over the socket when the page changes.
  */
 
-import { setAvatarProfile } from "./dom.mjs";
+import { setAvatarProfile } from "./avatar.mjs";
 import { sendToServer } from "./protocol.mjs";
 import { readCurrentPage } from "./utils.mjs";
 import { MSG } from "../shared/protocol.mjs";
