@@ -13,6 +13,7 @@
     "smoke": "node scripts/smoke-test.js",
     "smoke:plugins": "node scripts/plugin-smoke-test.js",
     "test:ground-line": "node scripts/ground-line-test.mjs",
+    "test:widget-color": "node scripts/widget-color-test.mjs",
     "bot-replay": "node scripts/bot-replay-test.js"
   },
   "dependencies": {

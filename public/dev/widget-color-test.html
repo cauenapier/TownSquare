@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare — widget color test fixture</title>
+    <link rel="stylesheet" href="/widget.css" />
+    <link rel="stylesheet" href="/page.css" />
+  </head>
+  <body class="dev-page">
+    <main class="dev-shell">
+      <section class="townsquare-host dev-host" aria-label="TownSquare color test scene">
+        <div id="townsquare-root"></div>
+      </section>
+    </main>
+
+    <!--
+      Drives the sky/ground color test in two modes, chosen via ?mode=:
+
+        inline  (default) — the live-preview path. Mounts with `style: {}` so the
+                            widget writes an inline palette + flips
+                            `data-townsquare-surface`, which is what paints the
+                            gradient in widget.css. The test then recolors it via
+                            the mount handle (window.__tsColor.applyStyle).
+
+        pasted            — the hosted-embed path. Mounts with NO `style`, so the
+                            widget writes nothing inline and the pasted site CSS
+                            from buildSiteCss (injected by the test as a <style>
+                            block) owns the palette + the stage gradient.
+
+      No trees/benches/lamps/birds so props never paint over the sample points.
+    -->
+    <script type="module">
+      import { mountTownSquare } from "/townsquare.mjs";
+
+      const mode = new URLSearchParams(location.search).get("mode") === "pasted"
+        ? "pasted"
+        : "inline";
+      const scene = { benches: 0, trees: 0, lamps: 0, birds: 0 };
+      const options = mode === "pasted"
+        ? { preview: true, scene }
+        : { preview: true, style: {}, scene };
+
+      const handle = mountTownSquare(document.getElementById("townsquare-root"), options);
+
+      window.__tsColor = {
+        mode,
+        // inline mode: recolor the mounted widget in place.
+        applyStyle(palette) {
+          handle.updateConfig({ style: palette });
+        },
+        ready: true,
+      };
+    </script>
+  </body>
+</html>
