@@ -582,6 +582,16 @@ function ownerHandle(siteKey, browserId) {
   return crypto.createHash("sha256").update(`${siteKey}:${browserId}`).digest("hex").slice(0, 16);
 }
 
+function identityFp(site, identity) {
+  if (!site || !identity) return null;
+  const key = `${site.siteKey}:${identity.browserId}`;
+  if (identity._fpKey !== key) {
+    identity._fpKey = key;
+    identity._fp = ownerHandle(site.siteKey, identity.browserId);
+  }
+  return identity._fp;
+}
+
 // One structured line per genuine new join, for diagnosing bot/abuse patterns
 // from server logs. The browser fingerprint is the same per-site hash the admin
 // editor uses (ownerHandle), so a bot reusing its browserId shows a stable `fp`
@@ -597,7 +607,7 @@ function logJoin(client, identity) {
     scene: client.scene.key,
     name: identity.displayName,
     ip: client.ip,
-    fp: site ? ownerHandle(site.siteKey, identity.browserId) : null,
+    fp: identityFp(site, identity),
     origin: client.origin || null,
     powVerified: Boolean(client.powVerified),
     botProtection: Boolean(site && site.botProtection),
@@ -1688,6 +1698,7 @@ function handleAdminAction(req, res) {
       const context = (name) => Object.freeze({
         site: pluginSite(site),
         data: getPluginData(site, name),
+        enabled: isPluginEnabledForSite(site, name),
         owners: getOwners(site, scene),
         visitors: getSceneStats(scene, site).visitors,
         setData(value) {
@@ -1960,6 +1971,7 @@ function serializeIdentity(identity, options = {}) {
     messages = false,
     clientCount = false,
     badge = false,
+    plugins: includePlugins = true,
   } = options;
   const serialized = {
     id: identity.id,
@@ -1986,6 +1998,7 @@ function serializeIdentity(identity, options = {}) {
   if (messages) {
     serialized.messages = identity.messages;
   }
+  if (!includePlugins) return serialized;
   return plugins.extendVisitor(
     serialized,
     pluginContext(identity.scene?.site || null, { visitor: pluginVisitor(identity) }),
@@ -2128,7 +2141,7 @@ function broadcastReading(scene, identity, options = {}) {
 function emitIdentityState(identity, options = {}) {
   broadcastIdentity(identity.scene, {
     type: MSG.MOVE,
-    ...serializeIdentity(identity, { reading: true }),
+    ...serializeIdentity(identity, { reading: true, plugins: false }),
   }, identity, { exceptConnectionId: options.exceptConnectionId ?? null });
 }
 
@@ -2739,7 +2752,7 @@ function pluginVisitor(identity) {
   // Stable per-visitor fingerprint (same hash as ownerHandle), so plugins can
   // key data on a visitor without ever seeing the raw browserId. Matches the
   // `fp` exposed to the admin panel by getSceneStats.
-  const fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
+  const fp = identityFp(site, identity);
   return Object.freeze({
     id: identity.id,
     browserId: identity.browserId,
@@ -2794,7 +2807,7 @@ function getSceneStats(scene, site = null) {
       serialized.hidden = isShadowBlocked(site, identity.browserId);
       // Stable fingerprint so the admin UI / plugin actions can target a
       // specific visitor (e.g. assign a hat) without exposing the browserId.
-      serialized.fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
+      serialized.fp = identityFp(site, identity);
       return serialized;
     });
 
@@ -3286,7 +3299,7 @@ function handleProfile(client, message) {
       site: client.site ? client.site.siteKey : null,
       name: displayName,
       ip: client.ip,
-      fp: client.site ? ownerHandle(client.site.siteKey, client.identity.browserId) : null,
+      fp: identityFp(client.site, client.identity),
       origin: client.origin || null,
     }));
   }

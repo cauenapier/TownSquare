@@ -93,7 +93,7 @@ async function post(pathname, body) {
   return { response, body: await response.json() };
 }
 
-function connect(siteKey) {
+function connect(siteKey, { browserId = "plugin-smoke", x = 0.5 } = {}) {
   const label = "connect plugin-smoke";
   const promise = new Promise((resolve, reject) => {
     const url = new URL(WS_URL);
@@ -101,7 +101,7 @@ function connect(siteKey) {
     const ws = new WebSocket(url, { headers: { Origin: HTTP_ORIGIN } });
     const seen = [];
     let joined = false;
-    ws.on("open", () => ws.send(JSON.stringify({ type: "init", browserId: "plugin-smoke", x: 0.5 })));
+    ws.on("open", () => ws.send(JSON.stringify({ type: "init", browserId, x })));
     ws.on("message", (raw) => {
       let message;
       try {
@@ -165,6 +165,36 @@ async function main() {
     before.body.pluginModules?.some((entry) => entry.name === "test-feature"),
     "admin response did not include the admin module",
   );
+  const labelledBeforeToggle = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    plugin: "test-labelled",
+    action: "update",
+    input: { value: "before-toggle" },
+  });
+  assert(labelledBeforeToggle.response.status === 400, "labelled plugin action should be rejected while disabled");
+
+  const toggleLabelled = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    action: "setPluginEnabled",
+    name: "test-labelled",
+    enabled: true,
+  });
+  assert(toggleLabelled.response.ok, toggleLabelled.body.error || "labelled plugin toggle failed");
+
+  const labelledAfterToggle = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    plugin: "test-labelled",
+    action: "update",
+    input: { value: "after-toggle" },
+  });
+  assert(labelledAfterToggle.response.ok, labelledAfterToggle.body.error || "labelled plugin action failed after toggle");
+  assert(
+    labelledAfterToggle.body.plugins?.["test-labelled"]?.value === "after-toggle",
+    "labelled plugin action data was not returned after toggle",
+  );
 
   const updated = await post("/api/admin/action", {
     siteKey,
@@ -183,6 +213,23 @@ async function main() {
     )),
     "plugin action did not broadcast updated visitor data",
   );
+
+  const mover = await connect(siteKey, { browserId: "plugin-smoke-mover", x: 0.25 });
+  const joinForMover = await waitForValue(
+    () => visitor.seen.find((message) => message.type === "join" && message.peer?.id === mover.hello.id),
+    (message) => message?.peer?.plugins?.["test-feature"]?.hat === "top-hat",
+    "join did not include plugin data for mover",
+  );
+  assert(joinForMover.peer.plugins?.["test-feature"]?.hat === "top-hat", "join did not include plugin data for mover");
+
+  mover.ws.send(JSON.stringify({ type: "move", x: 0.75 }));
+  const moveForMover = await waitForValue(
+    () => visitor.seen.find((message) => message.type === "move" && message.id === mover.hello.id && message.x === 0.75),
+    (message) => message && !Object.hasOwn(message, "plugins"),
+    "move included plugin data or did not arrive",
+  );
+  assert(!Object.hasOwn(moveForMover, "plugins"), "move should not include plugin data");
+  mover.ws.close();
 
   // Registry writes are debounced (~1s), so poll for the eventual persist
   // rather than reading the file immediately.

@@ -96,6 +96,9 @@ safe — then T5/T4 (boot-crash + auth), T3, then the structural splits (H1, H4)
 **Validation (current):** `npm run check` clean, `npm run lint` clean, `npm test` **49/49** pass, `npm run smoke` passes self-contained. Widget visual harness `scripts/widget-shots.mjs` passed with no console errors or horizontal overflow.
 
 ## Not yet started (from the audit)
+- Plugin data can hold credentials (telegram bot token); consider encrypting secret-bearing fields with a key from the environment.
+- Add a site-level live-config channel so site-wide plugin config ships once per hello/admin-change instead of per visitor.
+- If every plugin returns nothing for a visitor, `extendVisitor` omits `plugins` and the widget keeps stale plugin data; scene-cat currently masks this on Plus sites.
 - **Server H1 (remaining extractions)** — see the H1 row above.
 - **Widget**: H2/H3 are closed by the 2026-07-02 structural split.
   ⤷ Superseded in detail by the 2026-07-02 widget review: `docs/widget-review-2026-07-02.md`

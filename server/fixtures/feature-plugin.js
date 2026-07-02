@@ -19,3 +19,17 @@ registerPlugin({
     return { ...panel, plugins: { ...panel.plugins, "test-feature": data } };
   },
 });
+
+registerPlugin({
+  name: "test-labelled",
+  label: "Test labelled add-on",
+  description: "Exercises labelled plugin admin actions in the smoke test.",
+  adminActions: {
+    update({ setData }, input) {
+      setData({ value: String(input.value || "") });
+    },
+  },
+  extendAdminPanel(panel, { data }) {
+    return { ...panel, plugins: { ...panel.plugins, "test-labelled": data } };
+  },
+});
