@@ -615,14 +615,18 @@ export function buildBirdPerches(props = []) {
 }
 
 function stageSurfaceCss(scope) {
+  // The split is anchored to --ts-ground-offset (defined on .townsquare in
+  // widget.css, which every embed loads alongside this pasted CSS) rather than
+  // a fixed percentage, so the painted ground always meets the actual ground
+  // line regardless of stage height — see the matching rule in widget.css.
   return [
     `${scope} .townsquare__stage {`,
     "  background: linear-gradient(",
     "    180deg,",
     "    var(--scene) 0%,",
-    "    var(--scene) 72%,",
-    "    var(--scene-edge) 72%,",
-    "    var(--page) 72.4%,",
+    "    var(--scene) calc(100% - var(--ts-ground-offset)),",
+    "    var(--scene-edge) calc(100% - var(--ts-ground-offset)),",
+    "    var(--page) calc(100% - var(--ts-ground-offset) + 1px),",
     "    var(--page) 100%",
     "  );",
     "}",
