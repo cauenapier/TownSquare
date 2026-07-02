@@ -106,9 +106,10 @@ no toggle code lives in the Plus repo. A Plus plugin that omits `label` (like
 
 Each site persists plugin data under `site.plugins[pluginName]`. Admin action
 context exposes the current immutable `data`, `owners`, public `visitors`, and
-`setData(nextData)`. `setData` replaces only that plugin's namespace and saves
-it atomically with the site registry after the action succeeds. Failed actions
-do not retain staged data. Data must be JSON and is limited to 64 KiB per plugin.
+`enabled`, plus `setData(nextData)`. `enabled` is the per-site activation state
+for labelled plugins. `setData` replaces only that plugin's namespace and saves
+it atomically with the site registry after the action succeeds. Failed actions do
+not retain staged data. Data must be JSON and is limited to 64 KiB per plugin.
 
 Browser admin modules call actions through the authenticated core admin API;
 they never receive the admin token:
