@@ -107,14 +107,22 @@ export const STYLE_FIELDS = Object.freeze([
   // owners); `legacyKey` keeps older stored palettes keyed "scene" loading, and
   // `cssVar` stays `--scene` so CSS already pasted into hosted pages still wins.
   Object.freeze({ key: "sky", legacyKey: "scene", label: "Sky", defaultValue: "#e4e2dd", darkValue: "#242521", cssVar: "--scene", overrideUI: true }),
-  Object.freeze({ key: "page", label: "Ground", defaultValue: "#efede9", darkValue: "#181917", cssVar: "--page", overrideUI: true }),
+  // The ground band's fill. Renamed from "page" → "groundFill": the token
+  // borrowed the hosted page-background name, which read as "page color" in
+  // pasted CSS while actually painting the ground. `legacyCssVar` keeps both
+  // skew directions working — the widget paint falls back to the old name for
+  // CSS pasted before the rename, and the snippet emits the old name alongside
+  // the new one for visitors still on a cached pre-rename widget.css.
+  Object.freeze({ key: "groundFill", legacyKey: "page", label: "Ground", defaultValue: "#efede9", darkValue: "#181917", cssVar: "--ground-fill", legacyCssVar: "--page", overrideUI: true }),
   Object.freeze({ key: "surface", label: "Buttons and Tags", defaultValue: "#fdf8f4", darkValue: "#24231f", cssVar: "--surface", overrideUI: true }),
   Object.freeze({ key: "ink", label: "Ink", defaultValue: "#2a2926", darkValue: "#f2eee6", cssVar: "--ink", overrideUI: true }),
   Object.freeze({ key: "accent", label: "Accent", defaultValue: "#c8641f", darkValue: "#df8a43", cssVar: "--you", overrideUI: true }),
   Object.freeze({ key: "treeTrunk", label: "Tree trunk", defaultValue: PROP_INK_MIX, darkValue: PROP_INK_MIX, cssVar: "--tree-trunk", overrideUI: true }),
   Object.freeze({ key: "treeCanopy", label: "Tree leaves", defaultValue: PROP_INK_MIX, darkValue: PROP_INK_MIX, cssVar: "--tree-canopy", overrideUI: true }),
   Object.freeze({ key: "other", label: "Other", defaultValue: "#26241f", darkValue: "#ddd7cc", cssVar: "--other", overrideUI: false }),
-  Object.freeze({ key: "ground", label: "Ground line", defaultValue: "rgba(42, 41, 38, 0.16)", darkValue: "rgba(242, 238, 230, 0.18)", cssVar: "--ground", overrideUI: false }),
+  // The 1px line where sky meets ground. Renamed from "ground" → "groundLine":
+  // the bare name suggested the ground *fill* (that's groundFill above).
+  Object.freeze({ key: "groundLine", legacyKey: "ground", label: "Ground line", defaultValue: "rgba(42, 41, 38, 0.16)", darkValue: "rgba(242, 238, 230, 0.18)", cssVar: "--ground-line", legacyCssVar: "--ground", overrideUI: false }),
 ]);
 
 const SCENE_FIELD_BY_KEY = new Map(SCENE_FIELDS.map((field) => [field.key, field]));
@@ -630,20 +638,37 @@ export function buildBirdPerches(props = []) {
   return perches;
 }
 
+/**
+ * Flatten one sanitized flat palette into `[cssVar, value]` pairs: the base
+ * tokens, their legacy alias names (pre-rename tokens like `--page`, kept so
+ * pasted CSS and widget builds from before a rename keep painting), and the
+ * derived tokens. The single source for both palette writers — the pasted
+ * snippet (buildSiteCss) and the inline live preview (applySiteStyle) — so the
+ * two can't drift.
+ *
+ * @param {Record<string, string>} palette One sanitized flat palette (see sanitizeStylePalette).
+ * @returns {Array<[string, string]>}
+ */
+export function paletteVarEntries(palette) {
+  const entries = [];
+  for (const field of STYLE_FIELDS) {
+    entries.push([field.cssVar, palette[field.key]]);
+    if (field.legacyCssVar) entries.push([field.legacyCssVar, palette[field.key]]);
+  }
+  entries.push(...DERIVED_STYLE_VARS);
+  return entries;
+}
+
 function paletteDeclarations(palette) {
-  const lines = [];
-  for (const [key, cssVar] of STYLE_VAR_MAP) {
-    lines.push(`  ${cssVar}: ${palette[key]};`);
-  }
-  for (const [cssVar, value] of DERIVED_STYLE_VARS) {
-    lines.push(`  ${cssVar}: ${value};`);
-  }
-  return lines.join("\n");
+  return paletteVarEntries(palette)
+    .map(([cssVar, value]) => `  ${cssVar}: ${value};`)
+    .join("\n");
 }
 
 /**
  * Build the scoped CSS a hosted site pastes into its page: just the palette
- * tokens (--scene, --page, --ground, …) for each theme. The widget paints the
+ * tokens (--scene, --ground-fill, --ground-line, …, plus their legacy alias
+ * names) for each theme. The widget paints the
  * flat sky/ground from these tokens itself (widget.css, gated on
  * data-townsquare-surface, which the widget sets for `theme: "host"` embeds), so
  * this snippet never repaints the stage. The selector is doubled (e.g.

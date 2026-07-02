@@ -12,7 +12,7 @@
 // tools enabled) and mounts a static customization-preview widget instance
 // via public/dev/ground-line-test.html, then checks — in both collapsed and
 // expanded layout — that the rendered pixel just above the ground line is
-// the sky color and the pixel just below it is the ground (page) color.
+// the sky color and the pixel just below it is the ground-fill color.
 // Screenshots of the stage are saved to `tmp/ground-line-test/` for visual
 // review alongside the pixel assertions.
 //
@@ -44,12 +44,12 @@ async function checkStage(page, { label, screenshotPath }) {
   const stageBox = await stage.boundingBox();
   assert.ok(groundBox && stageBox, `${label}: could not measure stage/ground geometry`);
 
-  const { scene, page: pageColor } = await page.evaluate(() => {
+  const { scene, groundFill } = await page.evaluate(() => {
     const root = document.getElementById("townsquare-root");
     const styles = getComputedStyle(root);
     return {
       scene: styles.getPropertyValue("--scene").trim(),
-      page: styles.getPropertyValue("--page").trim(),
+      groundFill: styles.getPropertyValue("--ground-fill").trim(),
     };
   });
 
@@ -69,7 +69,7 @@ async function checkStage(page, { label, screenshotPath }) {
   assert.ok(groundY < image.height, `${label}: not enough room below the ground line to sample the ground (line at y=${lineTopY}, image height ${image.height})`);
 
   assertColorNear(pixelAt(image, sampleX, skyY), hexToRgb(scene), `${label}: sky pixel (${sampleX}, ${Math.round(skyY)})`);
-  assertColorNear(pixelAt(image, sampleX, groundY), hexToRgb(pageColor), `${label}: ground pixel (${sampleX}, ${Math.round(groundY)})`);
+  assertColorNear(pixelAt(image, sampleX, groundY), hexToRgb(groundFill), `${label}: ground pixel (${sampleX}, ${Math.round(groundY)})`);
 }
 
 async function main() {

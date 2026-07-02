@@ -44,15 +44,24 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, "..", "tmp", "widget-color-test");
 
-// Visually distinct sky/ground pairs. `ground` is the thin ground-line color
-// (--ground); the pixel checks target the sky/ground *fill*, so only sky/page
-// need to be far apart from each other (and from the stock defaults).
+// Visually distinct sky/ground pairs. `groundLine` is the thin ground-line
+// color (--ground-line); the pixel checks target the sky/ground *fill*, so only
+// sky/groundFill need to be far apart from each other (and from the stock
+// defaults). The last entry uses the pre-rename palette keys (`page`/`ground`)
+// to prove the legacy keys still recolor the widget through the inline path.
 const PALETTES = [
-  { name: "ocean", sky: "#1d3f6e", page: "#d9c7a3", ground: "rgba(0, 0, 0, 0.2)" },
-  { name: "poppy", sky: "#b3202a", page: "#123f2a", ground: "rgba(0, 0, 0, 0.25)" },
-  { name: "inverted", sky: "#f0e8d8", page: "#2a2620", ground: "rgba(255, 255, 255, 0.2)" },
-  { name: "orchid", sky: "#6a2ea0", page: "#e8a0c0", ground: "rgba(0, 0, 0, 0.2)" },
+  { name: "ocean", sky: "#1d3f6e", groundFill: "#d9c7a3", groundLine: "rgba(0, 0, 0, 0.2)" },
+  { name: "poppy", sky: "#b3202a", groundFill: "#123f2a", groundLine: "rgba(0, 0, 0, 0.25)" },
+  { name: "inverted", sky: "#f0e8d8", groundFill: "#2a2620", groundLine: "rgba(255, 255, 255, 0.2)" },
+  { name: "orchid", sky: "#6a2ea0", groundFill: "#e8a0c0", groundLine: "rgba(0, 0, 0, 0.2)" },
+  { name: "legacy-keys", sky: "#28502e", page: "#c98a3d", ground: "rgba(0, 0, 0, 0.2)" },
 ];
+
+// The ground-fill color of a palette whether it uses the current key or the
+// pre-rename `page` key (the legacy-keys entry above).
+function groundFillOf(palette) {
+  return palette.groundFill ?? palette.page;
+}
 
 async function stageBackgroundImage(page) {
   return page.evaluate(() => {
@@ -62,10 +71,10 @@ async function stageBackgroundImage(page) {
 }
 
 // Screenshot the stage and assert the pixel just above the ground line is the
-// sky color and the pixel just below it is the ground (page) color — comparing
+// sky color and the pixel just below it is the ground-fill color — comparing
 // against the *intended* palette, so a color that silently fails to apply is
 // caught (not just internal self-consistency).
-async function assertStageColors(page, { label, screenshotPath, skyHex, pageHex }) {
+async function assertStageColors(page, { label, screenshotPath, skyHex, groundHex }) {
   const stage = page.locator(".townsquare__stage");
   const groundBox = await page.locator(".townsquare__ground").boundingBox();
   const stageBox = await stage.boundingBox();
@@ -84,7 +93,7 @@ async function assertStageColors(page, { label, screenshotPath, skyHex, pageHex 
   assert.ok(groundY < image.height, `${label}: not enough room below the ground line to sample the ground (line at y=${lineTopY}, image height ${image.height})`);
 
   assertColorNear(pixelAt(image, sampleX, skyY), hexToRgb(skyHex), `${label}: sky pixel (${sampleX}, ${Math.round(skyY)})`);
-  assertColorNear(pixelAt(image, sampleX, groundY), hexToRgb(pageHex), `${label}: ground pixel (${sampleX}, ${Math.round(groundY)})`);
+  assertColorNear(pixelAt(image, sampleX, groundY), hexToRgb(groundHex), `${label}: ground pixel (${sampleX}, ${Math.round(groundY)})`);
 
   return { groundBox, stageBox };
 }
@@ -108,7 +117,7 @@ function assertColorFar(actual, expected, label, minDelta = 40) {
 
 // --- expanded / fullscreen path. Guards two regressions in .townsquare--expanded:
 //   1. a transparent sky must NOT fill the whole scene with the ground color
-//      (the backdrop falls back to the sky layer / Canvas, not --page);
+//      (the backdrop falls back to the sky layer / Canvas, not --ground-fill);
 //   2. no horizontal padding, so the full-bleed stage paints edge to edge with
 //      no ground-colored strip down the sides.
 async function checkExpanded(page, httpOrigin) {
@@ -120,7 +129,7 @@ async function checkExpanded(page, httpOrigin) {
   const sky = { hex: "#1d3f6e", rgb: hexToRgb("#1d3f6e") };
   const groundPage = { hex: "#2e7d32", rgb: hexToRgb("#2e7d32") };
   await page.evaluate((p) => window.__tsColor.applyStyle(p), {
-    sky: sky.hex, page: groundPage.hex, ground: "rgba(0, 0, 0, 0.25)",
+    sky: sky.hex, groundFill: groundPage.hex, groundLine: "rgba(0, 0, 0, 0.25)",
   });
   await page.waitForTimeout(120);
   await page.locator(".townsquare__control--expand").click();
@@ -148,16 +157,17 @@ async function checkExpanded(page, httpOrigin) {
   }
 
   // Transparent sky: the scene must not be flooded with the ground color. The
-  // sky region reads as the neutral Canvas backdrop, only the strip is --page.
+  // sky region reads as the neutral Canvas backdrop, only the strip is the
+  // ground fill.
   {
     await page.evaluate((p) => window.__tsColor.applyStyle(p), {
-      sky: "transparent", page: groundPage.hex, ground: "rgba(0, 0, 0, 0.25)",
+      sky: "transparent", groundFill: groundPage.hex, groundLine: "rgba(0, 0, 0, 0.25)",
     });
     await page.waitForTimeout(150);
     const { image, lineTopY } = await measure("transparent-sky");
     const sampleX = Math.round(image.width * 0.15);
     assertColorFar(pixelAt(image, sampleX, Math.round(lineTopY * 0.3)), groundPage.rgb, "expanded/transparent-sky: sky must not be flooded with the ground color");
-    assertColorNear(pixelAt(image, sampleX, lineTopY + 10), groundPage.rgb, "expanded/transparent-sky: ground strip is still --page");
+    assertColorNear(pixelAt(image, sampleX, lineTopY + 10), groundPage.rgb, "expanded/transparent-sky: ground strip is still --ground-fill");
   }
 }
 
@@ -175,7 +185,7 @@ async function checkInlinePalettes(page, httpOrigin) {
       label: `inline/${palette.name}`,
       screenshotPath: path.join(OUT_DIR, `inline-${palette.name}.png`),
       skyHex: palette.sky,
-      pageHex: palette.page,
+      groundHex: groundFillOf(palette),
     });
   }
 }
@@ -205,7 +215,39 @@ async function checkPastedPalette(page, httpOrigin, buildSiteCss) {
     label: "pasted",
     screenshotPath: path.join(OUT_DIR, "pasted.png"),
     skyHex: palette.sky,
-    pageHex: palette.page,
+    groundHex: groundFillOf(palette),
+  });
+}
+
+// --- pasted CSS from before the --page/--ground → --ground-fill/--ground-line
+// rename: sites that never re-copy their snippet set only the old token names,
+// and the widget.css var() fallbacks must keep painting them. ---
+async function checkLegacyPastedPalette(page, httpOrigin) {
+  await page.goto(`${httpOrigin}/dev/widget-color-test.html?mode=pasted`, { waitUntil: "networkidle" });
+  await page.waitForFunction(() => window.__tsColor?.ready === true);
+  await page.waitForTimeout(300);
+
+  const palette = PALETTES[3];
+  // The shape buildSiteCss emitted before the rename: doubled selector, old
+  // token names only, pinned to one palette for both modes (see above).
+  const declarations = [
+    `--scene: ${palette.sky};`,
+    `--page: ${groundFillOf(palette)};`,
+    `--ground: ${palette.groundLine ?? palette.ground};`,
+  ].join("\n  ");
+  const css = [
+    `#townsquare-root#townsquare-root { ${declarations} }`,
+    `#townsquare-root#townsquare-root[data-townsquare-theme="dark"] { ${declarations} }`,
+    `@media (prefers-color-scheme: dark) { #townsquare-root#townsquare-root[data-townsquare-theme="auto"] { ${declarations} } }`,
+  ].join("\n");
+  await page.addStyleTag({ content: css });
+  await page.waitForTimeout(120);
+
+  await assertStageColors(page, {
+    label: "pasted-legacy",
+    screenshotPath: path.join(OUT_DIR, "pasted-legacy.png"),
+    skyHex: palette.sky,
+    groundHex: groundFillOf(palette),
   });
 }
 
@@ -224,6 +266,7 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 500, height: 700 } });
     await checkInlinePalettes(page, httpOrigin);
     await checkPastedPalette(page, httpOrigin, buildSiteCss);
+    await checkLegacyPastedPalette(page, httpOrigin);
     await checkExpanded(page, httpOrigin);
     console.log(`Widget color test passed. Screenshots saved to ${OUT_DIR}`);
   } finally {

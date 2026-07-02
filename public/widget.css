@@ -320,8 +320,11 @@
 }
 
 /* Sky and ground are two flat colors: --scene fills the whole stage as the sky,
-   the .townsquare__ground band paints --page over the bottom on top of it, and
-   the band's top border is the --ground line where they meet.
+   the .townsquare__ground band paints --ground-fill over the bottom on top of
+   it, and the band's top border is the --ground-line where they meet.
+   --page/--ground are the pre-rename token names; the var() fallbacks keep CSS
+   pasted before the rename painting (the stock values also live under those
+   names in tokens.css, so the fallback chain covers the defaults too).
 
    Painted only when a customization layer is active: the live preview / overlay
    set data-townsquare-surface via applySiteStyle (with an inline palette), and
@@ -333,8 +336,8 @@
 }
 
 #townsquare-root[data-townsquare-surface] .townsquare__ground {
-  background: var(--page);
-  border-top: 1px solid var(--ground);
+  background: var(--ground-fill, var(--page));
+  border-top: 1px solid var(--ground-line, var(--ground));
 }
 
 .townsquare .prop {

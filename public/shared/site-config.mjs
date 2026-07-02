@@ -13,8 +13,7 @@ import {
   STYLE_FIELDS,
   STYLE_MODES,
   STYLE_TRANSPARENT,
-  STYLE_VAR_MAP,
-  DERIVED_STYLE_VARS,
+  paletteVarEntries,
   styleInputName,
   DEFAULT_SITE_STYLE_LIGHT,
   DEFAULT_SITE_STYLE_DARK,
@@ -504,12 +503,9 @@ export function renderScenePositionFields(container, sceneConfig = {}) {
  */
 export function applySiteStyle(root, palette = DEFAULT_SITE_STYLE_LIGHT) {
   const next = sanitizeStylePalette(palette, DEFAULT_SITE_STYLE_LIGHT);
-  for (const [key, cssVar] of STYLE_VAR_MAP) {
-    root.style.setProperty(cssVar, next[key]);
-  }
-  // Derived tokens (--scene-edge, --you-deep, --text, --muted) resolve against
-  // the base tokens just set above; shared with buildSiteCss so the two can't drift.
-  for (const [cssVar, value] of DERIVED_STYLE_VARS) {
+  // Base tokens, their legacy alias names, and the derived tokens — the same
+  // entries buildSiteCss emits, so the two writers can't drift.
+  for (const [cssVar, value] of paletteVarEntries(next)) {
     root.style.setProperty(cssVar, value);
   }
   root.dataset.townsquareSurface = "";
