@@ -30,11 +30,15 @@
   --ts-stage-height: 180px;
   /* Space below the stage for the touch toolbar (see .townsquare__toolbar). */
   --ts-toolbar-reserve: 80px;
-  /* Distance from the stage's bottom edge up to the ground line (see
-     .townsquare__ground). Shared with the sky/ground gradient below so the
-     painted ground never drifts from the actual line, no matter how tall the
-     stage gets (e.g. in expanded mode, where the stage isn't a fixed 180px). */
+  /* The scene's vertical anchor. --ts-ground-offset is the height of the ground
+     band from the stage's bottom edge, i.e. how far up the ground line sits (see
+     .townsquare__ground); a fixed px so it holds at any stage height, including
+     the tall expanded stage. --ts-ground-level is where figures and props stand:
+     1px above the line so feet rest on it. Everything in the scene derives from
+     these, so retuning the offset moves the line and everything standing on it
+     together. */
   --ts-ground-offset: 52px;
+  --ts-ground-level: calc(var(--ts-ground-offset) + 1px);
   position: relative;
   min-height: calc(var(--ts-stage-height) + var(--ts-toolbar-reserve));
   overflow: hidden;
@@ -297,36 +301,38 @@
   container-type: inline-size;
 }
 
+/* The ground: a flat band filling the bottom --ts-ground-offset of the stage,
+   with its top border drawn as the ground line. Anchored to the stage's bottom
+   edge (not a percentage) so it holds its height at any stage height — the
+   default 180px stage and the tall flex-sized expanded stage alike. Painted
+   only when a customization layer is active (preview or pasted site CSS). */
 .townsquare__ground {
   position: absolute;
-  inset: auto 0 var(--ts-ground-offset, 52px);
-  height: 1px;
+  inset: auto 0 0;
+  height: var(--ts-ground-offset);
   background: transparent;
 }
 
-/* Painted scene/ground only when a customization layer is active (preview or pasted site CSS).
-   The split is anchored to --ts-ground-offset (a fixed px distance from the stage's bottom
-   edge, same as .townsquare__ground) rather than a percentage, so the painted ground always
-   meets the actual ground line regardless of stage height (e.g. the tall flex-sized stage in
-   expanded mode). */
+/* Sky and ground are two flat colors: --scene fills the whole stage as the sky,
+   the .townsquare__ground band paints --page over the bottom on top of it, and
+   the band's top border is the --ground line where they meet.
+
+   The two declarations below are copied into stageSurfaceCss() in
+   public/shared/site-config-core.mjs — the self-contained snippet a hosted site
+   pastes into its own page (it can't rely on this file's selectors). Keep them
+   identical; server/site-config-css.test.js fails if they drift. */
 #townsquare-root[data-townsquare-surface] .townsquare__stage {
-  background: linear-gradient(
-    180deg,
-    var(--scene) 0%,
-    var(--scene) calc(100% - var(--ts-ground-offset, 52px)),
-    var(--scene-edge) calc(100% - var(--ts-ground-offset, 52px)),
-    var(--page) calc(100% - var(--ts-ground-offset, 52px) + 1px),
-    var(--page) 100%
-  );
+  background: var(--scene);
 }
 
 #townsquare-root[data-townsquare-surface] .townsquare__ground {
-  background: var(--ground);
+  background: var(--page);
+  border-top: 1px solid var(--ground);
 }
 
 .townsquare .prop {
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   transform: translateX(-50%);
   color: var(--prop-ink);
   opacity: 0.5;
@@ -351,7 +357,7 @@
 /* Neighbouring-town fingerposts at the stage edges. */
 .townsquare .townsquare-signpost {
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   display: block;
   margin: 0;
   padding: 0;
@@ -444,7 +450,7 @@
 .townsquare .townsquare-board {
   --board-accent: var(--you);
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   transform: translateX(-50%);
   display: block;
   margin: 0;
@@ -738,14 +744,11 @@
   padding: 0 0 var(--ts-toolbar-reserve);
   border-top: 0;
   border-radius: 0;
-  /* Backdrop shown only where the stage doesn't paint — i.e. the sky region when
-     --scene is transparent. Use the sky (--scene), not the ground (--page), so a
-     transparent sky never fills the scene with the ground color; the stage's own
-     gradient still paints the ground strip on top. Canvas is an opaque fallback
-     so expanded mode always covers the host even when --scene is transparent. */
-  background:
-    linear-gradient(var(--scene), var(--scene)),
-    Canvas;
+  /* Opaque backdrop so the fullscreen overlay always covers the host page. The
+     flat stage paints --scene over the whole scene, so this only shows through
+     where --scene is transparent (then reading as neutral Canvas, never the
+     ground color) or behind the docked toolbar. */
+  background: Canvas;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -866,7 +869,7 @@
 .bird {
   position: absolute;
   left: calc(var(--bird-x) * 100%);
-  bottom: calc(53px + var(--bird-lift, 0px));
+  bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px));
   width: 12px;
   height: 8px;
   transform: translateX(-50%);
@@ -960,25 +963,25 @@
 @keyframes bird-arrive {
   from {
     left: calc(var(--bird-from) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px) + 24px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 24px);
     opacity: 0;
   }
 
   25% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 20px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 20px);
   }
 
   50% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 26px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 26px);
   }
 
   75% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 18px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 18px);
   }
 
   to {
     left: calc(var(--bird-to) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px));
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px));
     opacity: 0.45;
   }
 }
@@ -997,17 +1000,17 @@
 @keyframes bird-flee {
   from {
     left: calc(var(--bird-x) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px));
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px));
     opacity: 0.45;
   }
 
   35% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 28px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 28px);
   }
 
   to {
     left: calc((var(--bird-x) + var(--bird-dir, 1) * 0.18) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px) + 42px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 42px);
     opacity: 0;
   }
 }
@@ -1024,7 +1027,7 @@
      --avatar-pos so their hop composes on top of the live position. */
   --avatar-pos: translateX(calc(var(--avatar-x, 50) * 1cqw)) translateX(-50%);
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   left: 0;
   width: 18px;
   height: 46px;

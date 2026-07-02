@@ -14,6 +14,7 @@ import {
   STYLE_MODES,
   STYLE_TRANSPARENT,
   STYLE_VAR_MAP,
+  DERIVED_STYLE_VARS,
   styleInputName,
   DEFAULT_SITE_STYLE_LIGHT,
   DEFAULT_SITE_STYLE_DARK,
@@ -506,9 +507,10 @@ export function applySiteStyle(root, palette = DEFAULT_SITE_STYLE_LIGHT) {
   for (const [key, cssVar] of STYLE_VAR_MAP) {
     root.style.setProperty(cssVar, next[key]);
   }
-  root.style.setProperty("--scene-edge", "color-mix(in oklab, var(--scene) 88%, var(--page) 12%)");
-  root.style.setProperty("--you-deep", next.accent);
-  root.style.setProperty("--text", next.ink);
-  root.style.setProperty("--muted", next.ink);
+  // Derived tokens (--scene-edge, --you-deep, --text, --muted) resolve against
+  // the base tokens just set above; shared with buildSiteCss so the two can't drift.
+  for (const [cssVar, value] of DERIVED_STYLE_VARS) {
+    root.style.setProperty(cssVar, value);
+  }
   root.dataset.townsquareSurface = "";
 }

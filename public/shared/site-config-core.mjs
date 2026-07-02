@@ -120,6 +120,18 @@ export const STYLE_FIELDS = Object.freeze([
 const SCENE_FIELD_BY_KEY = new Map(SCENE_FIELDS.map((field) => [field.key, field]));
 export const STYLE_VAR_MAP = new Map(STYLE_FIELDS.map((field) => [field.key, field.cssVar]));
 
+// Tokens derived from the base palette above (not owner-editable). Declared once
+// so the two writers of a site palette — the pasted CSS from buildSiteCss
+// (paletteDeclarations) and the inline live preview (applySiteStyle) — stay in
+// lockstep and can't drift. Values reference the base tokens via var(), so they
+// resolve the same whether emitted as a stylesheet rule or set inline right
+// after the base tokens.
+export const DERIVED_STYLE_VARS = Object.freeze([
+  ["--you-deep", "var(--you)"],
+  ["--text", "var(--ink)"],
+  ["--muted", "var(--ink)"],
+]);
+
 /**
  * Form input name for a style token in a given palette mode, e.g.
  * `style-light-accent` / `style-dark-accent`.
@@ -615,27 +627,17 @@ export function buildBirdPerches(props = []) {
 }
 
 function stageSurfaceCss(scope) {
-  // The split is anchored to --ts-ground-offset (defined on .townsquare in
-  // widget.css, which every embed loads alongside this pasted CSS) rather than
-  // a fixed percentage, so the painted ground always meets the actual ground
-  // line regardless of stage height — see the matching rule in widget.css.
-  // The 52px fallback matters: this snippet is pasted onto a host page that may
-  // still be serving a browser-cached older widget.css without the variable, and
-  // an undefined var with no fallback invalidates the whole gradient (dropping
-  // the sky/ground fill entirely). The fallback keeps the default in that case.
+  // Sky and ground are two flat colors: --scene fills the stage, the ground band
+  // paints --page over the bottom, and the band's top border is the --ground
+  // line. Copied verbatim from widget.css (the ground band's height/position
+  // lives there) — server/site-config-css.test.js fails if the two drift.
   return [
     `${scope} .townsquare__stage {`,
-    "  background: linear-gradient(",
-    "    180deg,",
-    "    var(--scene) 0%,",
-    "    var(--scene) calc(100% - var(--ts-ground-offset, 52px)),",
-    "    var(--scene-edge) calc(100% - var(--ts-ground-offset, 52px)),",
-    "    var(--page) calc(100% - var(--ts-ground-offset, 52px) + 1px),",
-    "    var(--page) 100%",
-    "  );",
+    "  background: var(--scene);",
     "}",
     `${scope} .townsquare__ground {`,
-    "  background: var(--ground);",
+    "  background: var(--page);",
+    "  border-top: 1px solid var(--ground);",
     "}",
   ].join("\n");
 }
@@ -645,10 +647,9 @@ function paletteDeclarations(palette) {
   for (const [key, cssVar] of STYLE_VAR_MAP) {
     lines.push(`  ${cssVar}: ${palette[key]};`);
   }
-  lines.push("  --scene-edge: color-mix(in oklab, var(--scene) 88%, var(--page) 12%);");
-  lines.push("  --you-deep: var(--you);");
-  lines.push("  --text: var(--ink);");
-  lines.push("  --muted: var(--ink);");
+  for (const [cssVar, value] of DERIVED_STYLE_VARS) {
+    lines.push(`  ${cssVar}: ${value};`);
+  }
   return lines.join("\n");
 }
 

@@ -180,7 +180,8 @@ async function checkInlinePalettes(page, httpOrigin) {
   }
 }
 
-// --- pasted / hosted-embed path: buildSiteCss owns the palette + gradient. ---
+// --- pasted / hosted-embed path: the buildSiteCss snippet owns the palette; the
+// widget.css structure (ground band height) paints it. ---
 async function checkPastedPalette(page, httpOrigin, buildSiteCss) {
   await page.goto(`${httpOrigin}/dev/widget-color-test.html?mode=pasted`, { waitUntil: "networkidle" });
   await page.waitForFunction(() => window.__tsColor?.ready === true);
@@ -193,47 +194,19 @@ async function checkPastedPalette(page, httpOrigin, buildSiteCss) {
   await page.addStyleTag({ content: css });
   await page.waitForTimeout(120);
 
-  assert.notStrictEqual(
+  // Flat colors, not a gradient: the stage paints a background-color, so there's
+  // no background-image. Guards against a regression back to the gradient.
+  assert.strictEqual(
     await stageBackgroundImage(page),
     "none",
-    "pasted-fresh: the pasted CSS should paint a stage gradient",
+    "pasted: the sky should be a flat color, not a gradient",
   );
   await assertStageColors(page, {
-    label: "pasted-fresh",
-    screenshotPath: path.join(OUT_DIR, "pasted-fresh.png"),
+    label: "pasted",
+    screenshotPath: path.join(OUT_DIR, "pasted.png"),
     skyHex: palette.sky,
     pageHex: palette.page,
   });
-
-  // Simulate a host still serving a browser-cached older widget.css that never
-  // defined --ts-ground-offset: `initial` reverts the custom property to the
-  // guaranteed-invalid value, exactly as if the declaration were absent. Without
-  // the 52px fallback this would drop the whole gradient (background-image:
-  // none) and the ground line would lose its offset.
-  await page.addStyleTag({
-    content: "#townsquare-root .townsquare { --ts-ground-offset: initial; }",
-  });
-  await page.waitForTimeout(120);
-
-  assert.notStrictEqual(
-    await stageBackgroundImage(page),
-    "none",
-    "pasted-stale-widget-css: the 52px fallback should keep the gradient painting when --ts-ground-offset is absent",
-  );
-  const { groundBox, stageBox } = await assertStageColors(page, {
-    label: "pasted-stale-widget-css",
-    screenshotPath: path.join(OUT_DIR, "pasted-stale-widget-css.png"),
-    skyHex: palette.sky,
-    pageHex: palette.page,
-  });
-
-  // The ground line must also fall back to its 52px offset from the stage's
-  // bottom edge (its inset uses the same variable).
-  const offset = stageBox.y + stageBox.height - groundBox.y;
-  assert.ok(
-    Math.abs(offset - 52) <= 2,
-    `pasted-stale-widget-css: ground line should fall back to 52px above the stage bottom, got ${offset.toFixed(1)}px`,
-  );
 }
 
 async function main() {
