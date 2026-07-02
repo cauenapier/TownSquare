@@ -30,6 +30,11 @@
   --ts-stage-height: 180px;
   /* Space below the stage for the touch toolbar (see .townsquare__toolbar). */
   --ts-toolbar-reserve: 80px;
+  /* Distance from the stage's bottom edge up to the ground line (see
+     .townsquare__ground). Shared with the sky/ground gradient below so the
+     painted ground never drifts from the actual line, no matter how tall the
+     stage gets (e.g. in expanded mode, where the stage isn't a fixed 180px). */
+  --ts-ground-offset: 52px;
   position: relative;
   min-height: calc(var(--ts-stage-height) + var(--ts-toolbar-reserve));
   overflow: hidden;
@@ -294,19 +299,23 @@
 
 .townsquare__ground {
   position: absolute;
-  inset: auto 0 52px;
+  inset: auto 0 var(--ts-ground-offset);
   height: 1px;
   background: transparent;
 }
 
-/* Painted scene/ground only when a customization layer is active (preview or pasted site CSS). */
+/* Painted scene/ground only when a customization layer is active (preview or pasted site CSS).
+   The split is anchored to --ts-ground-offset (a fixed px distance from the stage's bottom
+   edge, same as .townsquare__ground) rather than a percentage, so the painted ground always
+   meets the actual ground line regardless of stage height (e.g. the tall flex-sized stage in
+   expanded mode). */
 #townsquare-root[data-townsquare-surface] .townsquare__stage {
   background: linear-gradient(
     180deg,
     var(--scene) 0%,
-    var(--scene) 72%,
-    var(--scene-edge) 72%,
-    var(--page) 72.4%,
+    var(--scene) calc(100% - var(--ts-ground-offset)),
+    var(--scene-edge) calc(100% - var(--ts-ground-offset)),
+    var(--page) calc(100% - var(--ts-ground-offset) + 1px),
     var(--page) 100%
   );
 }
