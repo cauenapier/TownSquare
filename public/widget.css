@@ -317,10 +317,11 @@
    the .townsquare__ground band paints --page over the bottom on top of it, and
    the band's top border is the --ground line where they meet.
 
-   The two declarations below are copied into stageSurfaceCss() in
-   public/shared/site-config-core.mjs — the self-contained snippet a hosted site
-   pastes into its own page (it can't rely on this file's selectors). Keep them
-   identical; server/site-config-css.test.js fails if they drift. */
+   Painted only when a customization layer is active: the live preview / overlay
+   set data-townsquare-surface via applySiteStyle (with an inline palette), and
+   host embeds set it at mount (see townsquare.mjs) so this paints straight from
+   the palette tokens the site pastes in (buildSiteCss). The palette tokens are
+   the only thing a hosted site pastes — the paint lives here, in one place. */
 #townsquare-root[data-townsquare-surface] .townsquare__stage {
   background: var(--scene);
 }

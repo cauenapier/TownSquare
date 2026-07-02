@@ -23,10 +23,11 @@
                             gradient in widget.css. The test then recolors it via
                             the mount handle (window.__tsColor.applyStyle).
 
-        pasted            — the hosted-embed path. Mounts with NO `style`, so the
-                            widget writes nothing inline and the pasted site CSS
-                            from buildSiteCss (injected by the test as a <style>
-                            block) owns the palette + the stage gradient.
+        pasted            — the hosted-embed path. Mounts with `theme: "host"` (no
+                            inline `style`), so the widget flips
+                            `data-townsquare-surface` itself and paints from the
+                            palette tokens the pasted buildSiteCss snippet sets
+                            (injected by the test as a <style> block).
 
       No trees/benches/lamps/birds so props never paint over the sample points.
     -->
@@ -38,7 +39,7 @@
         : "inline";
       const scene = { benches: 0, trees: 0, lamps: 0, birds: 0 };
       const options = mode === "pasted"
-        ? { preview: true, scene }
+        ? { preview: true, theme: "host", scene }
         : { preview: true, style: {}, scene };
 
       const handle = mountTownSquare(document.getElementById("townsquare-root"), options);

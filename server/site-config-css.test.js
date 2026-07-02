@@ -6,12 +6,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-// Sky and ground are two flat colors painted by two deliberately separate
-// copies: the live widget via widget.css (gated on [data-townsquare-surface]),
-// and a hosted embed via a snippet from buildSiteCss. The two color declarations
-// are duplicated on purpose (the pasted snippet can't reference widget.css's own
-// selectors), so they must be hand-kept identical. These helpers pull a property
-// out of a rule so a test can assert the copies never drift.
+// The sky/ground are two flat colors, painted in one place: widget.css (gated on
+// [data-townsquare-surface], which the widget sets for host embeds). A hosted
+// site pastes only the palette *tokens* from buildSiteCss — it never repaints
+// the stage. These tests guard both halves of that split of responsibility.
 function normalize(css) {
   return css.replace(/\s+/g, " ").trim();
 }
@@ -31,54 +29,38 @@ function extractDecl(css, selectorFragment, prop) {
   return normalize(after.slice(0, after.indexOf(";")));
 }
 
-test("buildSiteCss paints sky/ground as flat colors, not a gradient", async () => {
+test("buildSiteCss emits palette tokens only, never repaints the stage", async () => {
   const { buildSiteCss } = await import(
     pathToFileURL(path.join(__dirname, "..", "public", "shared", "site-config-core.mjs")).href
   );
   const css = buildSiteCss();
 
-  // The sky/ground split is two flat colors (sky = --scene fill, ground band =
-  // --page with a --ground top border), not a linear-gradient. Guard against a
-  // regression back to the gradient/percentage approach — and against the pasted
-  // snippet depending on --ts-ground-offset (it must not; the band's height
-  // lives in widget.css, so the snippet stays robust to a stale widget.css).
-  assert.equal(
-    extractDecl(css, ".townsquare__stage", "background"),
-    "var(--scene)",
-    "the pasted sky should be a flat --scene fill",
-  );
-  assert.ok(!/linear-gradient/.test(css), "the pasted stage/ground must not use a gradient");
-  assert.ok(!/--ts-ground-offset/.test(css), "the pasted snippet must not depend on --ts-ground-offset");
-  assert.ok(!/\b72%|\b72\.4%/.test(css), "the split must not hardcode a fixed percentage");
+  // The pasted snippet sets the palette tokens the widget paints from...
+  assert.match(css, /--scene:/, "buildSiteCss must set the --scene token");
+  assert.match(css, /--page:/, "buildSiteCss must set the --page token");
+  assert.match(css, /--ground:/, "buildSiteCss must set the --ground token");
+
+  // ...but never the paint itself: no stage/ground rules, no gradient, and no
+  // dependency on --ts-ground-offset (the paint lives solely in widget.css, so a
+  // stale cached widget.css can never leave the pasted snippet half-applied).
+  assert.doesNotMatch(css, /\.townsquare__stage/, "the pasted snippet must not repaint the stage");
+  assert.doesNotMatch(css, /\.townsquare__ground/, "the pasted snippet must not repaint the ground");
+  assert.doesNotMatch(css, /linear-gradient/, "the pasted snippet must not paint a gradient");
+  assert.doesNotMatch(css, /--ts-ground-offset/, "the pasted snippet must not depend on --ts-ground-offset");
 });
 
-test("the pasted stage/ground CSS matches the copy painted in widget.css", async () => {
-  const { buildSiteCss } = await import(
-    pathToFileURL(path.join(__dirname, "..", "public", "shared", "site-config-core.mjs")).href
-  );
+test("widget.css paints the sky/ground as flat colors", async () => {
   const widgetCss = fs.readFileSync(
     path.join(__dirname, "..", "public", "widget.css"),
     "utf8",
   );
-  const pastedCss = buildSiteCss();
+  const stage = "[data-townsquare-surface] .townsquare__stage";
+  const ground = "[data-townsquare-surface] .townsquare__ground";
 
-  // widget.css paints via the surface-gated rule; the pasted CSS via the
-  // doubled-id selector. The sky fill, ground fill, and ground line must match.
-  const widgetStage = "[data-townsquare-surface] .townsquare__stage";
-  const widgetGround = "[data-townsquare-surface] .townsquare__ground";
-  assert.equal(
-    extractDecl(pastedCss, ".townsquare__stage", "background"),
-    extractDecl(widgetCss, widgetStage, "background"),
-    "the pasted sky fill has drifted from widget.css — update both copies together",
-  );
-  assert.equal(
-    extractDecl(pastedCss, ".townsquare__ground", "background"),
-    extractDecl(widgetCss, widgetGround, "background"),
-    "the pasted ground fill has drifted from widget.css — update both copies together",
-  );
-  assert.equal(
-    extractDecl(pastedCss, ".townsquare__ground", "border-top"),
-    extractDecl(widgetCss, widgetGround, "border-top"),
-    "the pasted ground line has drifted from widget.css — update both copies together",
-  );
+  // Flat colors, not a gradient: sky = --scene fill (a bare token, so definitionally
+  // not a gradient), ground band = --page with a --ground top border. Guards
+  // against a regression back to the gradient split.
+  assert.equal(extractDecl(widgetCss, stage, "background"), "var(--scene)", "the sky must be a flat --scene fill");
+  assert.equal(extractDecl(widgetCss, ground, "background"), "var(--page)", "the ground band must be a flat --page fill");
+  assert.equal(extractDecl(widgetCss, ground, "border-top"), "1px solid var(--ground)", "the ground line must be the band's top border");
 });

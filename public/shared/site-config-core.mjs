@@ -626,22 +626,6 @@ export function buildBirdPerches(props = []) {
   return perches;
 }
 
-function stageSurfaceCss(scope) {
-  // Sky and ground are two flat colors: --scene fills the stage, the ground band
-  // paints --page over the bottom, and the band's top border is the --ground
-  // line. Copied verbatim from widget.css (the ground band's height/position
-  // lives there) — server/site-config-css.test.js fails if the two drift.
-  return [
-    `${scope} .townsquare__stage {`,
-    "  background: var(--scene);",
-    "}",
-    `${scope} .townsquare__ground {`,
-    "  background: var(--page);",
-    "  border-top: 1px solid var(--ground);",
-    "}",
-  ].join("\n");
-}
-
 function paletteDeclarations(palette) {
   const lines = [];
   for (const [key, cssVar] of STYLE_VAR_MAP) {
@@ -654,10 +638,14 @@ function paletteDeclarations(palette) {
 }
 
 /**
- * Build the scoped CSS a hosted site pastes into its page. Emits separate light
- * and dark palettes. The selector is doubled (e.g. `#townsquare-root#townsquare-root`)
- * so its specificity beats the stock light/dark token rules in tokens.css in
- * every theme state (light, explicit dark, and auto/`prefers-color-scheme`).
+ * Build the scoped CSS a hosted site pastes into its page: just the palette
+ * tokens (--scene, --page, --ground, …) for each theme. The widget paints the
+ * flat sky/ground from these tokens itself (widget.css, gated on
+ * data-townsquare-surface, which the widget sets for `theme: "host"` embeds), so
+ * this snippet never repaints the stage. The selector is doubled (e.g.
+ * `#townsquare-root#townsquare-root`) so its specificity beats the stock
+ * light/dark token rules in tokens.css in every theme state (light, explicit
+ * dark, and auto/`prefers-color-scheme`).
  *
  * @param {unknown} style A `{ light, dark }` site style config (legacy flat is normalized).
  * @param {string} [selector="#townsquare-root"]
@@ -678,7 +666,6 @@ export function buildSiteCss(style = DEFAULT_SITE_STYLE, selector = "#townsquare
     paletteDeclarations(next.dark),
     "  }",
     "}",
-    stageSurfaceCss(scope),
   ].join("\n");
 }
 

@@ -228,8 +228,18 @@ export function mountTownSquare(root, options = {}) {
   // mounts), so two widgets on one page keep independent bubble limits.
   const chatScope = createChatScope();
 
-  const unwatchTheme = applyWidgetTheme(root, resolveWidgetTheme(root, options));
+  const resolvedTheme = resolveWidgetTheme(root, options);
+  const unwatchTheme = applyWidgetTheme(root, resolvedTheme);
   const disposers = [unwatchTheme];
+  // Host embeds theme via pasted CSS variables (--scene/--page/--ground) rather
+  // than an inline `style` palette, so nothing else flips on the scene paint.
+  // Mark the surface here so widget.css paints the flat sky/ground from those
+  // variables; the pasted snippet only sets the tokens, never repaints the
+  // stage. (The inline-`style` path — live preview, overlay — sets this in
+  // applySiteStyle instead.)
+  if (resolvedTheme === "host") {
+    root.dataset.townsquareSurface = "";
+  }
   root.replaceChildren();
 
   const {
