@@ -619,14 +619,18 @@ function stageSurfaceCss(scope) {
   // widget.css, which every embed loads alongside this pasted CSS) rather than
   // a fixed percentage, so the painted ground always meets the actual ground
   // line regardless of stage height — see the matching rule in widget.css.
+  // The 52px fallback matters: this snippet is pasted onto a host page that may
+  // still be serving a browser-cached older widget.css without the variable, and
+  // an undefined var with no fallback invalidates the whole gradient (dropping
+  // the sky/ground fill entirely). The fallback keeps the default in that case.
   return [
     `${scope} .townsquare__stage {`,
     "  background: linear-gradient(",
     "    180deg,",
     "    var(--scene) 0%,",
-    "    var(--scene) calc(100% - var(--ts-ground-offset)),",
-    "    var(--scene-edge) calc(100% - var(--ts-ground-offset)),",
-    "    var(--page) calc(100% - var(--ts-ground-offset) + 1px),",
+    "    var(--scene) calc(100% - var(--ts-ground-offset, 52px)),",
+    "    var(--scene-edge) calc(100% - var(--ts-ground-offset, 52px)),",
+    "    var(--page) calc(100% - var(--ts-ground-offset, 52px) + 1px),",
     "    var(--page) 100%",
     "  );",
     "}",

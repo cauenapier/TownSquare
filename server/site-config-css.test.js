@@ -20,11 +20,22 @@ test("buildSiteCss anchors the ground split to --ts-ground-offset, not a fixed p
   // offset from the stage's bottom edge) whenever the stage was a different
   // height — e.g. expanded/fullscreen view.
   assert.ok(
-    css.includes("calc(100% - var(--ts-ground-offset))"),
+    css.includes("calc(100% - var(--ts-ground-offset, 52px))"),
     "expected the sky/ground split to be anchored to --ts-ground-offset",
   );
   assert.ok(
     !/\b72%|\b72\.4%/.test(css),
     "the sky/ground split must not hardcode a fixed percentage",
+  );
+
+  // Every --ts-ground-offset reference must carry the 52px fallback. This
+  // snippet is pasted onto host pages that can still be serving a browser-cached
+  // older widget.css without the variable; without the fallback an undefined var
+  // invalidates the whole gradient and the sky/ground colors stop painting.
+  const bareRefs = css.match(/var\(--ts-ground-offset\)/g);
+  assert.equal(
+    bareRefs,
+    null,
+    "every --ts-ground-offset reference must include the 52px fallback",
   );
 });

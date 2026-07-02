@@ -299,7 +299,7 @@
 
 .townsquare__ground {
   position: absolute;
-  inset: auto 0 var(--ts-ground-offset);
+  inset: auto 0 var(--ts-ground-offset, 52px);
   height: 1px;
   background: transparent;
 }
@@ -313,9 +313,9 @@
   background: linear-gradient(
     180deg,
     var(--scene) 0%,
-    var(--scene) calc(100% - var(--ts-ground-offset)),
-    var(--scene-edge) calc(100% - var(--ts-ground-offset)),
-    var(--page) calc(100% - var(--ts-ground-offset) + 1px),
+    var(--scene) calc(100% - var(--ts-ground-offset, 52px)),
+    var(--scene-edge) calc(100% - var(--ts-ground-offset, 52px)),
+    var(--page) calc(100% - var(--ts-ground-offset, 52px) + 1px),
     var(--page) 100%
   );
 }
