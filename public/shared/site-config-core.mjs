@@ -165,10 +165,14 @@ export const DEFAULT_SITE_STYLE = Object.freeze({
   dark: DEFAULT_SITE_STYLE_DARK,
 });
 
+// Scene-prop art contract: the lowest path coordinate lies ON the viewBox
+// bottom edge (y = viewBox height). Props are bottom-anchored to the ground
+// plane (--ts-ground-level in widget.css), so art baseline = element bottom =
+// the ground line at any render scale.
 const BENCH_SVG = `
   <svg viewBox="0 0 50 18" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-    <line x1="8" y1="8" x2="6" y2="17"></line>
-    <line x1="42" y1="8" x2="44" y2="17"></line>
+    <line x1="8" y1="8" x2="6" y2="18"></line>
+    <line x1="42" y1="8" x2="44" y2="18"></line>
     <line x1="3" y1="8" x2="47" y2="8"></line>
     <line x1="6" y1="1" x2="6" y2="8"></line>
     <line x1="44" y1="1" x2="44" y2="8"></line>
@@ -179,8 +183,8 @@ const BENCH_SVG = `
 
 const LAMP_SVG = `
   <svg viewBox="0 0 20 56" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-    <line x1="3" y1="55" x2="11" y2="55"></line>
-    <line x1="7" y1="55" x2="7" y2="10"></line>
+    <line x1="3" y1="56" x2="11" y2="56"></line>
+    <line x1="7" y1="56" x2="7" y2="10"></line>
     <path d="M7 10 C7 4 9 2 15 2"></path>
     <line x1="15" y1="2" x2="15" y2="5"></line>
     <path d="M12 5 L11 9 L19 9 L18 5 Z"></path>
@@ -190,7 +194,7 @@ const LAMP_SVG = `
 const TREE_SVG = `
   <svg viewBox="0 0 56 76" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
     <path class="canopy" d="M13 44 C4 39 0 30 4 21 C7 14 12 9 17 8 C20 4 23 2 25 4 C27 1 29 1 31 4 C33 2 36 4 39 8 C44 9 49 14 52 21 C56 30 52 39 43 44 Z"></path>
-    <path class="trunk" d="M25 44 L25 75 L31 75 L31 44 Z"></path>
+    <path class="trunk" d="M25 44 L25 76 L31 76 L31 44 Z"></path>
   </svg>
 `;
 
@@ -199,7 +203,7 @@ const TREE_SVG = `
 // the panel differently in CSS; the line-art frame is shared.
 const MESSAGE_BOARD_SVG = `
   <svg viewBox="0 0 26 44" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-    <line x1="13" y1="18" x2="13" y2="43"></line>
+    <line x1="13" y1="18" x2="13" y2="44"></line>
     <rect class="panel" x="4" y="3" width="18" height="15"></rect>
     <line class="note" x1="8" y1="8" x2="18" y2="8"></line>
     <line class="note" x1="8" y1="11" x2="18" y2="11"></line>

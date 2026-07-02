@@ -31,14 +31,20 @@
   /* Space below the stage for the touch toolbar (see .townsquare__toolbar). */
   --ts-toolbar-reserve: 80px;
   /* The scene's vertical anchor. --ts-ground-offset is the height of the ground
-     band from the stage's bottom edge, i.e. how far up the ground line sits (see
-     .townsquare__ground); a fixed px so it holds at any stage height, including
-     the tall expanded stage. --ts-ground-level is where figures and props stand:
-     1px above the line so feet rest on it. Everything in the scene derives from
-     these, so retuning the offset moves the line and everything standing on it
-     together. */
+     band from the stage's bottom edge; the band's 1px top border is the ground
+     line, so the walkable plane is the band's top edge — exactly --ts-ground-offset
+     up. A fixed px so it holds at any stage height, including the tall expanded
+     stage. --ts-ground-level is that same plane, named for what stands on it:
+     every prop/figure is bottom-anchored to it, and every SVG's art is authored
+     to reach its viewBox bottom edge (see the props in site-config-core.mjs and
+     figure.mjs), so element bottom = art baseline = the line, at any scale. The
+     fixed-px stroke rounding (vector-effect: non-scaling-stroke) overlaps the
+     1px line slightly, which is what "standing on the line" looks like. */
   --ts-ground-offset: 52px;
-  --ts-ground-level: calc(var(--ts-ground-offset) + 1px);
+  --ts-ground-level: var(--ts-ground-offset);
+  /* Bench seat plank height above the plane: plank centerline y=8 in the 18-unit
+     bench art rendered 1:1 px (site-config-core.mjs BENCH_SVG). */
+  --ts-bench-seat-height: 10px;
   position: relative;
   min-height: calc(var(--ts-stage-height) + var(--ts-toolbar-reserve));
   overflow: hidden;
@@ -1185,8 +1191,19 @@
   pointer-events: none;
 }
 
-.townsquare-avatar--sitting { bottom: 44px; }
-.townsquare-avatar--resting { bottom: 42px; }
+/* Pose anchors: each pose sinks the element box below the plane by exactly the
+   distance its lowest rotated foot ends above the box bottom, so the feet stay
+   planted on the ground line while the pose bends the legs. Derived from the
+   figure geometry (figure.mjs, 0.9 px/unit; feet at y=42 = box bottom) and the
+   pose rotations below:
+   - sitting (bench): hip 70–74°, knee −80/−84° → lowest foot at y≈38.3
+     → drop (42 − 38.3) × 0.9 ≈ 3.3px. The hip (torso end, y=26 → 14.4px above
+     the box bottom) then lands 14.4 − 3.3 ≈ 11.1px above the plane, resting on
+     the 10px bench seat plank (--ts-bench-seat-height + half strokes).
+   - resting (under a tree): hip 118/120°, knee −85/−88°, core −10° → lowest
+     foot at y≈33.8 → drop (42 − 33.8) × 0.9 ≈ 7.4px. */
+.townsquare-avatar--sitting { bottom: calc(var(--ts-ground-level) - 3.3px); }
+.townsquare-avatar--resting { bottom: calc(var(--ts-ground-level) - 7.4px); }
 .townsquare-avatar--shaded { --townsquare-avatar-shade-filter: brightness(0.88); }
 .townsquare-avatar--lit {
   --townsquare-avatar-light-filter: drop-shadow(0 0 3px rgba(253, 230, 160, 0.7)) drop-shadow(0 0 6px rgba(253, 230, 160, 0.25));

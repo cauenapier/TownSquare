@@ -24,8 +24,8 @@ const SIDE_ARROWS = { left: "←", right: "→" };
 // Line-art fingerpost: a post with a directional plank pointing outward toward
 // the side it links to. Matches the stroked look of the scene props.
 const SIGN_SVG = {
-  left: `<svg viewBox="0 0 26 44" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><path d="M20 3 L20 43"></path><path d="M20 10 L7 10 L2 14 L7 18 L20 18 Z"></path></svg>`,
-  right: `<svg viewBox="0 0 26 44" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><path d="M6 3 L6 43"></path><path d="M6 10 L19 10 L24 14 L19 18 L6 18 Z"></path></svg>`,
+  left: `<svg viewBox="0 0 26 44" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><path d="M20 3 L20 44"></path><path d="M20 10 L7 10 L2 14 L7 18 L20 18 Z"></path></svg>`,
+  right: `<svg viewBox="0 0 26 44" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><path d="M6 3 L6 44"></path><path d="M6 10 L19 10 L24 14 L19 18 L6 18 Z"></path></svg>`,
 };
 
 /**

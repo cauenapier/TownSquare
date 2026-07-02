@@ -406,7 +406,7 @@ body {
   position: relative;
   z-index: 1;
   width: min(300px, 54vw);
-  aspect-ratio: 20 / 44;
+  aspect-ratio: 20 / 42; /* matches the figure viewBox (figure.mjs) */
   color: var(--you);
   filter: drop-shadow(0 16px 18px rgba(0,0,0,0.12));
 }
