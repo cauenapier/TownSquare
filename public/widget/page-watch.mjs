@@ -6,6 +6,7 @@
  */
 
 import { setAvatarProfile } from "./dom.mjs";
+import { sendToServer } from "./protocol.mjs";
 import { readCurrentPage } from "./utils.mjs";
 import { MSG } from "../shared/protocol.mjs";
 
@@ -89,8 +90,8 @@ export function watchCurrentPage(ctx) {
     ctx.self.readingUrl = nextPage.readingUrl;
     ctx.self.readingActive = readingActive;
     setAvatarProfile(ctx.self.avatar, ctx.self);
-    if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
-      ctx.socket.send(JSON.stringify({ type: MSG.READING, ...nextPage, readingActive }));
+    if (ctx.self.id) {
+      sendToServer(ctx, MSG.READING, { ...nextPage, readingActive });
     }
   };
 

@@ -22,16 +22,6 @@ import { MSG, GESTURE, BIRD_ACTION } from "../shared/protocol.mjs";
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
  */
 
-function isSolo(ctx) {
-  return ctx.options.solo === true;
-}
-
-// Livestream overlay: a passive viewer with no self identity. It still renders
-// peers, birds, and the scene, so only the self-identity setup is skipped.
-function isWatch(ctx) {
-  return ctx.options.watch === true;
-}
-
 const WALK_BUMP_MS = 120;
 const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 8000;
@@ -59,10 +49,6 @@ function clearPeers(ctx) {
   }
 }
 
-function clearPresencePoseForAction(ctx, presence) {
-  clearPresencePose(presence, ctx.sceneProps);
-}
-
 function presenceById(ctx, id) {
   return id === ctx.self.id ? ctx.self : ctx.peers.get(id);
 }
@@ -70,14 +56,14 @@ function presenceById(ctx, id) {
 function applyJump(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
-  clearPresencePoseForAction(ctx, presence);
+  clearPresencePose(presence, ctx.sceneProps);
   playJump(presence.avatar);
 }
 
 function applyRaiseHand(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
-  clearPresencePoseForAction(ctx, presence);
+  clearPresencePose(presence, ctx.sceneProps);
   playRaisedHand(presence.avatar);
 }
 
@@ -87,9 +73,31 @@ function applyHighFive(ctx, id, targetId) {
   if (!initiator || !target) return;
   const standUpFirst = needsStandUp(initiator) || needsStandUp(target);
   for (const presence of [initiator, target]) {
-    clearPresencePoseForAction(ctx, presence);
+    clearPresencePose(presence, ctx.sceneProps);
   }
   playHighFivePair(initiator, target, standUpFirst);
+}
+
+/**
+ * @param {WebSocket} socket
+ * @param {string} type
+ * @param {Record<string, unknown>} [payload]
+ * @returns {boolean}
+ */
+function sendToSocket(socket, type, payload = {}) {
+  if (socket.readyState !== WebSocket.OPEN) return false;
+  socket.send(JSON.stringify({ type, ...payload }));
+  return true;
+}
+
+/**
+ * @param {WidgetContext} ctx
+ * @param {string} type
+ * @param {Record<string, unknown>} [payload]
+ * @returns {boolean}
+ */
+export function sendToServer(ctx, type, payload = {}) {
+  return sendToSocket(ctx.socket, type, payload);
 }
 
 /**
@@ -106,8 +114,7 @@ export function wireSocket(ctx) {
 
     socket.addEventListener("open", () => {
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
-      const watch = isWatch(ctx);
-      const init = watch
+      const init = ctx.watch
         ? { type: MSG.INIT }
         : {
             type: MSG.INIT,
@@ -121,9 +128,8 @@ export function wireSocket(ctx) {
             readingActive: self.readingActive,
           };
       socket.send(JSON.stringify(init));
-      const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
-      if (!watch && !siteKey && ctx.options.scene) {
-        socket.send(JSON.stringify({ type: MSG.SCENE_CONFIG, sceneConfig: ctx.options.scene }));
+      if (!ctx.watch && !ctx.siteKey && ctx.options.scene) {
+        sendToSocket(socket, MSG.SCENE_CONFIG, { sceneConfig: ctx.options.scene });
       }
     });
 
@@ -150,19 +156,16 @@ export function wireSocket(ctx) {
       if (message.type === MSG.CHALLENGE) {
         if (typeof message.salt !== "string" || typeof message.difficulty !== "number") return;
         solveChallenge({ salt: message.salt, difficulty: message.difficulty }).then((nonce) => {
-          if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: MSG.SOLVE, nonce }));
-          }
+          sendToSocket(socket, MSG.SOLVE, { nonce });
         });
         return;
       }
 
       if (message.type === MSG.HELLO) {
-        const watch = isWatch(ctx);
         ctx.widgetPlugins?.setModules(message.pluginModules || ctx.options.pluginModules || []);
         if (typeof message.chatThrottleMs === "number") ctx.chatThrottleMs = message.chatThrottleMs;
         // A spectator hello carries no self identity, so skip own-avatar setup.
-        if (!watch) {
+        if (!ctx.watch) {
           self.id = message.id;
           saveBrowserSecret(message.browserSecret);
           applySelfState(ctx, message);
@@ -172,7 +175,7 @@ export function wireSocket(ctx) {
             recordMessage(self.avatar, recent);
           }
         }
-        if (!isSolo(ctx)) {
+        if (!ctx.solo) {
           for (const peer of message.peers) {
             applyPeerState(ctx, peer);
           }
@@ -228,14 +231,14 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === MSG.JOIN) {
-        if (!isSolo(ctx)) {
+        if (!ctx.solo) {
           applyPeerState(ctx, message.peer);
         }
         return;
       }
 
       if (message.type === MSG.LEAVE) {
-        if (!isSolo(ctx)) {
+        if (!ctx.solo) {
           removePeer(ctx, message.id);
         }
         return;
@@ -251,7 +254,7 @@ export function wireSocket(ctx) {
           return;
         }
 
-        if (isSolo(ctx)) return;
+        if (ctx.solo) return;
 
         const peer = applyPeerState(ctx, message);
         if (!peer.pose) {
@@ -261,7 +264,7 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === MSG.ACTION) {
-        if (message.id !== self.id && isSolo(ctx)) return;
+        if (message.id !== self.id && ctx.solo) return;
         if (message.action === GESTURE.JUMP) {
           applyJump(ctx, message.id);
         } else if (message.action === GESTURE.RAISE_HAND) {
@@ -282,7 +285,7 @@ export function wireSocket(ctx) {
           return;
         }
 
-        if (isSolo(ctx)) return;
+        if (ctx.solo) return;
 
         const peer = peers.get(message.id);
         if (!peer) return;
@@ -296,21 +299,21 @@ export function wireSocket(ctx) {
       }
 
       if (message.type === MSG.TYPING) {
-        if (message.id === self.id || isSolo(ctx)) return;
+        if (message.id === self.id || ctx.solo) return;
         const peer = peers.get(message.id);
         peer?.avatar.el.classList.toggle("townsquare-avatar--typing", message.typing === true);
         return;
       }
 
       if (message.type === MSG.PROFILE) {
-        if (message.id === self.id || !isSolo(ctx)) {
+        if (message.id === self.id || !ctx.solo) {
           applyProfileState(ctx, message);
         }
         return;
       }
 
       if (message.type === MSG.READING) {
-        if (message.id === self.id || !isSolo(ctx)) {
+        if (message.id === self.id || !ctx.solo) {
           applyReadingState(ctx, message);
         }
         return;

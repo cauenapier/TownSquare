@@ -510,7 +510,7 @@ export function isTransparentStyleValue(value) {
 }
 
 /**
- * Sanitize one flat palette (the 7 style tokens) against a set of defaults.
+ * Sanitize one flat palette against the supported style tokens and defaults.
  *
  * @param {Record<string, unknown>} input
  * @param {Record<string, string>} [defaults=DEFAULT_SITE_STYLE_LIGHT]

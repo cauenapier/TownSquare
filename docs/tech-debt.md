@@ -30,7 +30,7 @@ Status legend: 🔴 not started · 🟡 in progress · ✅ done · ⏭️ deferr
 ### Reliability / leaks
 | # | Item | Location | Status |
 |---|------|----------|--------|
-| H5 | Replaced WebSockets leak on reconnect — old socket listeners not removed/closed; `destroy()` only closes latest. Double-mount unsafe (module-level `chat.mjs` state; unrestored `history.pushState` patch) | `protocol.mjs:97`, `townsquare.mjs:438`, `chat.mjs:31-32`, `page-watch.mjs:65-98` | 🔴 |
+| H5 | Widget lifecycle leftovers: timer cleanup and reconnect self-history duplication remain; earlier double-mount chat/history-patch claims are fixed and the socket-listener leak was re-assessed | `docs/widget-review-2026-07-02.md` C1/C2/E | 🟡 |
 | H6 | Unbounded in-memory growth — per-IP-per-scene activity map and scenes never bounded (leak + rate-limit-state amplification) | `server.js:968-1010` | ✅ (activity map) |
 | H7 | Leave timers fire against deleted scenes — not cleared on site/scene deletion or shutdown | `server.js:3050-3053` | ✅ |
 

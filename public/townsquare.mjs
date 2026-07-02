@@ -37,7 +37,7 @@ import {
   wireStagePointer,
 } from "./widget/movement.mjs";
 import { setStatusMessage, updateStatus } from "./widget/presence.mjs";
-import { wireSocket } from "./widget/protocol.mjs";
+import { sendToServer, wireSocket } from "./widget/protocol.mjs";
 import {
   applySiteStyle,
   buildBirdPerches,
@@ -187,6 +187,13 @@ export function mountTownSquare(root, options = {}) {
     || window.location.origin,
   );
   const siteKey = options.siteKey || root.dataset.townsquareSiteKey || "";
+  const preview = options.preview === true;
+  const solo = options.solo === true;
+  // The dev simulation harness mounts the real widget but runs without a server:
+  // no socket, prop-settle resolves locally (as in preview), yet peers and birds
+  // stay on screen so the scene behaves exactly like production.
+  const simulate = options.simulate === true;
+  const localOnly = preview || simulate;
   // Livestream overlay: connect read-only. The widget renders the live crowd but
   // never places the viewer in the scene, and the server never counts it.
   const watch = options.watch === true;
@@ -202,7 +209,7 @@ export function mountTownSquare(root, options = {}) {
   };
   // Hosted sites (siteKey, real socket) fill the scene from the server's `hello`,
   // so start empty unless the host pinned a scene inline.
-  const serverDrivenScene = Boolean(siteKey) && !(options.preview === true || options.simulate === true);
+  const serverDrivenScene = Boolean(siteKey) && !localOnly;
   const initialScene = options.scene
     || (serverDrivenScene ? EMPTY_SCENE_CONFIG : DEFAULT_SCENE_CONFIG);
   const sceneConfig = sanitizeSceneConfig(initialScene);
@@ -212,13 +219,6 @@ export function mountTownSquare(root, options = {}) {
   const profile = getStoredProfile();
   const { readingLabel, readingUrl } = readCurrentPage(root, options);
   const readingActive = document.visibilityState === "visible" && document.hasFocus();
-  const preview = options.preview === true;
-  const solo = options.solo === true;
-  // The dev simulation harness mounts the real widget but runs without a server:
-  // no socket, prop-settle resolves locally (as in preview), yet peers and birds
-  // stay on screen so the scene behaves exactly like production.
-  const simulate = options.simulate === true;
-  const localOnly = preview || simulate;
   const spawnX = preview || solo || simulate ? PREVIEW_SPAWN_X : randomSpawnX();
   const peers = new Map();
   // Per-mount chat state, shared by every avatar in this mount (and never across
@@ -262,6 +262,12 @@ export function mountTownSquare(root, options = {}) {
     inlineConfig,
     serverOrigin,
     socketUrl,
+    siteKey,
+    preview,
+    simulate,
+    localOnly,
+    solo,
+    watch,
     browserId,
     peers,
     chat: chatScope,
@@ -311,8 +317,8 @@ export function mountTownSquare(root, options = {}) {
           const saved = saveStoredProfile(nextProfile);
           ctx.self.displayName = saved.displayName;
           ctx.self.color = saved.color;
-          if (ctx.socket.readyState === WebSocket.OPEN && ctx.self.id) {
-            ctx.socket.send(JSON.stringify({ type: MSG.PROFILE, ...saved }));
+          if (ctx.self.id) {
+            sendToServer(ctx, MSG.PROFILE, saved);
           }
         },
         onSubmitChat: () => submitChat(ctx),
@@ -485,9 +491,8 @@ export function mountTownSquare(root, options = {}) {
         const sceneConfig = sanitizeSceneConfig(scene);
         ctx.options = { ...ctx.options, scene: sceneConfig };
         refreshScene(ctx, sceneConfig);
-        const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
-        if (!preview && !siteKey && ctx.socket.readyState === WebSocket.OPEN) {
-          ctx.socket.send(JSON.stringify({ type: MSG.SCENE_CONFIG, sceneConfig }));
+        if (!ctx.preview && !ctx.siteKey) {
+          sendToServer(ctx, MSG.SCENE_CONFIG, { sceneConfig });
         }
       }
       if (style) {

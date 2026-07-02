@@ -2,8 +2,8 @@
 
 Deep review of the embeddable widget (`public/townsquare.mjs`, `public/widget/`,
 `public/shared/`) performed 2026-07-02. This is a work order for a follow-up
-agent: each item has a location, the evidence, and the intended change. Nothing
-here has been applied yet.
+agent: each item has a location, the evidence, and the intended change. Progress
+is logged at the end of this file; items not listed there remain unapplied.
 
 Baseline at review time: `npm run lint` clean, `npm test` 49/49 pass.
 Complements `docs/tech-debt.md` (items H2/H3/H5 there overlap; see §E for
@@ -421,3 +421,9 @@ After each step: `npm run check && npm run lint && npm test`; after steps 3-5
 also `npm run smoke`; after anything visual, `scripts/widget-shots.mjs`
 before/after screenshots. Update `docs/tech-debt.md` rows H2/H3/H5 as they
 land, and log progress in this file.
+
+## Implementation progress
+
+| Date | Item(s) | Notes |
+|------|---------|-------|
+| 2026-07-02 | A3, A5, A6, A9, A12, C7 ✅ | First mechanical batch landed: pose-clearing now uses `clearPresencePose`, mount-mode/siteKey derivations live on `ctx`, socket sends go through `sendToServer`, chat stack/history caps are factored, bird get-or-create paths share `ensureBird`, and documented typedef/JSDoc drift was corrected. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), and `npm run smoke`. |

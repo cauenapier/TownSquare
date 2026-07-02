@@ -8,6 +8,7 @@ import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_
 import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
 import { MSG, GESTURE } from "../shared/protocol.mjs";
 import { clamp } from "./math.mjs";
+import { sendToServer } from "./protocol.mjs";
 import {
   clearPresencePose,
   needsStandUp,
@@ -77,7 +78,7 @@ function applyLocalPropSettle(ctx, prop) {
  * @param {number} now
  */
 export function maybeRequestPropSettle(ctx, now) {
-  const { self, socket } = ctx;
+  const { self } = ctx;
   if (self.pose) return;
 
   const prop = findSettleProp(ctx.sceneProps, self.x);
@@ -96,15 +97,14 @@ export function maybeRequestPropSettle(ctx, now) {
     return;
   }
 
-  if (ctx.options.preview === true || ctx.options.simulate === true) {
+  if (ctx.localOnly) {
     applyLocalPropSettle(ctx, prop);
     return;
   }
 
-  if (socket.readyState !== WebSocket.OPEN) return;
-
-  self.settleRequested = true;
-  socket.send(JSON.stringify({ type: MSG.SETTLE, propId: prop.id }));
+  if (sendToServer(ctx, MSG.SETTLE, { propId: prop.id })) {
+    self.settleRequested = true;
+  }
 }
 
 /**
@@ -113,17 +113,18 @@ export function maybeRequestPropSettle(ctx, now) {
  *   so send-throttle timing uses the same clock as prop-settle and frame timing.
  */
 export function maybeSendMove(ctx, now) {
-  const { self, socket } = ctx;
+  const { self } = ctx;
   const movedEnough = Math.abs(self.x - self.lastSentX) > 0.002;
   const waitedLongEnough = now - self.lastSendAt > SEND_INTERVAL_MS;
 
-  if (socket.readyState !== WebSocket.OPEN || !movedEnough || !waitedLongEnough) {
+  if (!movedEnough || !waitedLongEnough) {
     return;
   }
 
-  self.lastSentX = self.x;
-  self.lastSendAt = now;
-  socket.send(JSON.stringify({ type: MSG.MOVE, x: self.x }));
+  if (sendToServer(ctx, MSG.MOVE, { x: self.x })) {
+    self.lastSentX = self.x;
+    self.lastSendAt = now;
+  }
 }
 
 // Block re-jumping until the current jump animation finishes.
@@ -148,11 +149,7 @@ function isTypingTarget(target) {
  */
 function clearSelfPoseForAction(ctx) {
   resetPropSettle(ctx);
-  ctx.self.pose = null;
-  ctx.self.propId = null;
-  updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
-  setWalking(ctx.self.avatar, false);
+  clearPresencePose(ctx.self, ctx.sceneProps);
 }
 
 /**
@@ -168,9 +165,7 @@ export function triggerJump(ctx) {
   clearSelfPoseForAction(ctx);
   playJump(ctx.self.avatar);
 
-  if (ctx.socket.readyState === WebSocket.OPEN) {
-    ctx.socket.send(JSON.stringify({ type: MSG.ACTION, action: GESTURE.JUMP }));
-  }
+  sendToServer(ctx, MSG.ACTION, { action: GESTURE.JUMP });
 }
 
 /**
@@ -206,17 +201,13 @@ export function triggerHighFive(ctx) {
     clearSelfPoseForAction(ctx);
     clearPresencePose(peer, ctx.sceneProps);
     playHighFivePair(ctx.self, peer, standUpFirst);
-    if (ctx.socket.readyState === WebSocket.OPEN) {
-      ctx.socket.send(JSON.stringify({ type: MSG.ACTION, action: GESTURE.HIGH_FIVE, targetId: peer.id }));
-    }
+    sendToServer(ctx, MSG.ACTION, { action: GESTURE.HIGH_FIVE, targetId: peer.id });
     return;
   }
 
   clearSelfPoseForAction(ctx);
   playRaisedHand(ctx.self.avatar);
-  if (ctx.socket.readyState === WebSocket.OPEN) {
-    ctx.socket.send(JSON.stringify({ type: MSG.ACTION, action: GESTURE.RAISE_HAND }));
-  }
+  sendToServer(ctx, MSG.ACTION, { action: GESTURE.RAISE_HAND });
 }
 
 /**
@@ -254,9 +245,7 @@ export function tick(ctx, now) {
 
   if (direction !== 0) {
     resetPropSettle(ctx);
-    ctx.self.pose = null;
-    ctx.self.propId = null;
-    updatePose(ctx.self.avatar, ctx.self.pose);
+    clearPresencePose(ctx.self, ctx.sceneProps);
     ctx.self.x = clampSelfX(arrived ? ctx.self.targetX : ctx.self.x + direction * MOVEMENT_SPEED * dt);
     if (arrived) {
       ctx.self.targetX = null;
@@ -274,7 +263,7 @@ export function tick(ctx, now) {
 
   updateConnectionProximity(ctx);
 
-  const presences = ctx.options.preview === true || ctx.options.solo === true
+  const presences = ctx.preview || ctx.solo
     ? [ctx.self]
     : [ctx.self, ...ctx.peers.values()];
   const layoutCfg = layoutConfigFor(ctx.options.layout, ctx.expanded);

@@ -88,8 +88,7 @@ function renderBoard(ctx, prop) {
 function refreshUnreadBadge(ctx) {
   const state = ctx.messageBoard;
   if (!state) return;
-  const siteKey = ctx.options.siteKey || ctx.root?.dataset?.townsquareSiteKey || "";
-  const unread = getMessageBoardRead(siteKey) !== state.signature;
+  const unread = getMessageBoardRead(ctx.siteKey) !== state.signature;
   state.button.classList.toggle("townsquare-board--unread", unread);
 }
 
@@ -155,8 +154,7 @@ export function openMessageBoardModal(ctx) {
   close.focus();
 
   // Opening the board counts as reading the message it currently shows.
-  const siteKey = ctx.options.siteKey || ctx.root?.dataset?.townsquareSiteKey || "";
-  setMessageBoardRead(siteKey, state.signature);
+  setMessageBoardRead(ctx.siteKey, state.signature);
   refreshUnreadBadge(ctx);
 }
 

@@ -63,6 +63,12 @@
  * @property {import("../townsquare.mjs").MountOptions} options
  * @property {string} serverOrigin
  * @property {string} socketUrl
+ * @property {string} siteKey
+ * @property {boolean} preview
+ * @property {boolean} simulate
+ * @property {boolean} localOnly
+ * @property {boolean} solo
+ * @property {boolean} watch
  * @property {string} browserId
  * @property {Map<string, PeerState>} peers
  * @property {import("./chat.mjs").ChatScope} chat Per-mount chat state shared by all avatars.
@@ -102,8 +108,8 @@
  * @property {{ overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void, trigger: HTMLButtonElement | null } | null} [connectionsModal]
  * @property {"left"|"right"|null} [nearSide] Edge whose signpost the avatar can currently activate.
  * @property {{ board: import("../shared/site-config.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: { overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void, trigger: HTMLButtonElement | null } | null } | null} [messageBoard]
- * @property {{ scene: boolean, connections: boolean, messageBoard: boolean }} [inlineConfig] Which config fields the host pinned inline (power-user overrides that live updates must not touch).
- * @property {(config?: { scene?: unknown, connections?: unknown, messageBoard?: unknown }) => void} [applyLiveConfig] Apply server-pushed config, honouring inline overrides.
+ * @property {{ scene: boolean, style: boolean, connections: boolean, messageBoard: boolean }} [inlineConfig] Which config fields the host pinned inline (power-user overrides that live updates must not touch).
+ * @property {(config?: { scene?: unknown, styleConfig?: Record<string, unknown>, connections?: unknown, messageBoard?: unknown }) => void} [applyLiveConfig] Apply server-pushed config, honouring inline overrides.
  */
 
 export {};

@@ -137,7 +137,7 @@ export function openConnectionsModal(ctx, side) {
   // The admin/customization preview mounts the real widget. Opening a town there
   // should not navigate the owner away from their own page mid-configuration, so
   // links open in a new tab instead of travelling in place.
-  const newTab = ctx.options.preview === true || ctx.options.simulate === true;
+  const newTab = ctx.localOnly;
 
   const overlay = document.createElement("div");
   overlay.className = "townsquare-connections";
@@ -241,13 +241,12 @@ export function closeConnectionsModal(ctx) {
  * @param {string} url Destination town the visitor is travelling to.
  */
 function reportConnectionClick(ctx, url) {
-  const siteKey = ctx.options.siteKey || ctx.root?.dataset?.townsquareSiteKey || "";
-  if (!siteKey || !ctx.serverOrigin || typeof navigator?.sendBeacon !== "function") return;
+  if (!ctx.siteKey || !ctx.serverOrigin || typeof navigator?.sendBeacon !== "function") return;
 
   try {
     // A text/plain body keeps this a CORS-simple request (no preflight); the
     // server parses it as JSON regardless of the declared content type.
-    const payload = new Blob([JSON.stringify({ siteKey, url })], { type: "text/plain" });
+    const payload = new Blob([JSON.stringify({ siteKey: ctx.siteKey, url })], { type: "text/plain" });
     navigator.sendBeacon(`${ctx.serverOrigin}/api/connection-click`, payload);
   } catch {
     // Tracking is best-effort and must never block the visit.
