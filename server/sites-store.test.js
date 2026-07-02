@@ -24,6 +24,9 @@ test("saveNow writes the snapshot atomically (no leftover temp file)", () => {
   const { dir, file, writer } = tmpStore(sites);
   writer.saveNow();
   assert.deepEqual(read(file).sites, sites);
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  }
   assert.equal(fs.existsSync(`${file}.tmp`), false, "temp file renamed away");
   fs.rmSync(dir, { recursive: true, force: true });
 });

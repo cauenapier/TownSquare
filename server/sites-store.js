@@ -20,10 +20,10 @@ function createSitesWriter({ dataDir, sitesFile, getSites, debounceMs = 1000, lo
       clearTimeout(timer);
       timer = null;
     }
-    fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     const sites = getSites();
     const tmpFile = `${sitesFile}.tmp`;
-    fs.writeFileSync(tmpFile, `${JSON.stringify({ sites }, null, 2)}\n`);
+    fs.writeFileSync(tmpFile, `${JSON.stringify({ sites }, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(tmpFile, sitesFile);
   }
 

@@ -23,14 +23,14 @@ Status legend: 🔴 not started · 🟡 in progress · ✅ done · ⏭️ deferr
 | # | Item | Location | Status |
 |---|------|----------|--------|
 | H1 | `server.js` is a ~3,200-line god file mixing 8+ responsibilities; `server/` exists as intended home. Extract static/sites-store/rate-limit/scene/ws-handlers/admin-routes | `server.js` | 🟡 |
-| H2 | `dom.mjs` is 968 lines; `createAvatar` ~360 lines bundling DOM + profile form + animations | `public/widget/dom.mjs:317-676` | 🔴 |
-| H3 | `mountTownSquare` is a ~290-line god function; teardown correctness depends on hand-synced lists | `public/townsquare.mjs:154-442` | 🔴 |
+| H2 | `dom.mjs` is 968 lines; `createAvatar` ~360 lines bundling DOM + profile form + animations | `public/widget/dom.mjs:317-676` | ✅ |
+| H3 | `mountTownSquare` is a ~290-line god function; teardown correctness depends on hand-synced lists | `public/townsquare.mjs:154-442` | ✅ |
 | H4 | `site-config.mjs` (1,048 lines) fuses pure server sanitizers with browser-only DOM code (76 `document`/`FormData`/rAF refs); forces server to keep divergent stub sanitizers swapped in async at boot | `shared/site-config.mjs`, `server.js:188-193` | ✅ |
 
 ### Reliability / leaks
 | # | Item | Location | Status |
 |---|------|----------|--------|
-| H5 | Replaced WebSockets leak on reconnect — old socket listeners not removed/closed; `destroy()` only closes latest. Double-mount unsafe (module-level `chat.mjs` state; unrestored `history.pushState` patch) | `protocol.mjs:97`, `townsquare.mjs:438`, `chat.mjs:31-32`, `page-watch.mjs:65-98` | 🔴 |
+| H5 | Widget lifecycle leftovers closed: timer cleanup and reconnect self-history duplication fixed; earlier double-mount chat/history-patch claims are fixed and the socket-listener leak was re-assessed | `docs/widget-review-2026-07-02.md` C1/C2/E | ✅ |
 | H6 | Unbounded in-memory growth — per-IP-per-scene activity map and scenes never bounded (leak + rate-limit-state amplification) | `server.js:968-1010` | ✅ (activity map) |
 | H7 | Leave timers fire against deleted scenes — not cleared on site/scene deletion or shutdown | `server.js:3050-3053` | ✅ |
 
@@ -91,17 +91,19 @@ safe — then T5/T4 (boot-crash + auth), T3, then the structural splits (H1, H4)
 | 2026-06-25 | H7 ✅ | `closeSiteScene` now clears every identity's pending reconnect-grace leave timer before deleting the scene, and `finalizeDisconnect` bails out if its scene was already torn down (`scenes.get(scene.key) !== scene`) — so a leave timer can no longer fire/broadcast against a detached scene when a site is disabled/deleted mid-grace. Smoke (disconnect→leave + service-admin delete/disable) confirms normal leaves still work. |
 | 2026-06-25 | H11 ⏭️ | Re-assessed and deferred. The init flow already runs `allowIdentityInit` (counts a secret-mismatch as a new identity against `IP_MAX_IDENTITIES`) **before** `getOrCreateIdentity`, so the ephemeral fork does **not** bypass the IP cap; browserIds are unguessable random UUIDs (no targeted hijack), and orphaned identities self-expire in the 1.5s grace. The current fork is a defensible self-healing fail-safe; the audit's "reject 1008" would strand a legitimate secret-loss user in a reconnect loop without coordinated client-side identity recovery. Worth doing only as a deliberate client+server change, not a quick fix. |
 | 2026-06-25 | H9 ✅ | Folded into the `server/plausible.js` extraction: the first-party event relay (`/api/event`) is now per-IP rate limited (`PLAUSIBLE_EVENTS_PER_HOUR`, default 600; reuses the `recentBucket` budget) so it can't be used to amplify traffic at the upstream. Verified with a fake upstream: events forward, then return 429 once over budget; script proxy + HTML injection still work. |
+| 2026-07-02 | H2 + H3 ✅ | Widget structure split: `public/widget/dom.mjs` is now a compatibility barrel over `shell.mjs`, `avatar.mjs`, and `gestures.mjs`, with internal imports pointed at the split modules. `mountTownSquare` delegates mobile keyboard inset handling and quiet-mode toggling, and teardown reverse-iterates collected disposers before clearing socket/timer/avatar state. |
 
-**Validation (current):** `npm run check` clean, `npm test` **30/30** pass, `npm run smoke` and `npm run smoke:plugins` both pass self-contained, server boots / `/healthz` ok / SIGTERM drains cleanly.
+**Validation (current):** `npm run check` clean, `npm run lint` clean, `npm test` **49/49** pass, `npm run smoke` passes self-contained. Widget visual harness `scripts/widget-shots.mjs` passed with no console errors or horizontal overflow.
 
 ## Not yet started (from the audit)
+- Plugin data can hold credentials (telegram bot token); consider encrypting secret-bearing fields with a key from the environment.
+- Add a site-level live-config channel so site-wide plugin config ships once per hello/admin-change instead of per visitor.
+- If every plugin returns nothing for a visitor, `extendVisitor` omits `plugins` and the widget keeps stale plugin data; scene-cat currently masks this on Plus sites.
 - **Server H1 (remaining extractions)** — see the H1 row above.
-- **Widget**: H2 (`dom.mjs` 968-line god module / `createAvatar`), H3 (`mountTownSquare` god function + teardown), H5 (reconnect socket/listener leaks; double-mount unsafe via module-level `chat.mjs` state + unrestored `history.pushState`), plus the per-bubble/per-avatar timer leaks.
+- **Widget**: H2/H3 are closed by the 2026-07-02 structural split.
   ⤷ Superseded in detail by the 2026-07-02 widget review: `docs/widget-review-2026-07-02.md`
   (full work order incl. dedup items A1-A12, splits B1-B5, lifecycle fixes C1-C7,
   security F1-F4, performance G1-G4).
-  Note: two of H5's four claims are already fixed on main (per-mount `createChatScope`;
-  refcounted history patch) — see that file's §E. The still-real remainder is its C1/C2.
-- **Reliability**: H6-style memory bounds already partially addressed via admin-session caps; H6 unbounded per-IP-per-scene activity map and H7 leave-timers-on-deleted-scene still open.
-- **Security**: H9 (unauth Plausible event proxy — rate-limit it; do alongside the `server/plausible.js` extraction), H10 (admin-page `innerHTML` XSS footguns + no CSP/`X-Frame-Options`), H11 (identity secret-mismatch forks ephemeral identity).
-- **Cross-cutting**: C1 (shared protocol contract / message-type constants), C2 (no linter/formatter).
+  H5 is now closed: its stale double-mount/socket-listener claims were re-assessed,
+  and the still-real timer/reconnect-history leftovers are fixed in that file's C1/C2 progress log.
+- **Reliability/Security/Cross-cutting**: H6/H7, H9/H10, and C1/C2 are closed above; H11 is deliberately deferred.

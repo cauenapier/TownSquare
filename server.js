@@ -230,6 +230,7 @@ let BIRD_PERCHES = [];
 let MSG;
 let GESTURE;
 let BIRD_ACTION;
+let CLOSE_REASON;
 // Assigned synchronously from site-config-core.mjs once loadSharedModules()
 // resolves — before server.listen(), so requests never see them unset. (No
 // stub re-implementations: those were a second, divergent source of truth.)
@@ -581,6 +582,16 @@ function ownerHandle(siteKey, browserId) {
   return crypto.createHash("sha256").update(`${siteKey}:${browserId}`).digest("hex").slice(0, 16);
 }
 
+function identityFp(site, identity) {
+  if (!site || !identity) return null;
+  const key = `${site.siteKey}:${identity.browserId}`;
+  if (identity._fpKey !== key) {
+    identity._fpKey = key;
+    identity._fp = ownerHandle(site.siteKey, identity.browserId);
+  }
+  return identity._fp;
+}
+
 // One structured line per genuine new join, for diagnosing bot/abuse patterns
 // from server logs. The browser fingerprint is the same per-site hash the admin
 // editor uses (ownerHandle), so a bot reusing its browserId shows a stable `fp`
@@ -596,7 +607,7 @@ function logJoin(client, identity) {
     scene: client.scene.key,
     name: identity.displayName,
     ip: client.ip,
-    fp: site ? ownerHandle(site.siteKey, identity.browserId) : null,
+    fp: identityFp(site, identity),
     origin: client.origin || null,
     powVerified: Boolean(client.powVerified),
     botProtection: Boolean(site && site.botProtection),
@@ -961,7 +972,7 @@ function pruneIpActivity(now = Date.now()) {
 }
 
 function closeRateLimited(client) {
-  client.ws.close(1008, "rate limited");
+  client.ws.close(1008, CLOSE_REASON.RATE_LIMITED);
 }
 
 function allowIpEvent(client, type, limit) {
@@ -1013,7 +1024,7 @@ function registerFloodAction(client, now = Date.now()) {
   // Kick every live connection from this IP in the scene, not just this one.
   for (const peer of client.scene.clients.values()) {
     if (peer.ip === client.ip && peer.ws.readyState === peer.ws.OPEN) {
-      peer.ws.close(4003, "blocked");
+      peer.ws.close(4003, CLOSE_REASON.BLOCKED);
     }
   }
   return true;
@@ -1155,6 +1166,25 @@ function isPlausibleEventAllowed(ip) {
   return plausibleEventsByIp.take(ip, PLAUSIBLE_EVENTS_PER_HOUR);
 }
 
+const connectionClicksByIp = makeBucketStore();
+const mapClicksByIp = makeBucketStore();
+const sitePresenceReadsByIp = makeBucketStore();
+const CONNECTION_CLICKS_PER_HOUR = readLimit("CONNECTION_CLICKS_PER_HOUR", 600);
+const MAP_CLICKS_PER_HOUR = readLimit("MAP_CLICKS_PER_HOUR", 600);
+const SITE_PRESENCE_READS_PER_HOUR = readLimit("SITE_PRESENCE_READS_PER_HOUR", 600);
+
+function isConnectionClickAllowed(ip) {
+  return connectionClicksByIp.take(ip, CONNECTION_CLICKS_PER_HOUR);
+}
+
+function isMapClickAllowed(ip) {
+  return mapClicksByIp.take(ip, MAP_CLICKS_PER_HOUR);
+}
+
+function isSitePresenceReadAllowed(ip) {
+  return sitePresenceReadsByIp.take(ip, SITE_PRESENCE_READS_PER_HOUR);
+}
+
 const plausible = createPlausibleProxy({
   domain: PLAUSIBLE_DOMAIN,
   upstream: PLAUSIBLE_UPSTREAM,
@@ -1293,6 +1323,11 @@ function handleStats(_req, res) {
  * @param {import("http").ServerResponse} res
  */
 function handleSitePresence(req, res) {
+  if (!isSitePresenceReadAllowed(getRequestIp(req))) {
+    sendPublicJson(res, 429, { error: "rate limited" });
+    return;
+  }
+
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
   const siteKey = url.searchParams.get("siteKey") || "";
 
@@ -1490,7 +1525,7 @@ const ADMIN_ACTIONS = {
     if (identity) {
       logModeration(site, "kick", visitorLogLabel(identity));
       touchSite(site);
-      closeIdentityClients(identity, 4001, "kicked");
+      closeIdentityClients(identity, 4001, CLOSE_REASON.KICKED);
     }
   },
   blockVisitor(site, scene, body) {
@@ -1513,7 +1548,7 @@ const ADMIN_ACTIONS = {
     }
     logModeration(site, "block", visitorLogLabel(identity));
     touchSite(site);
-    closeIdentityClients(identity, 4003, "blocked");
+    closeIdentityClients(identity, 4003, CLOSE_REASON.BLOCKED);
   },
   muteVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -1625,7 +1660,7 @@ const ADMIN_ACTIONS = {
     touchSite(site);
     if (site.disabled) {
       for (const client of Array.from(scene.clients.values())) {
-        client.ws.close(4003, "site disabled");
+        client.ws.close(4003, CLOSE_REASON.SITE_DISABLED);
       }
     }
   },
@@ -1663,6 +1698,7 @@ function handleAdminAction(req, res) {
       const context = (name) => Object.freeze({
         site: pluginSite(site),
         data: getPluginData(site, name),
+        enabled: isPluginEnabledForSite(site, name),
         owners: getOwners(site, scene),
         visitors: getSceneStats(scene, site).visitors,
         setData(value) {
@@ -1874,7 +1910,7 @@ const SERVICE_ADMIN_ACTIONS = {
     site.disabled = Boolean(body.disabled);
     touchSite(site);
     if (site.disabled) {
-      closeSiteScene(site.siteKey, 4003, "site disabled");
+      closeSiteScene(site.siteKey, 4003, CLOSE_REASON.SITE_DISABLED);
     }
     return { site: serviceAdminSite(site) };
   },
@@ -1935,6 +1971,7 @@ function serializeIdentity(identity, options = {}) {
     messages = false,
     clientCount = false,
     badge = false,
+    plugins: includePlugins = true,
   } = options;
   const serialized = {
     id: identity.id,
@@ -1961,6 +1998,7 @@ function serializeIdentity(identity, options = {}) {
   if (messages) {
     serialized.messages = identity.messages;
   }
+  if (!includePlugins) return serialized;
   return plugins.extendVisitor(
     serialized,
     pluginContext(identity.scene?.site || null, { visitor: pluginVisitor(identity) }),
@@ -2013,7 +2051,7 @@ function disconnectInactiveIdentity(identity) {
   if (!identity.joined) return;
   clearLeaveTimer(identity);
   identity.inactiveKick = true;
-  closeIdentityClients(identity, 4001, "inactive");
+  closeIdentityClients(identity, 4001, CLOSE_REASON.INACTIVE);
 }
 
 function sweepInactiveIdentities(now = Date.now()) {
@@ -2103,7 +2141,7 @@ function broadcastReading(scene, identity, options = {}) {
 function emitIdentityState(identity, options = {}) {
   broadcastIdentity(identity.scene, {
     type: MSG.MOVE,
-    ...serializeIdentity(identity, { reading: true }),
+    ...serializeIdentity(identity, { reading: true, plugins: false }),
   }, identity, { exceptConnectionId: options.exceptConnectionId ?? null });
 }
 
@@ -2538,13 +2576,18 @@ let lastSeenUrlSaveAt = 0;
  * @param {import("http").ServerResponse} res
  */
 function handleConnectionClick(req, res) {
+  const respond = (status) => {
+    res.writeHead(status, { "access-control-allow-origin": "*" });
+    res.end();
+  };
+
+  if (!isConnectionClickAllowed(getRequestIp(req))) {
+    respond(429);
+    return;
+  }
+
   readJsonBody(req, res, (body) => {
     // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
-    const respond = (status) => {
-      res.writeHead(status, { "access-control-allow-origin": "*" });
-      res.end();
-    };
-
     const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
     const url = typeof body.url === "string" ? body.url : "";
     const site = sitesByKey.get(siteKey);
@@ -2583,13 +2626,18 @@ function handleConnectionClick(req, res) {
  * @param {import("http").ServerResponse} res
  */
 function handleMapClick(req, res) {
+  const respond = (status) => {
+    res.writeHead(status, { "access-control-allow-origin": "*" });
+    res.end();
+  };
+
+  if (!isMapClickAllowed(getRequestIp(req))) {
+    respond(429);
+    return;
+  }
+
   readJsonBody(req, res, (body) => {
     // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
-    const respond = (status) => {
-      res.writeHead(status, { "access-control-allow-origin": "*" });
-      res.end();
-    };
-
     const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
     const site = sitesByKey.get(siteKey);
     if (!site || site.disabled) {
@@ -2704,7 +2752,7 @@ function pluginVisitor(identity) {
   // Stable per-visitor fingerprint (same hash as ownerHandle), so plugins can
   // key data on a visitor without ever seeing the raw browserId. Matches the
   // `fp` exposed to the admin panel by getSceneStats.
-  const fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
+  const fp = identityFp(site, identity);
   return Object.freeze({
     id: identity.id,
     browserId: identity.browserId,
@@ -2759,7 +2807,7 @@ function getSceneStats(scene, site = null) {
       serialized.hidden = isShadowBlocked(site, identity.browserId);
       // Stable fingerprint so the admin UI / plugin actions can target a
       // specific visitor (e.g. assign a hat) without exposing the browserId.
-      serialized.fp = site ? ownerHandle(site.siteKey, identity.browserId) : null;
+      serialized.fp = identityFp(site, identity);
       return serialized;
     });
 
@@ -2786,10 +2834,10 @@ function validateSiteAccess(reqUrl) {
 
   const site = sitesByKey.get(siteKey);
   if (!site || site.disabled) {
-    return { ok: false, status: 403, reason: "site disabled or unknown" };
+    return { ok: false, status: 403, reason: CLOSE_REASON.SITE_DISABLED_OR_UNKNOWN };
   }
   if (watch && !site.plus) {
-    return { ok: false, status: 403, reason: "plus required" };
+    return { ok: false, status: 403, reason: CLOSE_REASON.PLUS_REQUIRED };
   }
 
   return { ok: true, scene: getScene(site.siteKey, site), site, watch };
@@ -3065,7 +3113,7 @@ function handleInit(client, message) {
   const { scene, site } = client;
 
   if (site && site.blockedBrowserIds.includes(sanitizeBrowserId(message.browserId))) {
-    client.ws.close(4003, "blocked");
+    client.ws.close(4003, CLOSE_REASON.BLOCKED);
     return;
   }
 
@@ -3251,7 +3299,7 @@ function handleProfile(client, message) {
       site: client.site ? client.site.siteKey : null,
       name: displayName,
       ip: client.ip,
-      fp: client.site ? ownerHandle(client.site.siteKey, client.identity.browserId) : null,
+      fp: identityFp(client.site, client.identity),
       origin: client.origin || null,
     }));
   }
@@ -3523,18 +3571,18 @@ wss.on("connection", (ws, req) => {
       : isAllowedOrigin(req.headers.origin, req.headers.host);
 
   if (!originAllowed) {
-    ws.close(4003, "origin not allowed");
+    ws.close(4003, CLOSE_REASON.ORIGIN_NOT_ALLOWED);
     return;
   }
 
   if (access.scene.clients.size >= getConnectionLimit(access.site)) {
-    ws.close(1013, "full");
+    ws.close(1013, CLOSE_REASON.FULL);
     return;
   }
 
   const ip = getRequestIp(req);
   if (isIpQuarantined(access.scene, ip)) {
-    ws.close(1008, "rate limited");
+    ws.close(1008, CLOSE_REASON.RATE_LIMITED);
     return;
   }
 
@@ -3543,7 +3591,7 @@ wss.on("connection", (ws, req) => {
   // cannot evade the block by rotating its client-chosen identity.
   if (access.site && Array.isArray(access.site.blockedIps) && access.site.blockedIps.includes(ip)) {
     console.log(JSON.stringify({ event: "block_ip_reject", at: new Date().toISOString(), site: access.site.siteKey, ip }));
-    ws.close(4003, "blocked");
+    ws.close(4003, CLOSE_REASON.BLOCKED);
     return;
   }
 
@@ -3619,6 +3667,7 @@ async function loadSharedModules() {
   MSG = protocol.MSG;
   GESTURE = protocol.GESTURE;
   BIRD_ACTION = protocol.BIRD_ACTION;
+  CLOSE_REASON = protocol.CLOSE_REASON;
   // Fail loudly at boot if a handler key drifts from the shared vocabulary.
   for (const type of Object.keys(MESSAGE_HANDLERS)) {
     if (!Object.values(MSG).includes(type)) {

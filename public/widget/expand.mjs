@@ -8,13 +8,14 @@
  */
 
 import { setExpandedView } from "./chat.mjs";
+import { isTypingTarget } from "./utils.mjs";
 
 /**
  * @param {{
  *   app: HTMLElement,
  *   expandButton: HTMLButtonElement,
  *   chatScope: import("./chat.mjs").ChatScope,
- *   getAvatars: () => import("./dom.mjs").AvatarView[],
+ *   getAvatars: () => import("./avatar.mjs").AvatarView[],
  *   onChange?: (expanded: boolean) => void,
  * }} options
  * @returns {{ setExpanded: (expanded: boolean) => void, isExpanded: () => boolean, destroy: () => void }}
@@ -45,7 +46,7 @@ export function createExpandController({ app, expandButton, chatScope, getAvatar
 
   const onWindowKeyDown = (event) => {
     if (event.key !== "Escape" || !expanded) return;
-    if (event.target instanceof HTMLInputElement) return;
+    if (isTypingTarget(event.target)) return;
     setExpanded(false);
   };
   window.addEventListener("keydown", onWindowKeyDown);

@@ -7,12 +7,26 @@ Plugins are trusted in-process feature modules. They are registered before
 ## Register a private plugin
 
 ```js
-const { registerPlugin } = require("../TownSquare/server/plugins");
+const pluginEngine = require("../TownSquare/server/plugins");
 const ownerFigure = require("./plugins/owner-figure");
 
+const EXPECTED_PLUGIN_API_VERSION = 1;
+if (pluginEngine.PLUGIN_API_VERSION !== EXPECTED_PLUGIN_API_VERSION) {
+  throw new Error(
+    `Expected TownSquare plugin API v${EXPECTED_PLUGIN_API_VERSION}, ` +
+    `got ${pluginEngine.PLUGIN_API_VERSION ?? "unknown"}`,
+  );
+}
+
+const { registerPlugin } = pluginEngine;
 registerPlugin(ownerFigure);
 require("../TownSquare/server");
 ```
+
+`PLUGIN_API_VERSION` changes only on breaking plugin-contract changes: hook
+names/signatures, context shape, registration rules, or browser module path
+requirements. Private plugin bundles should assert the expected version before
+registering plugins so an incompatible core checkout fails before boot.
 
 Plugin names use lowercase kebab-case and are also their storage and wire-data
 namespace. Browser module paths are same-origin absolute `.mjs` paths. The Plus
@@ -92,9 +106,10 @@ no toggle code lives in the Plus repo. A Plus plugin that omits `label` (like
 
 Each site persists plugin data under `site.plugins[pluginName]`. Admin action
 context exposes the current immutable `data`, `owners`, public `visitors`, and
-`setData(nextData)`. `setData` replaces only that plugin's namespace and saves
-it atomically with the site registry after the action succeeds. Failed actions
-do not retain staged data. Data must be JSON and is limited to 64 KiB per plugin.
+`enabled`, plus `setData(nextData)`. `enabled` is the per-site activation state
+for labelled plugins. `setData` replaces only that plugin's namespace and saves
+it atomically with the site registry after the action succeeds. Failed actions do
+not retain staged data. Data must be JSON and is limited to 64 KiB per plugin.
 
 Browser admin modules call actions through the authenticated core admin API;
 they never receive the admin token:
@@ -121,7 +136,8 @@ are synchronous; the returned promise represents the browser request.
 ## Visitor data and widget modules
 
 `extendVisitor` runs through the single identity serializer used by hello,
-join, movement, profile, and admin visitor snapshots. Its return value is
+join, profile, and admin visitor snapshots. MOVE broadcasts skip visitor plugin
+extension data and the widget keeps the peer's last-known plugin state. Its return value is
 placed under `visitor.plugins[pluginName]`; plugins cannot replace core visitor
 fields or another plugin's namespace.
 

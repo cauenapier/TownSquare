@@ -74,6 +74,9 @@ async function startManagedServer() {
       // Hosted sites default to bot protection; keep PoW cheap in this harness.
       POW_DIFFICULTY_BITS: process.env.POW_DIFFICULTY_BITS || "1",
       AUTH_FAILURES_PER_HOUR: process.env.AUTH_FAILURES_PER_HOUR || "5",
+      CONNECTION_CLICKS_PER_HOUR: process.env.CONNECTION_CLICKS_PER_HOUR || "2",
+      MAP_CLICKS_PER_HOUR: process.env.MAP_CLICKS_PER_HOUR || "2",
+      SITE_PRESENCE_READS_PER_HOUR: process.env.SITE_PRESENCE_READS_PER_HOUR || "4",
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
@@ -858,6 +861,52 @@ async function getSitePresence(siteKey = "") {
   const body = await response.json();
   assert(response.ok, body.error || "site presence request failed");
   return body;
+}
+
+async function assertPublicEndpointRateLimits() {
+  const connectionLimit = Number(process.env.CONNECTION_CLICKS_PER_HOUR || 600);
+  const mapLimit = Number(process.env.MAP_CLICKS_PER_HOUR || 600);
+  const presenceLimit = Number(process.env.SITE_PRESENCE_READS_PER_HOUR || 600);
+  if (connectionLimit > 10 || mapLimit > 10 || presenceLimit > 10) return;
+
+  const postBeacon = (pathname, ip) => fetch(`${HTTP_ORIGIN}${pathname}`, {
+    method: "POST",
+    headers: {
+      "content-type": "text/plain",
+      "x-real-ip": ip,
+    },
+    body: JSON.stringify({ siteKey: "missing-site", url: "https://example.com/" }),
+  });
+
+  const assertLimited = async ({ pathname, ip, limit, expectedStatus }) => {
+    for (let index = 0; index < limit; index += 1) {
+      const response = await postBeacon(pathname, ip);
+      assert(response.status === expectedStatus, `${pathname} throttled before its public budget`);
+    }
+    const throttled = await postBeacon(pathname, ip);
+    assert(throttled.status === 429, `${pathname} did not throttle over its public budget`);
+  };
+
+  await assertLimited({
+    pathname: "/api/connection-click",
+    ip: "198.51.100.10",
+    limit: connectionLimit,
+    expectedStatus: 204,
+  });
+  await assertLimited({
+    pathname: "/api/map-click",
+    ip: "198.51.100.11",
+    limit: mapLimit,
+    expectedStatus: 204,
+  });
+
+  const presenceUrl = new URL("/api/site-presence", HTTP_ORIGIN);
+  for (let index = 0; index < presenceLimit; index += 1) {
+    const response = await fetch(presenceUrl, { headers: { "x-real-ip": "198.51.100.12" } });
+    assert(response.ok, "site presence throttled before its public budget");
+  }
+  const throttledPresence = await fetch(presenceUrl, { headers: { "x-real-ip": "198.51.100.12" } });
+  assert(throttledPresence.status === 429, "site presence did not throttle over its public budget");
 }
 
 async function serviceAdminApi(pathname, payload = {}) {
@@ -1721,6 +1770,7 @@ async function main() {
     minMessages: statsBeforeChat.messages + 1,
   });
   assert(statsAfterChat.messages === statsBeforeChat.messages + 1, "stats.messages did not increment after chat");
+  await assertPublicEndpointRateLimits();
 
   siteAVisitor.ws.send(JSON.stringify({
     type: "reading",
@@ -1755,6 +1805,9 @@ async function run() {
   if (!external) {
     if (!process.env.POW_DIFFICULTY_BITS) process.env.POW_DIFFICULTY_BITS = "1";
     if (!process.env.AUTH_FAILURES_PER_HOUR) process.env.AUTH_FAILURES_PER_HOUR = "5";
+    if (!process.env.CONNECTION_CLICKS_PER_HOUR) process.env.CONNECTION_CLICKS_PER_HOUR = "2";
+    if (!process.env.MAP_CLICKS_PER_HOUR) process.env.MAP_CLICKS_PER_HOUR = "2";
+    if (!process.env.SITE_PRESENCE_READS_PER_HOUR) process.env.SITE_PRESENCE_READS_PER_HOUR = "4";
   }
   const cleanup = external ? null : await startManagedServer();
   try {

@@ -2,8 +2,8 @@
 
 Deep review of the embeddable widget (`public/townsquare.mjs`, `public/widget/`,
 `public/shared/`) performed 2026-07-02. This is a work order for a follow-up
-agent: each item has a location, the evidence, and the intended change. Nothing
-here has been applied yet.
+agent: each item has a location, the evidence, and the intended change. Progress
+is logged at the end of this file; items not listed there remain unapplied.
 
 Baseline at review time: `npm run lint` clean, `npm test` 49/49 pass.
 Complements `docs/tech-debt.md` (items H2/H3/H5 there overlap; see §E for
@@ -268,9 +268,11 @@ H5 bundles four claims; two are already fixed on main:
 - Reconnect "socket listener leak": largely obsolete — each closed socket is
   dropped and its listeners GC with it; `destroy()` clears `reconnectTimer` and
   closes the live socket. No action needed.
-- **Still real:** the timer leaks — tracked here as **C1**.
+- ~~Still real: the timer leaks — tracked here as C1.~~ → fixed in the
+  2026-07-02 step-3 batch; see the progress log below.
 
-Suggested edit: mark H5 🟡 with a pointer to this file's C1/C2.
+Suggested edit is now applied: H5 is ✅ in `docs/tech-debt.md` because C1/C2
+landed after the stale claims were re-assessed.
 
 ---
 
@@ -421,3 +423,18 @@ After each step: `npm run check && npm run lint && npm test`; after steps 3-5
 also `npm run smoke`; after anything visual, `scripts/widget-shots.mjs`
 before/after screenshots. Update `docs/tech-debt.md` rows H2/H3/H5 as they
 land, and log progress in this file.
+
+## Implementation progress
+
+| Date | Item(s) | Notes |
+|------|---------|-------|
+| 2026-07-02 | A3, A5, A6, A9, A12, C7 ✅ | First mechanical batch landed: pose-clearing now uses `clearPresencePose`, mount-mode/siteKey derivations live on `ctx`, socket sends go through `sendToServer`, chat stack/history caps are factored, bird get-or-create paths share `ensureBird`, and documented typedef/JSDoc drift was corrected. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), and `npm run smoke`. |
+| 2026-07-02 | A1, A2, A4, C3 ✅ | Solver/state dedup batch landed: bubble columns and name labels now share `solveClusters`, presence field assignment/rendering is centralized, MOVE frames skip full profile DOM refresh unless profile-ish fields changed, and connections/message-board modals share `openWidgetModal`. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), `npm run smoke`, and `scripts/widget-shots.mjs` (no console errors or horizontal overflow). |
+| 2026-07-02 | C1, C2, C4, C5, F1, F2, F3, G4 ✅ | Lifecycle/security batch landed: avatar/chat timers are cleared on peer removal and destroy, reconnect `HELLO` reseeds self history without duplicates, expanded Escape uses the shared typing-target guard, touch pointer capture is guarded, PoW challenges are clamped/cancellable, counter polling skips hidden tabs and aborts hung fetches, and public click/presence endpoints are per-IP throttled with smoke assertions. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), and `npm run smoke`. |
+| 2026-07-02 | A7, A8 ✅ | Config unification batch landed: live socket config and handle `updateConfig` now share `applyConfig`, and initial scene/style setup goes through the same `refreshScene` path used by later scene changes. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), `npm run smoke`, and `scripts/widget-shots.mjs` (no console errors or horizontal overflow). |
+| 2026-07-02 | B1, B2, B3, B4 ✅ | Structural split batch landed: `dom.mjs` is now a compatibility barrel over shell/avatar/gesture modules, `mountTownSquare` delegates keyboard inset and quiet-mode logic while teardown uses collected disposers, client message routing uses a handler table, and WS close reasons live in shared protocol constants used by both client and server. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), `npm run smoke`, and `scripts/widget-shots.mjs` (no console errors or horizontal overflow). |
+| 2026-07-02 | A10, A11, B5, F4 ✅ | Idle-cleanup batch landed: scene count/prose helpers iterate `[...SCENE_FIELDS, SCENE_BIRDS_FIELD]` and guard position logic on `positionsKey` (birds no longer copy-pasted); `bindStyleColorFields`/`syncStyleColorFields` share a `forEachStyleControl` iterator; the j/h/t keydown shortcuts are table-driven behind one modifier guard; and the color sanitizer rejects `url(`-shaped palette tokens via `isSafeColorValue`. Validated with `npm run check`, `npm run lint`, `npm test` (49/49). |
+| 2026-07-02 | G1, G2, G3 ✅ | Performance batch landed: `bubble-layout.mjs` now runs one measure phase then one write phase per frame via `layoutStage` (all widths read up front, both passes write with no intervening reads); the game loop pauses via an `IntersectionObserver` on the shell when scrolled offscreen and resumes on return (`wireGameLoop`); and avatars position via a compositor `translateX(--avatar-x · 1cqw)` transform instead of `left`, with jump/high-five keyframes composing on the shared `--avatar-pos`. Verified: `scripts/widget-shots.mjs` before/after parity (overflow 0, label metrics within crowd noise, 0 console errors); a rAF-counting probe confirmed the loop pauses offscreen (34→0→30 fps) and resumes; and a positional probe confirmed transform placement is pixel-identical to `left` (0.00px centre error) with jumps holding horizontal position. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), `npm run smoke`. |
+| 2026-07-02 | D1 partial, D2 won't-do | `layoutStage` no longer re-spreads the already-merged config each frame (safe part of D1). The rest of D1 is **won't-do**: caching the merged config by `ctx.options.layout` identity would freeze the dev scene's live sliders, which mutate `tuning.layout` **in place** (`public/dev/dev-scene.mjs:44,289`) and rely on `layoutConfigFor` re-reading it every frame — the review missed that interaction. The per-frame `presences` array is left as-is (cheap, and caching it is correctness-sensitive when peers join/leave). **D2** stays note-only by design (prop scans are fine at the ≤16 cap; revisit only if scenes grow). |
+
+Every item now has a disposition: A/B/C/E/F/G implemented and verified; D1's safe part done with the caching sub-part consciously declined (dev-tuning conflict); D2 note-only. Nothing actionable remains open.

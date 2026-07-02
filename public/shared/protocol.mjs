@@ -42,3 +42,16 @@ export const BIRD_ACTION = Object.freeze({
   SPAWN: "spawn",
   FLEE: "flee",
 });
+
+/** WebSocket close reason strings shared by server and client reconnect logic. */
+export const CLOSE_REASON = Object.freeze({
+  KICKED: "kicked",
+  BLOCKED: "blocked",
+  INACTIVE: "inactive",
+  SITE_DISABLED: "site disabled",
+  SITE_DISABLED_OR_UNKNOWN: "site disabled or unknown",
+  ORIGIN_NOT_ALLOWED: "origin not allowed",
+  PLUS_REQUIRED: "plus required",
+  RATE_LIMITED: "rate limited",
+  FULL: "full",
+});

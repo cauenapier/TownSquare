@@ -7,6 +7,7 @@
  */
 
 import { MAX_X, MIN_X } from "./constants.mjs";
+import { openWidgetModal } from "./modal.mjs";
 import { CONNECTION_SIDES, connectionsBySide, hostnameLabel } from "../shared/site-config.mjs";
 
 /**
@@ -137,34 +138,18 @@ export function openConnectionsModal(ctx, side) {
   // The admin/customization preview mounts the real widget. Opening a town there
   // should not navigate the owner away from their own page mid-configuration, so
   // links open in a new tab instead of travelling in place.
-  const newTab = ctx.options.preview === true || ctx.options.simulate === true;
+  const newTab = ctx.localOnly;
 
-  const overlay = document.createElement("div");
-  overlay.className = "townsquare-connections";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", `Towns to the ${SIDE_LABELS[side]}`);
-
-  const backdrop = document.createElement("div");
-  backdrop.className = "townsquare-connections__backdrop";
-
-  const panel = document.createElement("div");
-  panel.className = "townsquare-connections__panel";
-
-  const head = document.createElement("div");
-  head.className = "townsquare-connections__head";
-
-  const title = document.createElement("span");
-  title.className = "townsquare-connections__title";
-  title.textContent = `Towns to the ${SIDE_LABELS[side]}`;
-
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "townsquare-connections__close";
-  close.setAttribute("aria-label", "Close");
-  close.textContent = "×";
-
-  head.append(title, close);
+  const title = `Towns to the ${SIDE_LABELS[side]}`;
+  const modal = openWidgetModal(ctx, {
+    className: "townsquare-connections",
+    ariaLabel: title,
+    title,
+    trigger: ctx.signposts?.[side] || null,
+    onClose: () => {
+      ctx.connectionsModal = null;
+    },
+  });
 
   const list = document.createElement("ul");
   list.className = "townsquare-connections__list";
@@ -200,24 +185,10 @@ export function openConnectionsModal(ctx, side) {
     list.appendChild(item);
   }
 
-  panel.append(head, list);
-  overlay.append(backdrop, panel);
-
-  const onKeyDown = (event) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      closeConnectionsModal(ctx);
-    }
-  };
-
-  backdrop.addEventListener("click", () => closeConnectionsModal(ctx));
-  close.addEventListener("click", () => closeConnectionsModal(ctx));
-  window.addEventListener("keydown", onKeyDown, true);
-
-  ctx.app.appendChild(overlay);
+  modal.panel.appendChild(list);
   // Return focus to the signpost on close (matters when opened via the keyboard).
-  ctx.connectionsModal = { overlay, onKeyDown, trigger: ctx.signposts?.[side] || null };
-  close.focus();
+  ctx.connectionsModal = modal;
+  modal.closeButton.focus();
 }
 
 /**
@@ -226,10 +197,7 @@ export function openConnectionsModal(ctx, side) {
 export function closeConnectionsModal(ctx) {
   const modal = ctx.connectionsModal;
   if (!modal) return;
-  window.removeEventListener("keydown", modal.onKeyDown, true);
-  modal.overlay.remove();
-  ctx.connectionsModal = null;
-  if (modal.trigger?.isConnected) modal.trigger.focus();
+  modal.close();
 }
 
 /**
@@ -241,13 +209,12 @@ export function closeConnectionsModal(ctx) {
  * @param {string} url Destination town the visitor is travelling to.
  */
 function reportConnectionClick(ctx, url) {
-  const siteKey = ctx.options.siteKey || ctx.root?.dataset?.townsquareSiteKey || "";
-  if (!siteKey || !ctx.serverOrigin || typeof navigator?.sendBeacon !== "function") return;
+  if (!ctx.siteKey || !ctx.serverOrigin || typeof navigator?.sendBeacon !== "function") return;
 
   try {
     // A text/plain body keeps this a CORS-simple request (no preflight); the
     // server parses it as JSON regardless of the declared content type.
-    const payload = new Blob([JSON.stringify({ siteKey, url })], { type: "text/plain" });
+    const payload = new Blob([JSON.stringify({ siteKey: ctx.siteKey, url })], { type: "text/plain" });
     navigator.sendBeacon(`${ctx.serverOrigin}/api/connection-click`, payload);
   } catch {
     // Tracking is best-effort and must never block the visit.

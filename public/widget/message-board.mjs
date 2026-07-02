@@ -15,6 +15,7 @@ import {
   messageBoardSignature,
   setMessageBoardRead,
 } from "./utils.mjs";
+import { openWidgetModal } from "./modal.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -88,8 +89,7 @@ function renderBoard(ctx, prop) {
 function refreshUnreadBadge(ctx) {
   const state = ctx.messageBoard;
   if (!state) return;
-  const siteKey = ctx.options.siteKey || ctx.root?.dataset?.townsquareSiteKey || "";
-  const unread = getMessageBoardRead(siteKey) !== state.signature;
+  const unread = getMessageBoardRead(ctx.siteKey) !== state.signature;
   state.button.classList.toggle("townsquare-board--unread", unread);
 }
 
@@ -103,60 +103,29 @@ export function openMessageBoardModal(ctx) {
 
   const { board } = state;
 
-  const overlay = document.createElement("div");
-  overlay.className = "townsquare-board-modal";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", board.title || "Message board");
-  if (board.accent) overlay.style.setProperty("--board-accent", board.accent);
-
-  const backdrop = document.createElement("div");
-  backdrop.className = "townsquare-board-modal__backdrop";
-
-  const panel = document.createElement("div");
-  panel.className = "townsquare-board-modal__panel";
-
-  const head = document.createElement("div");
-  head.className = "townsquare-board-modal__head";
-
-  const title = document.createElement("span");
-  title.className = "townsquare-board-modal__title";
-  title.textContent = board.title || "Message board";
-
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "townsquare-board-modal__close";
-  close.setAttribute("aria-label", "Close");
-  close.textContent = "×";
-
-  head.append(title, close);
+  const title = board.title || "Message board";
+  const modal = openWidgetModal(ctx, {
+    className: "townsquare-board-modal",
+    ariaLabel: title,
+    title,
+    trigger: state.button,
+    onClose: () => {
+      state.modal = null;
+    },
+  });
+  if (board.accent) modal.overlay.style.setProperty("--board-accent", board.accent);
 
   const bodyEl = document.createElement("p");
   bodyEl.className = "townsquare-board-modal__body";
   // Preserve the owner's line breaks; textContent keeps the message inert (no HTML).
   bodyEl.textContent = board.body;
 
-  panel.append(head, bodyEl);
-  overlay.append(backdrop, panel);
-
-  const onKeyDown = (event) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      closeMessageBoardModal(ctx);
-    }
-  };
-
-  backdrop.addEventListener("click", () => closeMessageBoardModal(ctx));
-  close.addEventListener("click", () => closeMessageBoardModal(ctx));
-  window.addEventListener("keydown", onKeyDown, true);
-
-  ctx.app.appendChild(overlay);
-  state.modal = { overlay, onKeyDown, trigger: state.button };
-  close.focus();
+  modal.panel.appendChild(bodyEl);
+  state.modal = modal;
+  modal.closeButton.focus();
 
   // Opening the board counts as reading the message it currently shows.
-  const siteKey = ctx.options.siteKey || ctx.root?.dataset?.townsquareSiteKey || "";
-  setMessageBoardRead(siteKey, state.signature);
+  setMessageBoardRead(ctx.siteKey, state.signature);
   refreshUnreadBadge(ctx);
 }
 
@@ -166,10 +135,7 @@ export function openMessageBoardModal(ctx) {
 export function closeMessageBoardModal(ctx) {
   const modal = ctx.messageBoard?.modal;
   if (!modal) return;
-  window.removeEventListener("keydown", modal.onKeyDown, true);
-  modal.overlay.remove();
-  ctx.messageBoard.modal = null;
-  if (modal.trigger?.isConnected) modal.trigger.focus();
+  modal.close();
 }
 
 /**
