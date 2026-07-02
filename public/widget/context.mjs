@@ -105,9 +105,9 @@
  * @property {HTMLElement} [cloudLayer]
  * @property {{ left: Array<import("../shared/site-config.mjs").Connection>, right: Array<import("../shared/site-config.mjs").Connection> } | null} [connectionsBySide]
  * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]
- * @property {{ overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void, trigger: HTMLButtonElement | null } | null} [connectionsModal]
+ * @property {import("./modal.mjs").WidgetModal | null} [connectionsModal]
  * @property {"left"|"right"|null} [nearSide] Edge whose signpost the avatar can currently activate.
- * @property {{ board: import("../shared/site-config.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: { overlay: HTMLElement, onKeyDown: (event: KeyboardEvent) => void, trigger: HTMLButtonElement | null } | null } | null} [messageBoard]
+ * @property {{ board: import("../shared/site-config.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: import("./modal.mjs").WidgetModal | null } | null} [messageBoard]
  * @property {{ scene: boolean, style: boolean, connections: boolean, messageBoard: boolean }} [inlineConfig] Which config fields the host pinned inline (power-user overrides that live updates must not touch).
  * @property {(config?: { scene?: unknown, styleConfig?: Record<string, unknown>, connections?: unknown, messageBoard?: unknown }) => void} [applyLiveConfig] Apply server-pushed config, honouring inline overrides.
  */

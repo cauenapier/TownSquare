@@ -28,6 +28,20 @@ function ownerSetupHint(id) {
  * @typedef {import("./context.mjs").PeerState} PeerState
  */
 
+const PRESENCE_STRING_FIELDS = [
+  "displayName",
+  "color",
+  "badgeColor",
+  "readingLabel",
+  "readingUrl",
+];
+
+const PRESENCE_BOOLEAN_FIELDS = [
+  "readingActive",
+  "isOwner",
+];
+const PRESENCE_PROFILE_FIELDS = [...PRESENCE_STRING_FIELDS, ...PRESENCE_BOOLEAN_FIELDS, "plugins"];
+
 /**
  * @param {WidgetContext} ctx
  * @param {string | null} message
@@ -109,22 +123,61 @@ export function removePeer(ctx, id) {
 }
 
 /**
+ * @param {import("./context.mjs").SelfState | PeerState} presence
+ * @param {Record<string, any>} state
+ * @param {Array<string>} [fields]
+ * @returns {boolean} Whether profile-ish fields changed and need a profile render.
+ */
+function assignPresenceState(presence, state, fields = PRESENCE_PROFILE_FIELDS) {
+  let changed = false;
+  for (const field of PRESENCE_STRING_FIELDS) {
+    if (!fields.includes(field)) continue;
+    if (typeof state[field] !== "string" || presence[field] === state[field]) continue;
+    presence[field] = state[field];
+    changed = true;
+  }
+  for (const field of PRESENCE_BOOLEAN_FIELDS) {
+    if (!fields.includes(field)) continue;
+    if (typeof state[field] !== "boolean" || presence[field] === state[field]) continue;
+    presence[field] = state[field];
+    changed = true;
+  }
+  if (fields.includes("plugins") && state.plugins && typeof state.plugins === "object" && presence.plugins !== state.plugins) {
+    presence.plugins = state.plugins;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
  * @param {WidgetContext} ctx
- * @param {{ x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} state
+ * @param {import("./context.mjs").SelfState | PeerState} presence
+ * @param {number} previousX
+ * @param {{ profileChanged: boolean, faceOnMove?: boolean }} options
+ */
+function renderPresence(ctx, presence, previousX, { profileChanged, faceOnMove = true }) {
+  renderAvatar(presence.avatar, presence.x);
+  if (profileChanged) {
+    setAvatarProfile(presence.avatar, presence);
+  }
+  if (faceOnMove && presence.x !== previousX) {
+    setFacing(presence.avatar, presence.x < previousX);
+  }
+  updatePose(presence.avatar, presence.pose);
+  updatePropEffects(presence.avatar, presence.x, presence.propId, ctx.sceneProps);
+  ctx.widgetPlugins?.renderPresence(presence);
+}
+
+/**
+ * @param {WidgetContext} ctx
+ * @param {{ x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, isOwner?: boolean, plugins?: Record<string, any> }} state
  */
 export function applySelfState(ctx, state) {
   const previousX = ctx.self.x;
   ctx.self.x = state.x;
   ctx.self.pose = state.pose || null;
   ctx.self.propId = state.propId || null;
-  if (typeof state.displayName === "string") ctx.self.displayName = state.displayName;
-  if (typeof state.color === "string") ctx.self.color = state.color;
-  if (typeof state.badgeColor === "string") ctx.self.badgeColor = state.badgeColor;
-  if (typeof state.readingLabel === "string") ctx.self.readingLabel = state.readingLabel;
-  if (typeof state.readingUrl === "string") ctx.self.readingUrl = state.readingUrl;
-  if (typeof state.readingActive === "boolean") ctx.self.readingActive = state.readingActive;
-  if (typeof state.isOwner === "boolean") ctx.self.isOwner = state.isOwner;
-  if (state.plugins && typeof state.plugins === "object") ctx.self.plugins = state.plugins;
+  const profileChanged = assignPresenceState(ctx.self, state);
   if (ctx.self.pose) {
     // The server snapped us onto a seat; abandon any pending tap destination.
     ctx.self.targetX = null;
@@ -132,19 +185,12 @@ export function applySelfState(ctx, state) {
   ctx.self.settleRequested = false;
   ctx.self.settlePropId = null;
   ctx.self.propZoneEnteredAt = 0;
-  renderAvatar(ctx.self.avatar, ctx.self.x);
-  setAvatarProfile(ctx.self.avatar, ctx.self);
-  if (ctx.self.x !== previousX) {
-    setFacing(ctx.self.avatar, ctx.self.x < previousX);
-  }
-  updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
-  ctx.widgetPlugins?.renderPresence(ctx.self);
+  renderPresence(ctx, ctx.self, previousX, { profileChanged });
 }
 
 /**
  * @param {WidgetContext} ctx
- * @param {{ id: string, x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} peerState
+ * @param {{ id: string, x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, isOwner?: boolean, plugins?: Record<string, any> }} peerState
  * @returns {PeerState}
  */
 export function applyPeerState(ctx, peerState) {
@@ -154,22 +200,8 @@ export function applyPeerState(ctx, peerState) {
   peer.x = peerState.x;
   peer.pose = peerState.pose || null;
   peer.propId = peerState.propId || null;
-  if (typeof peerState.displayName === "string") peer.displayName = peerState.displayName;
-  if (typeof peerState.color === "string") peer.color = peerState.color;
-  if (typeof peerState.badgeColor === "string") peer.badgeColor = peerState.badgeColor;
-  if (typeof peerState.readingLabel === "string") peer.readingLabel = peerState.readingLabel;
-  if (typeof peerState.readingUrl === "string") peer.readingUrl = peerState.readingUrl;
-  if (typeof peerState.readingActive === "boolean") peer.readingActive = peerState.readingActive;
-  if (typeof peerState.isOwner === "boolean") peer.isOwner = peerState.isOwner;
-  if (peerState.plugins && typeof peerState.plugins === "object") peer.plugins = peerState.plugins;
-  renderAvatar(peer.avatar, peer.x);
-  setAvatarProfile(peer.avatar, peer);
-  if (hadPeer && peer.x !== previousX) {
-    setFacing(peer.avatar, peer.x < previousX);
-  }
-  updatePose(peer.avatar, peer.pose);
-  updatePropEffects(peer.avatar, peer.x, peer.propId, ctx.sceneProps);
-  ctx.widgetPlugins?.renderPresence(peer);
+  const profileChanged = assignPresenceState(peer, peerState);
+  renderPresence(ctx, peer, previousX, { profileChanged, faceOnMove: hadPeer });
   return peer;
 }
 
@@ -184,13 +216,11 @@ export function applyPeerState(ctx, peerState) {
 function applyPresenceFields(ctx, state, fields) {
   const presence = state.id === ctx.self.id ? ctx.self : ctx.peers.get(state.id);
   if (!presence) return;
-  for (const field of fields) {
-    const value = state[field];
-    if (typeof value === "string" || typeof value === "boolean") presence[field] = value;
+  const profileChanged = assignPresenceState(presence, state, fields);
+  if (profileChanged) {
+    setAvatarProfile(presence.avatar, presence);
+    ctx.widgetPlugins?.renderPresence(presence);
   }
-  if (state.plugins && typeof state.plugins === "object") presence.plugins = state.plugins;
-  setAvatarProfile(presence.avatar, presence);
-  ctx.widgetPlugins?.renderPresence(presence);
 }
 
 /**
@@ -198,7 +228,7 @@ function applyPresenceFields(ctx, state, fields) {
  * @param {{ id: string, displayName?: string, color?: string, badgeColor?: string, isOwner?: boolean }} profile
  */
 export function applyProfileState(ctx, profile) {
-  applyPresenceFields(ctx, profile, ["displayName", "color", "badgeColor", "isOwner"]);
+  applyPresenceFields(ctx, profile, ["displayName", "color", "badgeColor", "isOwner", "plugins"]);
 }
 
 /**
@@ -206,5 +236,5 @@ export function applyProfileState(ctx, profile) {
  * @param {{ id: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} state
  */
 export function applyReadingState(ctx, state) {
-  applyPresenceFields(ctx, state, ["readingLabel", "readingUrl", "readingActive"]);
+  applyPresenceFields(ctx, state, ["readingLabel", "readingUrl", "readingActive", "plugins"]);
 }

@@ -147,19 +147,20 @@ function clusterLeft(cluster, minLeft, maxRight) {
  * Apply final shifts for one cluster. Past the point where the stage can hold
  * every column side by side, non-overlap is unwinnable — so the cluster
  * compresses: member centres squeeze proportionally until the run spans
- * exactly the stage, trading even partial overlap for keeping every bubble
+ * exactly the stage, trading even partial overlap for keeping every item
  * visible and near its speaker.
  *
  * @param {Cluster} cluster
  * @param {number} minLeft
  * @param {number} maxRight
+ * @param {(column: Column, shift: number) => void} apply
  */
-function placeCluster(cluster, minLeft, maxRight) {
+function placeCluster(cluster, minLeft, maxRight, apply) {
   const left = clusterLeft(cluster, minLeft, maxRight);
   const span = maxRight - minLeft;
   if (cluster.width <= span) {
     for (const item of cluster.items) {
-      applyShift(item.column, left + item.centerOffset - item.column.anchor);
+      apply(item.column, left + item.centerOffset - item.column.anchor);
     }
     return;
   }
@@ -172,7 +173,7 @@ function placeCluster(cluster, minLeft, maxRight) {
   const scale = (span - firstHalf - lastHalf) / Math.max(1, cluster.width - firstHalf - lastHalf);
   for (const item of items) {
     const center = minLeft + firstHalf + (item.centerOffset - firstHalf) * scale;
-    applyShift(item.column, center - item.column.anchor);
+    apply(item.column, center - item.column.anchor);
   }
 }
 
@@ -196,6 +197,40 @@ function mergeClusters(a, b, gap) {
     sumIdealLeft: a.sumIdealLeft + b.sumIdealLeft - b.count * offsetDelta,
     items: a.items.concat(b.items),
   };
+}
+
+/**
+ * Resolve adjacent overlaps by seeding one cluster per column, merging any
+ * cluster that collides with the previous one, then applying final shifts.
+ *
+ * @param {Array<Column>} columns
+ * @param {{ minLeft: number, maxRight: number, gap: number, apply: (column: Column, shift: number) => void }} options
+ */
+function solveClusters(columns, { minLeft, maxRight, gap, apply }) {
+  columns.sort((a, b) => a.anchor - b.anchor);
+
+  /** @type {Array<Cluster>} */
+  const clusters = [];
+  for (const column of columns) {
+    /** @type {Cluster} */
+    let cluster = {
+      width: column.width,
+      count: 1,
+      sumIdealLeft: column.anchor - column.width / 2,
+      items: [{ column, centerOffset: column.width / 2 }],
+    };
+    while (clusters.length > 0) {
+      const previous = clusters[clusters.length - 1];
+      const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
+      if (previousRight + gap <= clusterLeft(cluster, minLeft, maxRight)) break;
+      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster, gap);
+    }
+    clusters.push(cluster);
+  }
+
+  for (const cluster of clusters) {
+    placeCluster(cluster, minLeft, maxRight, apply);
+  }
 }
 
 /**
@@ -309,33 +344,12 @@ export function layoutBubbleColumns(stage, presences, selfX, config) {
   }
   if (columns.length === 0) return;
 
-  columns.sort((a, b) => a.anchor - b.anchor);
-
-  // Classic 1D label placement: seed one cluster per column, and while a new
-  // cluster would overlap the one before it, merge them. Each merge re-centres
-  // the group on the mean of its anchors, which can cascade further left.
-  /** @type {Array<Cluster>} */
-  const clusters = [];
-  for (const column of columns) {
-    /** @type {Cluster} */
-    let cluster = {
-      width: column.width,
-      count: 1,
-      sumIdealLeft: column.anchor - column.width / 2,
-      items: [{ column, centerOffset: column.width / 2 }],
-    };
-    while (clusters.length > 0) {
-      const previous = clusters[clusters.length - 1];
-      const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
-      if (previousRight + cfg.columnGap <= clusterLeft(cluster, minLeft, maxRight)) break;
-      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster, cfg.columnGap);
-    }
-    clusters.push(cluster);
-  }
-
-  for (const cluster of clusters) {
-    placeCluster(cluster, minLeft, maxRight);
-  }
+  solveClusters(columns, {
+    minLeft,
+    maxRight,
+    gap: cfg.columnGap,
+    apply: applyShift,
+  });
 }
 
 /**
@@ -362,35 +376,6 @@ function setLabelFade(avatar, fade) {
   if (Math.abs((avatar.labelFade ?? 1) - fade) <= PROMINENCE_EPSILON) return;
   avatar.labelFade = fade;
   avatar.below.style.setProperty("--label-fade", fade.toFixed(3));
-}
-
-/**
- * Apply final shifts for one cluster of name tags. Mirrors placeCluster: a
- * cluster that fits sits at its displacement-minimizing spot; one wider than the
- * stage compresses so its edges land on the stage edges, trading partial overlap
- * for keeping every tag on-screen and near its figure.
- *
- * @param {Cluster} cluster
- * @param {number} minLeft
- * @param {number} maxRight
- */
-function placeLabelCluster(cluster, minLeft, maxRight) {
-  const left = clusterLeft(cluster, minLeft, maxRight);
-  const span = maxRight - minLeft;
-  if (cluster.width <= span) {
-    for (const item of cluster.items) {
-      setLabelShift(item.column.avatar, left + item.centerOffset - item.column.anchor);
-    }
-    return;
-  }
-  const { items } = cluster;
-  const firstHalf = items[0].column.width / 2;
-  const lastHalf = items[items.length - 1].column.width / 2;
-  const scale = (span - firstHalf - lastHalf) / Math.max(1, cluster.width - firstHalf - lastHalf);
-  for (const item of items) {
-    const center = minLeft + firstHalf + (item.centerOffset - firstHalf) * scale;
-    setLabelShift(item.column.avatar, center - item.column.anchor);
-  }
 }
 
 /**
@@ -438,28 +423,10 @@ export function layoutNameLabels(stage, presences, selfX, config) {
   }
   if (columns.length === 0) return;
 
-  columns.sort((a, b) => a.anchor - b.anchor);
-
-  /** @type {Array<Cluster>} */
-  const clusters = [];
-  for (const column of columns) {
-    /** @type {Cluster} */
-    let cluster = {
-      width: column.width,
-      count: 1,
-      sumIdealLeft: column.anchor - column.width / 2,
-      items: [{ column, centerOffset: column.width / 2 }],
-    };
-    while (clusters.length > 0) {
-      const previous = clusters[clusters.length - 1];
-      const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
-      if (previousRight + LABEL_GAP <= clusterLeft(cluster, minLeft, maxRight)) break;
-      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster, LABEL_GAP);
-    }
-    clusters.push(cluster);
-  }
-
-  for (const cluster of clusters) {
-    placeLabelCluster(cluster, minLeft, maxRight);
-  }
+  solveClusters(columns, {
+    minLeft,
+    maxRight,
+    gap: LABEL_GAP,
+    apply: (column, shift) => setLabelShift(column.avatar, shift),
+  });
 }

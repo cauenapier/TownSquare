@@ -7,6 +7,7 @@
  */
 
 import { MAX_X, MIN_X } from "./constants.mjs";
+import { openWidgetModal } from "./modal.mjs";
 import { CONNECTION_SIDES, connectionsBySide, hostnameLabel } from "../shared/site-config.mjs";
 
 /**
@@ -139,32 +140,16 @@ export function openConnectionsModal(ctx, side) {
   // links open in a new tab instead of travelling in place.
   const newTab = ctx.localOnly;
 
-  const overlay = document.createElement("div");
-  overlay.className = "townsquare-connections";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", `Towns to the ${SIDE_LABELS[side]}`);
-
-  const backdrop = document.createElement("div");
-  backdrop.className = "townsquare-connections__backdrop";
-
-  const panel = document.createElement("div");
-  panel.className = "townsquare-connections__panel";
-
-  const head = document.createElement("div");
-  head.className = "townsquare-connections__head";
-
-  const title = document.createElement("span");
-  title.className = "townsquare-connections__title";
-  title.textContent = `Towns to the ${SIDE_LABELS[side]}`;
-
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "townsquare-connections__close";
-  close.setAttribute("aria-label", "Close");
-  close.textContent = "×";
-
-  head.append(title, close);
+  const title = `Towns to the ${SIDE_LABELS[side]}`;
+  const modal = openWidgetModal(ctx, {
+    className: "townsquare-connections",
+    ariaLabel: title,
+    title,
+    trigger: ctx.signposts?.[side] || null,
+    onClose: () => {
+      ctx.connectionsModal = null;
+    },
+  });
 
   const list = document.createElement("ul");
   list.className = "townsquare-connections__list";
@@ -200,24 +185,10 @@ export function openConnectionsModal(ctx, side) {
     list.appendChild(item);
   }
 
-  panel.append(head, list);
-  overlay.append(backdrop, panel);
-
-  const onKeyDown = (event) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      closeConnectionsModal(ctx);
-    }
-  };
-
-  backdrop.addEventListener("click", () => closeConnectionsModal(ctx));
-  close.addEventListener("click", () => closeConnectionsModal(ctx));
-  window.addEventListener("keydown", onKeyDown, true);
-
-  ctx.app.appendChild(overlay);
+  modal.panel.appendChild(list);
   // Return focus to the signpost on close (matters when opened via the keyboard).
-  ctx.connectionsModal = { overlay, onKeyDown, trigger: ctx.signposts?.[side] || null };
-  close.focus();
+  ctx.connectionsModal = modal;
+  modal.closeButton.focus();
 }
 
 /**
@@ -226,10 +197,7 @@ export function openConnectionsModal(ctx, side) {
 export function closeConnectionsModal(ctx) {
   const modal = ctx.connectionsModal;
   if (!modal) return;
-  window.removeEventListener("keydown", modal.onKeyDown, true);
-  modal.overlay.remove();
-  ctx.connectionsModal = null;
-  if (modal.trigger?.isConnected) modal.trigger.focus();
+  modal.close();
 }
 
 /**
