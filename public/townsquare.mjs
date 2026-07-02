@@ -168,6 +168,52 @@ function refreshScene(ctx, sceneConfig) {
 }
 
 /**
+ * @param {import("./widget/context.mjs").WidgetContext} ctx
+ * @param {{ scene?: unknown, style?: MountOptions["style"], styleConfig?: Record<string, any>, connections?: unknown, messageBoard?: unknown }} patch
+ * @param {{ respectInline?: boolean, sendSceneConfig?: boolean }} [options]
+ */
+function applyConfig(ctx, patch = {}, { respectInline = false, sendSceneConfig = false } = {}) {
+  const inline = respectInline ? ctx.inlineConfig : {};
+
+  if (patch.scene !== undefined && !inline.scene) {
+    const sceneConfig = sanitizeSceneConfig(patch.scene);
+    ctx.options = { ...ctx.options, scene: sceneConfig };
+    refreshScene(ctx, sceneConfig);
+    if (sendSceneConfig && !ctx.preview && !ctx.siteKey) {
+      sendToServer(ctx, MSG.SCENE_CONFIG, { sceneConfig });
+    }
+  }
+
+  if (patch.style && !inline.style) {
+    ctx.options = { ...ctx.options, style: patch.style };
+    applySiteStyle(ctx.root, patch.style);
+  }
+
+  // Livestream overlay: the site's appearance palette (with any overlay-only
+  // overrides already merged server-side) arrives over the socket, since the
+  // overlay page carries no pasted style snippet. Pick the palette for the
+  // active theme and write it inline. A power-user inline `style` still wins.
+  if (patch.styleConfig && !inline.style) {
+    const mode = resolveStyleMode(ctx.root, ctx.options);
+    const palette = patch.styleConfig[mode] || patch.styleConfig.dark || patch.styleConfig.light;
+    if (palette) {
+      ctx.options = { ...ctx.options, style: palette };
+      applySiteStyle(ctx.root, palette);
+    }
+  }
+
+  if (patch.connections !== undefined && !inline.connections) {
+    ctx.options = { ...ctx.options, connections: patch.connections };
+    setupConnections(ctx);
+  }
+
+  if (patch.messageBoard !== undefined && !inline.messageBoard) {
+    ctx.options = { ...ctx.options, messageBoard: patch.messageBoard };
+    setupMessageBoard(ctx);
+  }
+}
+
+/**
  * Mount a TownSquare widget into any host page.
  *
  * The host page provides a DOM node. TownSquare owns scene rendering, input,
@@ -213,9 +259,6 @@ export function mountTownSquare(root, options = {}) {
   const serverDrivenScene = Boolean(siteKey) && !localOnly;
   const initialScene = options.scene
     || (serverDrivenScene ? EMPTY_SCENE_CONFIG : DEFAULT_SCENE_CONFIG);
-  const sceneConfig = sanitizeSceneConfig(initialScene);
-  const sceneProps = buildSceneProps(sceneConfig);
-  const birdPerches = buildBirdPerches(sceneProps);
   const browserId = getBrowserId();
   const profile = getStoredProfile();
   const { readingLabel, readingUrl } = readCurrentPage(root, options);
@@ -247,15 +290,6 @@ export function mountTownSquare(root, options = {}) {
     toolbar,
   } = renderShell(root);
 
-  // Only write palette tokens inline when the host explicitly passes `style`
-  // (e.g. the live registration/admin preview). Otherwise leave theming to the
-  // cascade — tokens.css defaults plus any host stylesheet rules on
-  // #townsquare-root — so inline styles never beat host CSS.
-  if (options.style) {
-    applySiteStyle(root, options.style);
-  }
-  renderProps(stage, sceneProps);
-
   /** @type {import("./widget/context.mjs").WidgetContext} */
   const ctx = {
     root,
@@ -272,9 +306,9 @@ export function mountTownSquare(root, options = {}) {
     browserId,
     peers,
     chat: chatScope,
-    sceneProps,
-    propsById: new Map(sceneProps.map((prop) => [prop.id, prop])),
-    birdPerchesById: new Map(birdPerches.map((perch) => [perch.id, perch])),
+    sceneProps: [],
+    propsById: new Map(),
+    birdPerchesById: new Map(),
     app,
     stage,
     statusRowEl: statusRow,
@@ -352,6 +386,9 @@ export function mountTownSquare(root, options = {}) {
   };
 
   ctx.widgetPlugins = createWidgetPluginRuntime(ctx);
+  // Initial scene/style setup uses the same path as later config updates. Run it
+  // before appending the self avatar so prop rendering stays behind figures.
+  applyConfig(ctx, { scene: initialScene, style: options.style });
 
   const expandController = createExpandController({
     app,
@@ -443,36 +480,9 @@ export function mountTownSquare(root, options = {}) {
     updateStatus(ctx);
   }
 
-  // Apply config the server pushes live (in `hello` and on owner edits). Each
-  // field is honoured only when the host did not pin it inline — an inline value
-  // is a power-user override that stays in the host's control.
-  ctx.applyLiveConfig = ({ scene, styleConfig, connections, messageBoard } = {}) => {
-    if (scene !== undefined && !ctx.inlineConfig.scene) {
-      const sceneConfig = sanitizeSceneConfig(scene);
-      ctx.options = { ...ctx.options, scene: sceneConfig };
-      refreshScene(ctx, sceneConfig);
-    }
-    // Livestream overlay: the site's appearance palette (with any overlay-only
-    // overrides already merged server-side) arrives over the socket, since the
-    // overlay page carries no pasted style snippet. Pick the palette for the
-    // active theme and write it inline. A power-user inline `style` still wins.
-    if (styleConfig && !ctx.inlineConfig.style) {
-      const mode = resolveStyleMode(root, ctx.options);
-      const palette = styleConfig[mode] || styleConfig.dark || styleConfig.light;
-      if (palette) {
-        ctx.options = { ...ctx.options, style: palette };
-        applySiteStyle(root, palette);
-      }
-    }
-    if (connections !== undefined && !ctx.inlineConfig.connections) {
-      ctx.options = { ...ctx.options, connections };
-      setupConnections(ctx);
-    }
-    if (messageBoard !== undefined && !ctx.inlineConfig.messageBoard) {
-      ctx.options = { ...ctx.options, messageBoard };
-      setupMessageBoard(ctx);
-    }
-  };
+  // Apply config the server pushes live (in `hello` and on owner edits). Inline
+  // values are power-user overrides that stay in the host's control.
+  ctx.applyLiveConfig = (config = {}) => applyConfig(ctx, config, { respectInline: true });
 
   if (!localOnly) {
     wireSocket(ctx);
@@ -489,26 +499,7 @@ export function mountTownSquare(root, options = {}) {
   return {
     ctx,
     updateConfig({ scene, style, connections, messageBoard } = {}) {
-      if (scene) {
-        const sceneConfig = sanitizeSceneConfig(scene);
-        ctx.options = { ...ctx.options, scene: sceneConfig };
-        refreshScene(ctx, sceneConfig);
-        if (!ctx.preview && !ctx.siteKey) {
-          sendToServer(ctx, MSG.SCENE_CONFIG, { sceneConfig });
-        }
-      }
-      if (style) {
-        ctx.options = { ...ctx.options, style };
-        applySiteStyle(root, style);
-      }
-      if (connections !== undefined) {
-        ctx.options = { ...ctx.options, connections };
-        setupConnections(ctx);
-      }
-      if (messageBoard !== undefined) {
-        ctx.options = { ...ctx.options, messageBoard };
-        setupMessageBoard(ctx);
-      }
+      applyConfig(ctx, { scene, style, connections, messageBoard }, { sendSceneConfig: true });
     },
     destroy() {
       ctx.disposed = true;
