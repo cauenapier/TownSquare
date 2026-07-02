@@ -2,7 +2,7 @@
  * WebSocket wire-up and server message routing for the widget runtime.
  */
 
-import { recordMessage, sayMessage } from "./chat.mjs";
+import { recordMessage, sayMessage, setHistory } from "./chat.mjs";
 import { applyBirdFlee, applyBirdSpawn, syncBirdsFromHello } from "./birds.mjs";
 import { clearPresencePose, needsStandUp, playHighFivePair, playJump, playRaisedHand, setWalking } from "./dom.mjs";
 import {
@@ -155,8 +155,14 @@ export function wireSocket(ctx) {
       // replays our init and proceeds to the normal hello.
       if (message.type === MSG.CHALLENGE) {
         if (typeof message.salt !== "string" || typeof message.difficulty !== "number") return;
-        solveChallenge({ salt: message.salt, difficulty: message.difficulty }).then((nonce) => {
+        ctx.challenge?.cancel();
+        const challenge = solveChallenge({ salt: message.salt, difficulty: message.difficulty });
+        ctx.challenge = challenge;
+        challenge.promise.then((nonce) => {
+          if (ctx.challenge === challenge) ctx.challenge = null;
           sendToSocket(socket, MSG.SOLVE, { nonce });
+        }).catch(() => {
+          if (ctx.challenge === challenge) ctx.challenge = null;
         });
         return;
       }
@@ -171,6 +177,7 @@ export function wireSocket(ctx) {
           applySelfState(ctx, message);
           // Backlog seeds the hover tray only — it never pops a live bubble, so a
           // refresh doesn't replay everyone's last messages into the scene.
+          setHistory(self.avatar, []);
           for (const recent of message.messages || []) {
             recordMessage(self.avatar, recent);
           }
@@ -328,6 +335,8 @@ export function wireSocket(ctx) {
 
       const wasJoined = Boolean(self.id);
       self.id = null;
+      ctx.challenge?.cancel();
+      ctx.challenge = null;
       clearTimeout(ctx.typingTimer);
       ctx.typingTimer = null;
       self.typing = false;

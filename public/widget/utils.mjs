@@ -15,6 +15,17 @@ import {
 } from "./constants.mjs";
 
 /**
+ * @param {EventTarget | null} target
+ * @returns {boolean}
+ */
+export function isTypingTarget(target) {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || Boolean(target instanceof Element && target.closest("[contenteditable]"));
+}
+
+/**
  * Stable per-browser identity used to dedupe visitors across tabs.
  *
  * @returns {string}

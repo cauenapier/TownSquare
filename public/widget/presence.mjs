@@ -4,7 +4,7 @@
 
 import { recordMessage } from "./chat.mjs";
 import { OWNER_SETUP_HASH } from "./constants.mjs";
-import { createAvatar, renderAvatar, setAvatarProfile, setFacing, updatePose, updatePropEffects } from "./dom.mjs";
+import { createAvatar, destroyAvatar, renderAvatar, setAvatarProfile, setFacing, updatePose, updatePropEffects } from "./dom.mjs";
 
 /**
  * When the page URL carries the owner-setup hash, returns a hint telling the
@@ -115,7 +115,8 @@ export function removePeer(ctx, id) {
   const peer = ctx.peers.get(id);
   if (!peer) return;
   clearTimeout(peer.walkTimer);
-  clearTimeout(peer.avatar.awayTimer);
+  peer.walkTimer = null;
+  destroyAvatar(peer.avatar);
   ctx.widgetPlugins?.removePresence(peer);
   peer.avatar.el.remove();
   ctx.peers.delete(id);

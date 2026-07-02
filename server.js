@@ -1155,6 +1155,25 @@ function isPlausibleEventAllowed(ip) {
   return plausibleEventsByIp.take(ip, PLAUSIBLE_EVENTS_PER_HOUR);
 }
 
+const connectionClicksByIp = makeBucketStore();
+const mapClicksByIp = makeBucketStore();
+const sitePresenceReadsByIp = makeBucketStore();
+const CONNECTION_CLICKS_PER_HOUR = readLimit("CONNECTION_CLICKS_PER_HOUR", 600);
+const MAP_CLICKS_PER_HOUR = readLimit("MAP_CLICKS_PER_HOUR", 600);
+const SITE_PRESENCE_READS_PER_HOUR = readLimit("SITE_PRESENCE_READS_PER_HOUR", 600);
+
+function isConnectionClickAllowed(ip) {
+  return connectionClicksByIp.take(ip, CONNECTION_CLICKS_PER_HOUR);
+}
+
+function isMapClickAllowed(ip) {
+  return mapClicksByIp.take(ip, MAP_CLICKS_PER_HOUR);
+}
+
+function isSitePresenceReadAllowed(ip) {
+  return sitePresenceReadsByIp.take(ip, SITE_PRESENCE_READS_PER_HOUR);
+}
+
 const plausible = createPlausibleProxy({
   domain: PLAUSIBLE_DOMAIN,
   upstream: PLAUSIBLE_UPSTREAM,
@@ -1293,6 +1312,11 @@ function handleStats(_req, res) {
  * @param {import("http").ServerResponse} res
  */
 function handleSitePresence(req, res) {
+  if (!isSitePresenceReadAllowed(getRequestIp(req))) {
+    sendPublicJson(res, 429, { error: "rate limited" });
+    return;
+  }
+
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
   const siteKey = url.searchParams.get("siteKey") || "";
 
@@ -2538,13 +2562,18 @@ let lastSeenUrlSaveAt = 0;
  * @param {import("http").ServerResponse} res
  */
 function handleConnectionClick(req, res) {
+  const respond = (status) => {
+    res.writeHead(status, { "access-control-allow-origin": "*" });
+    res.end();
+  };
+
+  if (!isConnectionClickAllowed(getRequestIp(req))) {
+    respond(429);
+    return;
+  }
+
   readJsonBody(req, res, (body) => {
     // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
-    const respond = (status) => {
-      res.writeHead(status, { "access-control-allow-origin": "*" });
-      res.end();
-    };
-
     const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
     const url = typeof body.url === "string" ? body.url : "";
     const site = sitesByKey.get(siteKey);
@@ -2583,13 +2612,18 @@ function handleConnectionClick(req, res) {
  * @param {import("http").ServerResponse} res
  */
 function handleMapClick(req, res) {
+  const respond = (status) => {
+    res.writeHead(status, { "access-control-allow-origin": "*" });
+    res.end();
+  };
+
+  if (!isMapClickAllowed(getRequestIp(req))) {
+    respond(429);
+    return;
+  }
+
   readJsonBody(req, res, (body) => {
     // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
-    const respond = (status) => {
-      res.writeHead(status, { "access-control-allow-origin": "*" });
-      res.end();
-    };
-
     const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
     const site = sitesByKey.get(siteKey);
     if (!site || site.disabled) {

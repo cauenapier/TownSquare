@@ -137,6 +137,7 @@ function capGhostStack(avatar, max) {
     const dropped = avatar.messages.shift();
     if (!dropped) break;
     clearTimeout(dropped.timer);
+    clearTimeout(dropped.removeTimer);
     dropped.el.remove();
   }
 }
@@ -145,7 +146,7 @@ function capGhostStack(avatar, max) {
  * @param {AvatarView} avatar
  * @param {Array<{ text: string, at: number }>} entries
  */
-function setHistory(avatar, entries) {
+export function setHistory(avatar, entries) {
   avatar.history = entries;
   avatar.trayList.replaceChildren(...avatar.history.map(createTrayRow));
   avatar.el.classList.toggle("townsquare-avatar--has-history", avatar.history.length > 0);
@@ -160,8 +161,14 @@ function setHistory(avatar, entries) {
 function expire(avatar, message) {
   const index = avatar.messages.indexOf(message);
   if (index !== -1) avatar.messages.splice(index, 1);
+  avatar.expiringMessages.push(message);
   message.el.classList.add("townsquare-avatar__bubble--expiring");
-  setTimeout(() => message.el.remove(), FADE_MS);
+  message.removeTimer = setTimeout(() => {
+    const expiringIndex = avatar.expiringMessages.indexOf(message);
+    if (expiringIndex !== -1) avatar.expiringMessages.splice(expiringIndex, 1);
+    message.removeTimer = null;
+    message.el.remove();
+  }, FADE_MS);
   renderGhostStack(avatar);
 }
 
@@ -197,7 +204,7 @@ export function sayMessage(avatar, message) {
   avatar.above.appendChild(el);
 
   /** @type {GhostMessage} */
-  const entry = { el, solid: true, timer: null };
+  const entry = { el, solid: true, timer: null, removeTimer: null };
   avatar.messages.push(entry);
 
   // If lines pile up faster than they fade, cap the stack by dropping the oldest.

@@ -268,9 +268,11 @@ H5 bundles four claims; two are already fixed on main:
 - Reconnect "socket listener leak": largely obsolete — each closed socket is
   dropped and its listeners GC with it; `destroy()` clears `reconnectTimer` and
   closes the live socket. No action needed.
-- **Still real:** the timer leaks — tracked here as **C1**.
+- ~~Still real: the timer leaks — tracked here as C1.~~ → fixed in the
+  2026-07-02 step-3 batch; see the progress log below.
 
-Suggested edit: mark H5 🟡 with a pointer to this file's C1/C2.
+Suggested edit is now applied: H5 is ✅ in `docs/tech-debt.md` because C1/C2
+landed after the stale claims were re-assessed.
 
 ---
 
@@ -428,3 +430,4 @@ land, and log progress in this file.
 |------|---------|-------|
 | 2026-07-02 | A3, A5, A6, A9, A12, C7 ✅ | First mechanical batch landed: pose-clearing now uses `clearPresencePose`, mount-mode/siteKey derivations live on `ctx`, socket sends go through `sendToServer`, chat stack/history caps are factored, bird get-or-create paths share `ensureBird`, and documented typedef/JSDoc drift was corrected. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), and `npm run smoke`. |
 | 2026-07-02 | A1, A2, A4, C3 ✅ | Solver/state dedup batch landed: bubble columns and name labels now share `solveClusters`, presence field assignment/rendering is centralized, MOVE frames skip full profile DOM refresh unless profile-ish fields changed, and connections/message-board modals share `openWidgetModal`. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), `npm run smoke`, and `scripts/widget-shots.mjs` (no console errors or horizontal overflow). |
+| 2026-07-02 | C1, C2, C4, C5, F1, F2, F3, G4 ✅ | Lifecycle/security batch landed: avatar/chat timers are cleared on peer removal and destroy, reconnect `HELLO` reseeds self history without duplicates, expanded Escape uses the shared typing-target guard, touch pointer capture is guarded, PoW challenges are clamped/cancellable, counter polling skips hidden tabs and aborts hung fetches, and public click/presence endpoints are per-IP throttled with smoke assertions. Validated with `npm run check`, `npm run lint`, `npm test` (49/49), and `npm run smoke`. |

@@ -16,6 +16,7 @@ import { createExpandController } from "./widget/expand.mjs";
 import { MSG } from "./shared/protocol.mjs";
 import {
   createAvatar,
+  destroyAvatar,
   renderAvatar,
   renderProps,
   renderShell,
@@ -335,6 +336,7 @@ export function mountTownSquare(root, options = {}) {
       : new WebSocket(socketUrl),
     reconnectTimer: null,
     typingTimer: null,
+    challenge: null,
     quiet: false,
     expanded: false,
     disposed: false,
@@ -532,8 +534,20 @@ export function mountTownSquare(root, options = {}) {
       expandController.destroy();
       clearTimeout(ctx.reconnectTimer);
       ctx.reconnectTimer = null;
+      ctx.challenge?.cancel();
+      ctx.challenge = null;
       clearTimeout(ctx.typingTimer);
       ctx.typingTimer = null;
+      clearTimeout(ctx.cooldownHintTimer);
+      ctx.cooldownHintTimer = null;
+      clearTimeout(ctx.self.walkTimer);
+      ctx.self.walkTimer = null;
+      destroyAvatar(ctx.self.avatar);
+      for (const peer of ctx.peers.values()) {
+        clearTimeout(peer.walkTimer);
+        peer.walkTimer = null;
+        destroyAvatar(peer.avatar);
+      }
       ctx.socket.close();
       root.replaceChildren();
     },

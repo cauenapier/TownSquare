@@ -30,7 +30,7 @@ Status legend: 🔴 not started · 🟡 in progress · ✅ done · ⏭️ deferr
 ### Reliability / leaks
 | # | Item | Location | Status |
 |---|------|----------|--------|
-| H5 | Widget lifecycle leftovers: timer cleanup and reconnect self-history duplication remain; earlier double-mount chat/history-patch claims are fixed and the socket-listener leak was re-assessed | `docs/widget-review-2026-07-02.md` C1/C2/E | 🟡 |
+| H5 | Widget lifecycle leftovers closed: timer cleanup and reconnect self-history duplication fixed; earlier double-mount chat/history-patch claims are fixed and the socket-listener leak was re-assessed | `docs/widget-review-2026-07-02.md` C1/C2/E | ✅ |
 | H6 | Unbounded in-memory growth — per-IP-per-scene activity map and scenes never bounded (leak + rate-limit-state amplification) | `server.js:968-1010` | ✅ (activity map) |
 | H7 | Leave timers fire against deleted scenes — not cleared on site/scene deletion or shutdown | `server.js:3050-3053` | ✅ |
 
@@ -96,12 +96,12 @@ safe — then T5/T4 (boot-crash + auth), T3, then the structural splits (H1, H4)
 
 ## Not yet started (from the audit)
 - **Server H1 (remaining extractions)** — see the H1 row above.
-- **Widget**: H2 (`dom.mjs` 968-line god module / `createAvatar`), H3 (`mountTownSquare` god function + teardown), H5 (reconnect socket/listener leaks; double-mount unsafe via module-level `chat.mjs` state + unrestored `history.pushState`), plus the per-bubble/per-avatar timer leaks.
+- **Widget**: H2 (`dom.mjs` 968-line god module / `createAvatar`) and H3 (`mountTownSquare` god function + teardown).
   ⤷ Superseded in detail by the 2026-07-02 widget review: `docs/widget-review-2026-07-02.md`
   (full work order incl. dedup items A1-A12, splits B1-B5, lifecycle fixes C1-C7,
   security F1-F4, performance G1-G4).
-  Note: two of H5's four claims are already fixed on main (per-mount `createChatScope`;
-  refcounted history patch) — see that file's §E. The still-real remainder is its C1/C2.
+  H5 is now closed: its stale double-mount/socket-listener claims were re-assessed,
+  and the still-real timer/reconnect-history leftovers are fixed in that file's C1/C2 progress log.
 - **Reliability**: H6-style memory bounds already partially addressed via admin-session caps; H6 unbounded per-IP-per-scene activity map and H7 leave-timers-on-deleted-scene still open.
 - **Security**: H9 (unauth Plausible event proxy — rate-limit it; do alongside the `server/plausible.js` extraction), H10 (admin-page `innerHTML` XSS footguns + no CSP/`X-Frame-Options`), H11 (identity secret-mismatch forks ephemeral identity).
 - **Cross-cutting**: C1 (shared protocol contract / message-type constants), C2 (no linter/formatter).

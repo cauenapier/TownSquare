@@ -11,6 +11,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLElement} el Bubble element living in the `above` stack.
  * @property {boolean} solid Whether this is the live (un-faded) bubble.
  * @property {ReturnType<typeof setTimeout> | null} timer This line's own fade-out timer.
+ * @property {ReturnType<typeof setTimeout> | null} [removeTimer] Timer removing a faded bubble from the DOM.
  */
 
 /**
@@ -18,6 +19,7 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLElement} el
  * @property {HTMLElement} above Container holding the ghost stack of bubbles.
  * @property {Array<GhostMessage>} messages Newest last; the live bubble is at the end.
+ * @property {Array<GhostMessage>} expiringMessages Bubbles removed from the stack but still fading in the DOM.
  * @property {HTMLElement} tray Hover surface listing recent history.
  * @property {HTMLElement} trayList Container the history rows render into.
  * @property {Array<{ text: string, at: number }>} history Recent messages, newest last.
@@ -346,6 +348,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     el,
     above,
     messages: [],
+    expiringMessages: [],
     tray,
     trayList,
     history: [],
@@ -947,6 +950,37 @@ export function updatePropEffects(avatar, x, propId, props = []) {
     "townsquare-avatar--lit",
     props.some((prop) => prop.lightRadius && Math.abs(x - prop.x) < prop.lightRadius),
   );
+}
+
+/**
+ * Clear timers owned by one avatar. DOM removal stays with callers so this can
+ * be used both for peers leaving and for whole-widget teardown.
+ *
+ * @param {AvatarView} avatar
+ */
+export function destroyAvatar(avatar) {
+  clearTimeout(avatar.jumpTimer);
+  clearTimeout(avatar.raisedHandTimer);
+  clearTimeout(avatar.highFiveTimer);
+  clearTimeout(avatar.awayTimer);
+  avatar.jumpTimer = null;
+  avatar.raisedHandTimer = null;
+  avatar.highFiveTimer = null;
+  avatar.awayTimer = null;
+  for (const message of avatar.messages) {
+    clearTimeout(message.timer);
+    clearTimeout(message.removeTimer);
+    message.timer = null;
+    message.removeTimer = null;
+  }
+  for (const message of avatar.expiringMessages) {
+    clearTimeout(message.timer);
+    clearTimeout(message.removeTimer);
+    message.timer = null;
+    message.removeTimer = null;
+  }
+  avatar.messages = [];
+  avatar.expiringMessages = [];
 }
 
 /**

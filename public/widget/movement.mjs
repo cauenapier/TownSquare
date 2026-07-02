@@ -9,6 +9,7 @@ import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
 import { MSG, GESTURE } from "../shared/protocol.mjs";
 import { clamp } from "./math.mjs";
 import { sendToServer } from "./protocol.mjs";
+import { isTypingTarget } from "./utils.mjs";
 import {
   clearPresencePose,
   needsStandUp,
@@ -132,17 +133,6 @@ const JUMP_COOLDOWN_MS = JUMP_MS;
 const HIGH_FIVE_COOLDOWN_MS = 360;
 const SWIPE_THRESHOLD_PX = 12;
 const SWIPE_CLICK_SUPPRESSION_MS = 500;
-
-/**
- * @param {EventTarget | null} target
- * @returns {boolean}
- */
-function isTypingTarget(target) {
-  return target instanceof HTMLInputElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLSelectElement
-    || Boolean(target instanceof Element && target.closest("[contenteditable]"));
-}
 
 /**
  * @param {WidgetContext} ctx
@@ -385,7 +375,11 @@ export function wireStagePointer(ctx) {
     if (rect.width <= 0) return;
     if (!swipe.dragging) {
       swipe.dragging = true;
-      ctx.stage.setPointerCapture(event.pointerId);
+      try {
+        ctx.stage.setPointerCapture(event.pointerId);
+      } catch {
+        // The browser may have already taken over the touch gesture.
+      }
     }
     ctx.self.targetX = clampSelfX(swipe.startX + deltaX / rect.width);
   };

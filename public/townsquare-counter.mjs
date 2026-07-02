@@ -23,6 +23,7 @@ import { normalizeAbsoluteOrigin } from "./shared/url.mjs";
 const STYLE_ID = "townsquare-counter-style";
 const DEFAULT_POLL_MS = 20000;
 const MIN_POLL_MS = 5000;
+const POLL_TIMEOUT_MS = 10000;
 const WIDGET_ROOT_SELECTOR = "#townsquare-root";
 
 /** Built-in looks. Each is just a class; every value behind them is a CSS var. */
@@ -251,7 +252,8 @@ export function mountTownSquareCounter(root, options = {}) {
   const fetchCount = async () => {
     if (disposed || inFlight) return;
     const controller = new AbortController();
-    inFlight = controller;
+    const timeout = setTimeout(() => controller.abort(), POLL_TIMEOUT_MS);
+    inFlight = { controller, timeout };
     try {
       const res = await fetch(endpoint.href, { signal: controller.signal });
       if (!res.ok) {
@@ -266,7 +268,8 @@ export function mountTownSquareCounter(root, options = {}) {
     } catch {
       // Network error or aborted poll: keep the last rendered value.
     } finally {
-      if (inFlight === controller) inFlight = null;
+      clearTimeout(timeout);
+      if (inFlight?.controller === controller) inFlight = null;
     }
   };
 
@@ -278,7 +281,9 @@ export function mountTownSquareCounter(root, options = {}) {
   document.addEventListener("visibilitychange", onVisibility);
 
   fetchCount();
-  pollTimer = setInterval(fetchCount, pollMs);
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === "visible") fetchCount();
+  }, pollMs);
 
   return {
     refresh: fetchCount,
@@ -286,7 +291,10 @@ export function mountTownSquareCounter(root, options = {}) {
       disposed = true;
       clearInterval(pollTimer);
       pollTimer = null;
-      inFlight?.abort();
+      if (inFlight) {
+        clearTimeout(inFlight.timeout);
+        inFlight.controller.abort();
+      }
       inFlight = null;
       document.removeEventListener("visibilitychange", onVisibility);
       root.replaceChildren();

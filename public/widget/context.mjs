@@ -79,6 +79,7 @@
  * @property {ReturnType<import("./plugins.mjs").createWidgetPluginRuntime>} widgetPlugins
  * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
  * @property {ReturnType<typeof setTimeout> | null} typingTimer
+ * @property {ReturnType<import("./pow.mjs").solveChallenge> | null} [challenge]
  * @property {ReturnType<typeof setTimeout> | null} [cooldownHintTimer]
  * @property {HTMLElement} app
  * @property {HTMLElement} stage

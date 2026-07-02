@@ -11,6 +11,8 @@
  * event-loop-yielding loop is the fallback where Workers are unavailable.
  */
 
+export const MAX_CHALLENGE_DIFFICULTY = 24;
+
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -84,19 +86,39 @@ function leadingZeroBits(buffer) {
 }
 
 /**
+ * @param {number} difficulty
+ * @returns {number}
+ */
+function clampDifficulty(difficulty) {
+  if (!Number.isFinite(difficulty)) return 0;
+  return Math.max(0, Math.min(MAX_CHALLENGE_DIFFICULTY, Math.floor(difficulty)));
+}
+
+function challengeCanceledError() {
+  const error = new Error("challenge canceled");
+  error.name = "AbortError";
+  return error;
+}
+
+/**
  * Inline search loop. Used as the fallback when Web Workers are unavailable; it
  * yields to the event loop periodically so the page stays responsive, but the
  * hashing still competes with rendering on the main thread.
  *
  * @param {{salt:string, difficulty:number}} challenge
+ * @param {{ canceled: boolean }} state
  * @returns {Promise<string>}
  */
-async function solveInline({ salt, difficulty }) {
+async function solveInline({ salt, difficulty }, state) {
   const encoder = new TextEncoder();
   for (let nonce = 0; ; nonce++) {
+    if (state.canceled) throw challengeCanceledError();
     const hash = sha256(encoder.encode(`${salt}:${nonce}`));
     if (leadingZeroBits(hash) >= difficulty) return String(nonce);
-    if ((nonce & 0x3fff) === 0x3fff) await new Promise((resolve) => setTimeout(resolve));
+    if ((nonce & 0x3fff) === 0x3fff) {
+      await new Promise((resolve) => setTimeout(resolve));
+      if (state.canceled) throw challengeCanceledError();
+    }
   }
 }
 
@@ -135,16 +157,27 @@ onmessage = (event) => {
 
 /**
  * @param {{salt:string, difficulty:number}} challenge
+ * @param {{ canceled: boolean, worker: Worker | null, reject: ((error: Error | Event) => void) | null }} state
  * @returns {Promise<string>}
  */
-function solveInWorker(challenge) {
+function solveInWorker(challenge, state) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(getWorkerUrl());
+    state.worker = worker;
+    state.reject = reject;
     worker.onmessage = (event) => {
+      if (state.worker === worker) state.worker = null;
+      state.reject = null;
       worker.terminate();
+      if (state.canceled) {
+        reject(challengeCanceledError());
+        return;
+      }
       resolve(String(event.data));
     };
     worker.onerror = (event) => {
+      if (state.worker === worker) state.worker = null;
+      state.reject = null;
       worker.terminate();
       reject(event);
     };
@@ -158,16 +191,36 @@ function solveInWorker(challenge) {
  * back to the inline (main-thread, yielding) loop where Workers aren't available.
  *
  * @param {{salt:string, difficulty:number}} challenge
- * @returns {Promise<string>}
+ * @returns {{ promise: Promise<string>, cancel: () => void }}
  */
-export async function solveChallenge(challenge) {
-  if (workerSupported()) {
-    try {
-      return await solveInWorker(challenge);
-    } catch {
-      // Worker construction or execution failed (e.g. a strict CSP blocking
-      // blob: workers); fall through to the inline solver.
+export function solveChallenge(challenge) {
+  const normalized = {
+    salt: challenge.salt,
+    difficulty: clampDifficulty(challenge.difficulty),
+  };
+  const state = { canceled: false, worker: null, reject: null };
+  const promise = (async () => {
+    if (workerSupported()) {
+      try {
+        return await solveInWorker(normalized, state);
+      } catch (error) {
+        if (state.canceled) throw error;
+        // Worker construction or execution failed (e.g. a strict CSP blocking
+        // blob: workers); fall through to the inline solver.
+      }
     }
-  }
-  return solveInline(challenge);
+    return solveInline(normalized, state);
+  })();
+
+  return {
+    promise,
+    cancel() {
+      if (state.canceled) return;
+      state.canceled = true;
+      state.worker?.terminate();
+      state.worker = null;
+      state.reject?.(challengeCanceledError());
+      state.reject = null;
+    },
+  };
 }
