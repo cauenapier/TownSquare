@@ -62,7 +62,7 @@ import {
  * @property {string} [socketPath="/live"] WebSocket path on the server origin.
  * @property {string} [siteKey] Hosted TownSquare site key. Self-hosted embeds can omit it.
  * @property {{ benches?: number, trees?: number, lamps?: number, branches?: number, benchXs?: number[], treeXs?: number[], lampXs?: number[], branchXs?: number[] }} [scene] Scene prop counts and optional per-prop X positions (0..1).
- * @property {{ scene?: string, page?: string, surface?: string, ink?: string, accent?: string, treeTrunk?: string, treeCanopy?: string, other?: string, ground?: string }} [style] A single flat palette written as inline CSS variables on the mount root. Pass this only when you want JS to own the palette for the current `theme` (e.g. the live preview). Omit it to theme via CSS instead — set the same tokens (`--scene`, `--page`, `--surface`, `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`, `--ground`) on `#townsquare-root` in your own stylesheet; when `style` is absent the widget writes nothing inline so your rules win.
+ * @property {{ sky?: string, groundFill?: string, surface?: string, ink?: string, accent?: string, treeTrunk?: string, treeCanopy?: string, other?: string, groundLine?: string }} [style] A single flat palette written as inline CSS variables on the mount root (legacy keys `scene`, `page`, and `ground` are still read). Pass this only when you want JS to own the palette for the current `theme` (e.g. the live preview). Omit it to theme via CSS instead — set the same tokens (`--scene`, `--ground-fill`, `--surface`, `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`, `--ground-line`; the pre-rename names `--page`/`--ground` still work) on `#townsquare-root` in your own stylesheet; when `style` is absent the widget writes nothing inline so your rules win.
  * @property {string} [readingLabel] Explicit page label. Defaults to the page heading, then document title.
  * @property {string} [readingUrl] Explicit page URL. Defaults to the current browser URL.
  * @property {"auto" | "light" | "dark" | "host"} [theme="auto"] Widget palette. `auto` follows `prefers-color-scheme`; `host` follows common host-page dark mode signals.
@@ -228,8 +228,19 @@ export function mountTownSquare(root, options = {}) {
   // mounts), so two widgets on one page keep independent bubble limits.
   const chatScope = createChatScope();
 
-  const unwatchTheme = applyWidgetTheme(root, resolveWidgetTheme(root, options));
+  const resolvedTheme = resolveWidgetTheme(root, options);
+  const unwatchTheme = applyWidgetTheme(root, resolvedTheme);
   const disposers = [unwatchTheme];
+  // Host embeds theme via pasted CSS variables (--scene/--ground-fill/
+  // --ground-line, or their legacy names --page/--ground) rather
+  // than an inline `style` palette, so nothing else flips on the scene paint.
+  // Mark the surface here so widget.css paints the flat sky/ground from those
+  // variables; the pasted snippet only sets the tokens, never repaints the
+  // stage. (The inline-`style` path — live preview, overlay — sets this in
+  // applySiteStyle instead.)
+  if (resolvedTheme === "host") {
+    root.dataset.townsquareSurface = "";
+  }
   root.replaceChildren();
 
   const {

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare — scene alignment test fixture</title>
+    <link rel="stylesheet" href="/widget.css" />
+    <link rel="stylesheet" href="/page.css" />
+  </head>
+  <body class="dev-page">
+    <main class="dev-shell">
+      <section class="townsquare-host dev-host" aria-label="TownSquare alignment test scene">
+        <div id="townsquare-root"></div>
+      </section>
+    </main>
+
+    <!--
+      Fixture for scripts/scene-alignment-test.mjs: one bench, tree, and lamp at
+      fixed, well-separated positions plus the preview avatar, on a painted
+      surface (style: {} flips data-townsquare-surface), so the test can measure
+      each element's rendered bottom edge against the ground line. Birds are
+      excluded: they perch above ground by design.
+    -->
+    <script type="module">
+      import { mountTownSquare } from "/townsquare.mjs";
+
+      mountTownSquare(document.getElementById("townsquare-root"), {
+        preview: true,
+        style: {},
+        scene: {
+          benches: 1,
+          benchXs: [0.18],
+          trees: 1,
+          treeXs: [0.78],
+          lamps: 1,
+          lampXs: [0.62],
+          birds: 0,
+        },
+      });
+
+      window.__tsAlign = { ready: true };
+    </script>
+  </body>
+</html>

@@ -13,7 +13,7 @@ import {
   STYLE_FIELDS,
   STYLE_MODES,
   STYLE_TRANSPARENT,
-  STYLE_VAR_MAP,
+  paletteVarEntries,
   styleInputName,
   DEFAULT_SITE_STYLE_LIGHT,
   DEFAULT_SITE_STYLE_DARK,
@@ -503,12 +503,10 @@ export function renderScenePositionFields(container, sceneConfig = {}) {
  */
 export function applySiteStyle(root, palette = DEFAULT_SITE_STYLE_LIGHT) {
   const next = sanitizeStylePalette(palette, DEFAULT_SITE_STYLE_LIGHT);
-  for (const [key, cssVar] of STYLE_VAR_MAP) {
-    root.style.setProperty(cssVar, next[key]);
+  // Base tokens, their legacy alias names, and the derived tokens — the same
+  // entries buildSiteCss emits, so the two writers can't drift.
+  for (const [cssVar, value] of paletteVarEntries(next)) {
+    root.style.setProperty(cssVar, value);
   }
-  root.style.setProperty("--scene-edge", "color-mix(in oklab, var(--scene) 88%, var(--page) 12%)");
-  root.style.setProperty("--you-deep", next.accent);
-  root.style.setProperty("--text", next.ink);
-  root.style.setProperty("--muted", next.ink);
   root.dataset.townsquareSurface = "";
 }

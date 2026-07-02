@@ -397,14 +397,8 @@ body {
   min-height: min(68vh, 680px);
   border-top: 1px solid var(--line);
   border-radius: var(--r) var(--r) 0 0;
-  background: linear-gradient(
-    180deg,
-    var(--scene) 0%,
-    var(--scene) 72%,
-    var(--scene-edge) 72%,
-    var(--page) 72.4%,
-    var(--page) 100%
-  );
+  /* Flat sky; the ground is the .walk-ground band below (matches the widget). */
+  background: var(--scene);
   overflow: hidden;
 }
 
@@ -412,18 +406,22 @@ body {
   position: relative;
   z-index: 1;
   width: min(300px, 54vw);
-  aspect-ratio: 20 / 44;
+  aspect-ratio: 20 / 42; /* matches the figure viewBox (figure.mjs) */
   color: var(--you);
   filter: drop-shadow(0 16px 18px rgba(0,0,0,0.12));
 }
 
+/* Ground band filling the bottom of the walk stage, its top border the ground
+   line. Percentage height (this hero stage is fixed-aspect), unlike the widget's
+   px-anchored band. */
 .walk-ground {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 27.6%;
-  height: 1px;
-  background: var(--ground);
+  bottom: 0;
+  height: 27.6%;
+  background: var(--page);
+  border-top: 1px solid var(--ground);
 }
 
 .walk-timeline {

@@ -148,10 +148,12 @@ Notes:
   are present it stays on the light palette so macOS dark mode does not restyle
   the widget on a light page. Omit `theme` to use `auto`, which follows
   `prefers-color-scheme`.
-- To restyle the square, set the palette tokens (`--scene`, `--page`, `--surface`,
-  `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`, `--ground`) on
-  `#townsquare-root` in your own stylesheet. The widget writes no inline palette
-  styles, so your CSS wins. See [Customization](#customization).
+- To restyle the square, set the palette tokens (`--scene`, `--ground-fill`,
+  `--surface`, `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`,
+  `--ground-line`) on `#townsquare-root` in your own stylesheet. The pre-rename
+  names `--page` (ground fill) and `--ground` (ground line) still work. The
+  widget writes no inline palette styles, so your CSS wins. See
+  [Customization](#customization).
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
 
@@ -307,9 +309,12 @@ styles that would fight the host. The admin/register pages generate this
 colors** (scene, connections, and the board do not need this).
 
 The CSS sets these tokens, scoped to `#townsquare-root` for light, explicit dark, and
-`prefers-color-scheme` dark: `--scene` (background), `--page` (ground), `--surface`
+`prefers-color-scheme` dark: `--scene` (sky), `--ground-fill` (ground), `--surface`
 (buttons/tags), `--ink` (text/line work), `--you` (accent), `--tree-trunk`,
-`--tree-canopy`, `--other`, and `--ground`. Advanced owners can edit that block or
+`--tree-canopy`, `--other`, and `--ground-line` (the 1px line where sky meets
+ground). The snippet also emits the pre-rename names `--page` and `--ground` as
+aliases of `--ground-fill`/`--ground-line`, and the widget still reads them, so
+CSS pasted before the rename keeps working. Advanced owners can edit that block or
 write their own rules on the same tokens — the widget writes no inline palette styles
 for hosted embeds, so host CSS always wins.
 

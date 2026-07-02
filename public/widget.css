@@ -30,11 +30,21 @@
   --ts-stage-height: 180px;
   /* Space below the stage for the touch toolbar (see .townsquare__toolbar). */
   --ts-toolbar-reserve: 80px;
-  /* Distance from the stage's bottom edge up to the ground line (see
-     .townsquare__ground). Shared with the sky/ground gradient below so the
-     painted ground never drifts from the actual line, no matter how tall the
-     stage gets (e.g. in expanded mode, where the stage isn't a fixed 180px). */
+  /* The scene's vertical anchor. --ts-ground-offset is the height of the ground
+     band from the stage's bottom edge; the band's 1px top border is the ground
+     line, so the walkable plane is the band's top edge — exactly --ts-ground-offset
+     up. A fixed px so it holds at any stage height, including the tall expanded
+     stage. --ts-ground-level is that same plane, named for what stands on it:
+     every prop/figure is bottom-anchored to it, and every SVG's art is authored
+     to reach its viewBox bottom edge (see the props in site-config-core.mjs and
+     figure.mjs), so element bottom = art baseline = the line, at any scale. The
+     fixed-px stroke rounding (vector-effect: non-scaling-stroke) overlaps the
+     1px line slightly, which is what "standing on the line" looks like. */
   --ts-ground-offset: 52px;
+  --ts-ground-level: var(--ts-ground-offset);
+  /* Bench seat plank height above the plane: plank centerline y=8 in the 18-unit
+     bench art rendered 1:1 px (site-config-core.mjs BENCH_SVG). */
+  --ts-bench-seat-height: 10px;
   position: relative;
   min-height: calc(var(--ts-stage-height) + var(--ts-toolbar-reserve));
   overflow: hidden;
@@ -297,36 +307,42 @@
   container-type: inline-size;
 }
 
+/* The ground: a flat band filling the bottom --ts-ground-offset of the stage,
+   with its top border drawn as the ground line. Anchored to the stage's bottom
+   edge (not a percentage) so it holds its height at any stage height — the
+   default 180px stage and the tall flex-sized expanded stage alike. Painted
+   only when a customization layer is active (preview or pasted site CSS). */
 .townsquare__ground {
   position: absolute;
-  inset: auto 0 var(--ts-ground-offset, 52px);
-  height: 1px;
+  inset: auto 0 0;
+  height: var(--ts-ground-offset);
   background: transparent;
 }
 
-/* Painted scene/ground only when a customization layer is active (preview or pasted site CSS).
-   The split is anchored to --ts-ground-offset (a fixed px distance from the stage's bottom
-   edge, same as .townsquare__ground) rather than a percentage, so the painted ground always
-   meets the actual ground line regardless of stage height (e.g. the tall flex-sized stage in
-   expanded mode). */
+/* Sky and ground are two flat colors: --scene fills the whole stage as the sky,
+   the .townsquare__ground band paints --ground-fill over the bottom on top of
+   it, and the band's top border is the --ground-line where they meet.
+   --page/--ground are the pre-rename token names; the var() fallbacks keep CSS
+   pasted before the rename painting (the stock values also live under those
+   names in tokens.css, so the fallback chain covers the defaults too).
+
+   Painted only when a customization layer is active: the live preview / overlay
+   set data-townsquare-surface via applySiteStyle (with an inline palette), and
+   host embeds set it at mount (see townsquare.mjs) so this paints straight from
+   the palette tokens the site pastes in (buildSiteCss). The palette tokens are
+   the only thing a hosted site pastes — the paint lives here, in one place. */
 #townsquare-root[data-townsquare-surface] .townsquare__stage {
-  background: linear-gradient(
-    180deg,
-    var(--scene) 0%,
-    var(--scene) calc(100% - var(--ts-ground-offset, 52px)),
-    var(--scene-edge) calc(100% - var(--ts-ground-offset, 52px)),
-    var(--page) calc(100% - var(--ts-ground-offset, 52px) + 1px),
-    var(--page) 100%
-  );
+  background: var(--scene);
 }
 
 #townsquare-root[data-townsquare-surface] .townsquare__ground {
-  background: var(--ground);
+  background: var(--ground-fill, var(--page));
+  border-top: 1px solid var(--ground-line, var(--ground));
 }
 
 .townsquare .prop {
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   transform: translateX(-50%);
   color: var(--prop-ink);
   opacity: 0.5;
@@ -351,7 +367,7 @@
 /* Neighbouring-town fingerposts at the stage edges. */
 .townsquare .townsquare-signpost {
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   display: block;
   margin: 0;
   padding: 0;
@@ -444,7 +460,7 @@
 .townsquare .townsquare-board {
   --board-accent: var(--you);
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   transform: translateX(-50%);
   display: block;
   margin: 0;
@@ -738,14 +754,11 @@
   padding: 0 0 var(--ts-toolbar-reserve);
   border-top: 0;
   border-radius: 0;
-  /* Backdrop shown only where the stage doesn't paint — i.e. the sky region when
-     --scene is transparent. Use the sky (--scene), not the ground (--page), so a
-     transparent sky never fills the scene with the ground color; the stage's own
-     gradient still paints the ground strip on top. Canvas is an opaque fallback
-     so expanded mode always covers the host even when --scene is transparent. */
-  background:
-    linear-gradient(var(--scene), var(--scene)),
-    Canvas;
+  /* Opaque backdrop so the fullscreen overlay always covers the host page. The
+     flat stage paints --scene over the whole scene, so this only shows through
+     where --scene is transparent (then reading as neutral Canvas, never the
+     ground color) or behind the docked toolbar. */
+  background: Canvas;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -866,7 +879,7 @@
 .bird {
   position: absolute;
   left: calc(var(--bird-x) * 100%);
-  bottom: calc(53px + var(--bird-lift, 0px));
+  bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px));
   width: 12px;
   height: 8px;
   transform: translateX(-50%);
@@ -960,25 +973,25 @@
 @keyframes bird-arrive {
   from {
     left: calc(var(--bird-from) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px) + 24px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 24px);
     opacity: 0;
   }
 
   25% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 20px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 20px);
   }
 
   50% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 26px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 26px);
   }
 
   75% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 18px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 18px);
   }
 
   to {
     left: calc(var(--bird-to) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px));
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px));
     opacity: 0.45;
   }
 }
@@ -997,17 +1010,17 @@
 @keyframes bird-flee {
   from {
     left: calc(var(--bird-x) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px));
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px));
     opacity: 0.45;
   }
 
   35% {
-    bottom: calc(53px + var(--bird-lift, 0px) + 28px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 28px);
   }
 
   to {
     left: calc((var(--bird-x) + var(--bird-dir, 1) * 0.18) * 100%);
-    bottom: calc(53px + var(--bird-lift, 0px) + 42px);
+    bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 42px);
     opacity: 0;
   }
 }
@@ -1024,7 +1037,7 @@
      --avatar-pos so their hop composes on top of the live position. */
   --avatar-pos: translateX(calc(var(--avatar-x, 50) * 1cqw)) translateX(-50%);
   position: absolute;
-  bottom: 53px;
+  bottom: var(--ts-ground-level);
   left: 0;
   width: 18px;
   height: 46px;
@@ -1181,8 +1194,19 @@
   pointer-events: none;
 }
 
-.townsquare-avatar--sitting { bottom: 44px; }
-.townsquare-avatar--resting { bottom: 42px; }
+/* Pose anchors: each pose sinks the element box below the plane by exactly the
+   distance its lowest rotated foot ends above the box bottom, so the feet stay
+   planted on the ground line while the pose bends the legs. Derived from the
+   figure geometry (figure.mjs, 0.9 px/unit; feet at y=42 = box bottom) and the
+   pose rotations below:
+   - sitting (bench): hip 70–74°, knee −80/−84° → lowest foot at y≈38.3
+     → drop (42 − 38.3) × 0.9 ≈ 3.3px. The hip (torso end, y=26 → 14.4px above
+     the box bottom) then lands 14.4 − 3.3 ≈ 11.1px above the plane, resting on
+     the 10px bench seat plank (--ts-bench-seat-height + half strokes).
+   - resting (under a tree): hip 118/120°, knee −85/−88°, core −10° → lowest
+     foot at y≈33.8 → drop (42 − 33.8) × 0.9 ≈ 7.4px. */
+.townsquare-avatar--sitting { bottom: calc(var(--ts-ground-level) - 3.3px); }
+.townsquare-avatar--resting { bottom: calc(var(--ts-ground-level) - 7.4px); }
 .townsquare-avatar--shaded { --townsquare-avatar-shade-filter: brightness(0.88); }
 .townsquare-avatar--lit {
   --townsquare-avatar-light-filter: drop-shadow(0 0 3px rgba(253, 230, 160, 0.7)) drop-shadow(0 0 6px rgba(253, 230, 160, 0.25));

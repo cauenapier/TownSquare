@@ -4,6 +4,10 @@
  * Joint groups nest so a parent rotation carries its children (hip carries
  * knee, shoulder carries elbow). The pivot points live in widget.css as
  * transform-origins and must match this geometry.
+ *
+ * The viewBox bottom edge (y=42) IS the standing feet: with xMidYMax the art
+ * pins to the element's bottom edge, which the scene anchors on the ground
+ * plane (--ts-ground-level), so the feet touch the ground line at any scale.
  */
 
 /**
@@ -12,7 +16,7 @@
  */
 export function figureMarkup(svgAttributes = "") {
   return `
-    <svg viewBox="0 0 20 44" preserveAspectRatio="xMidYMax meet" ${svgAttributes}>
+    <svg viewBox="0 0 20 42" preserveAspectRatio="xMidYMax meet" ${svgAttributes}>
       <g class="figure-core">
         <circle class="head" cx="10" cy="6.2" r="3.4"></circle>
         <line x1="10" y1="10" x2="10" y2="26"></line>

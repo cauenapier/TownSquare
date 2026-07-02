@@ -302,13 +302,17 @@ async function assertCustomizationPersists() {
   // delivered live over the socket (see the hello payload), not baked here.
   assert(body.embedSnippet.includes(body.site.siteKey), "embed snippet did not include the site key");
   assert(!body.embedSnippet.includes("scene:"), "embed snippet should no longer bake the scene config");
+  // Palette tokens only (current names plus their legacy aliases), never a
+  // stage repaint — the paint lives in widget.css (see server/site-config-css.test.js).
   assert(
     typeof body.styleSnippet === "string"
       && body.styleSnippet.includes("#townsquare-root#townsquare-root")
       && body.styleSnippet.includes('[data-townsquare-theme="dark"]')
       && body.styleSnippet.includes("#ffcc00")
-      && body.styleSnippet.includes(".townsquare__stage"),
-    "style snippet missing the doubled-specificity selector, dark palette, or stage surface rules",
+      && body.styleSnippet.includes("--ground-fill:")
+      && body.styleSnippet.includes("--page:")
+      && !body.styleSnippet.includes(".townsquare__stage"),
+    "style snippet missing the doubled-specificity selector, dark palette, or palette tokens (or it repaints the stage)",
   );
 
   // Legacy flat styleConfig normalizes: flat becomes light, dark falls back to defaults.
@@ -331,6 +335,17 @@ async function assertCustomizationPersists() {
   assert(legacySky.response.ok, legacySky.body.error || "legacy-sky site registration failed");
   assert(legacySky.body.site.styleConfig?.light?.sky === "#abcdef", "legacy `scene` key did not load as light `sky`");
   assert(legacySky.body.site.styleConfig?.dark?.sky === "#123456", "legacy `scene` key did not load as dark `sky`");
+
+  // Likewise for the pre-rename ground keys: `page` loads as `groundFill` and
+  // `ground` as `groundLine`.
+  const legacyGround = await postJson("/api/sites", {
+    name: "Legacy Ground",
+    origin: HTTP_ORIGIN,
+    styleConfig: { light: { page: "#c98a3d", ground: "rgba(0, 0, 0, 0.2)" } },
+  });
+  assert(legacyGround.response.ok, legacyGround.body.error || "legacy-ground site registration failed");
+  assert(legacyGround.body.site.styleConfig?.light?.groundFill === "#c98a3d", "legacy `page` key did not load as `groundFill`");
+  assert(legacyGround.body.site.styleConfig?.light?.groundLine === "rgba(0, 0, 0, 0.2)", "legacy `ground` key did not load as `groundLine`");
 
   const updated = await postJson("/api/admin/action", {
     siteKey: body.site.siteKey,
