@@ -7,6 +7,20 @@
  */
 
 const SAFE_COLOR_RE = /^[#(),.%\sA-Za-z0-9-]+$/;
+
+/**
+ * A palette value is color-safe when it matches the conservative character set
+ * and does not smuggle a `url(...)` token. The character class already blocks
+ * `:`, `/`, `;` and quotes, so no external URL or declaration breakout is
+ * possible, but bare `url(name.png)` would otherwise pass and resolve relative
+ * to the stylesheet — reject it defensively.
+ *
+ * @param {string} value Trimmed candidate (caller enforces the length cap).
+ * @returns {boolean}
+ */
+function isSafeColorValue(value) {
+  return SAFE_COLOR_RE.test(value) && !/url\(/i.test(value);
+}
 export const STYLE_TRANSPARENT = "transparent";
 export const POSITION_INPUT_MIN = 0;
 export const POSITION_INPUT_MAX = 100;
@@ -495,7 +509,7 @@ export function sanitizeMessageBoard(input = {}) {
   let accent = "";
   if (isTransparentStyleValue(rawAccent)) {
     accent = STYLE_TRANSPARENT;
-  } else if (rawAccent && rawAccent.length <= 64 && SAFE_COLOR_RE.test(rawAccent)) {
+  } else if (rawAccent && rawAccent.length <= 64 && isSafeColorValue(rawAccent)) {
     accent = rawAccent;
   }
 
@@ -534,7 +548,7 @@ export function sanitizeStylePalette(input = {}, defaults = DEFAULT_SITE_STYLE_L
       next[key] = STYLE_TRANSPARENT;
       continue;
     }
-    next[key] = value && value.length <= 64 && SAFE_COLOR_RE.test(value) ? value : fallback;
+    next[key] = value && value.length <= 64 && isSafeColorValue(value) ? value : fallback;
   }
   return next;
 }

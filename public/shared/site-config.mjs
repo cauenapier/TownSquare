@@ -34,14 +34,21 @@ import {
 
 export * from "./site-config-core.mjs";
 
+// Every count-bearing scene field, birds included. Positioned fields carry a
+// `positionsKey`; birds are a bare count, so the position logic is guarded on
+// that key rather than special-casing the birds field in each helper.
+const SCENE_COUNT_FIELDS = [...SCENE_FIELDS, SCENE_BIRDS_FIELD];
+
 export function readSceneConfigFromForm(form) {
   const formData = new FormData(form);
   const next = {};
 
-  for (const field of SCENE_FIELDS) {
+  for (const field of SCENE_COUNT_FIELDS) {
     const count = clampInt(formData.get(field.inputName), field.min, field.max, field.defaultValue);
-    const fallbackPositions = selectDefaultPositions(field, count);
     next[field.key] = count;
+    if (!field.positionsKey) continue;
+
+    const fallbackPositions = selectDefaultPositions(field, count);
     next[field.positionsKey] = Array.from({ length: count }, (_, index) => {
       const fallbackPercent = (fallbackPositions[index] ?? 0.5) * 100;
       const percent = clampNumber(
@@ -53,13 +60,6 @@ export function readSceneConfigFromForm(form) {
       return roundPosition(percent / 100);
     });
   }
-
-  next[SCENE_BIRDS_FIELD.key] = clampInt(
-    formData.get(SCENE_BIRDS_FIELD.inputName),
-    SCENE_BIRDS_FIELD.min,
-    SCENE_BIRDS_FIELD.max,
-    SCENE_BIRDS_FIELD.defaultValue,
-  );
 
   return next;
 }
@@ -80,11 +80,12 @@ export function readStyleConfigFromForm(form) {
 }
 
 export function applySceneConfigToForm(form, config = {}) {
-  for (const field of SCENE_FIELDS) {
+  for (const field of SCENE_COUNT_FIELDS) {
     const input = form.elements.namedItem(field.inputName);
     if (input && "value" in input) {
       input.value = String(config[field.key] ?? field.defaultValue);
     }
+    if (!field.positionsKey) continue;
 
     const positions = Array.isArray(config[field.positionsKey]) ? config[field.positionsKey] : [];
     positions.forEach((x, index) => {
@@ -93,11 +94,6 @@ export function applySceneConfigToForm(form, config = {}) {
         positionInput.value = String(roundPercent(x * 100));
       }
     });
-  }
-
-  const birdsInput = form.elements.namedItem(SCENE_BIRDS_FIELD.inputName);
-  if (birdsInput && "value" in birdsInput) {
-    birdsInput.value = String(config[SCENE_BIRDS_FIELD.key] ?? SCENE_BIRDS_FIELD.defaultValue);
   }
 
   syncSceneCountProse(form);
@@ -125,7 +121,7 @@ export function applyConfigToForm(form, config = {}) {
 export function syncSceneCountProse(form) {
   if (!(form instanceof HTMLFormElement)) return;
 
-  for (const field of SCENE_FIELDS) {
+  for (const field of SCENE_COUNT_FIELDS) {
     const input = form.elements.namedItem(field.inputName);
     if (!(input instanceof HTMLInputElement)) continue;
 
@@ -136,17 +132,6 @@ export function syncSceneCountProse(form) {
     const plural = noun.dataset.plural || field.label.toLowerCase();
     const count = Number(input.value);
     noun.textContent = count === 1 ? singular : plural;
-  }
-
-  const birdsInput = form.elements.namedItem(SCENE_BIRDS_FIELD.inputName);
-  if (birdsInput instanceof HTMLInputElement) {
-    const noun = birdsInput.closest(".scene-count")?.querySelector(".scene-count__noun");
-    if (noun instanceof HTMLElement) {
-      const singular = noun.dataset.singular || SCENE_BIRDS_FIELD.itemLabel.toLowerCase();
-      const plural = noun.dataset.plural || SCENE_BIRDS_FIELD.label.toLowerCase();
-      const count = Number(birdsInput.value);
-      noun.textContent = count === 1 ? singular : plural;
-    }
   }
 }
 
@@ -159,20 +144,32 @@ export function bindSceneCountProse(form) {
   prose.dataset.sceneCountBound = "true";
 
   const sync = () => syncSceneCountProse(form);
-  for (const field of SCENE_FIELDS) {
+  for (const field of SCENE_COUNT_FIELDS) {
     const input = form.elements.namedItem(field.inputName);
     if (input instanceof HTMLInputElement) {
       input.addEventListener("input", sync);
     }
   }
-  const birdsInput = form.elements.namedItem(SCENE_BIRDS_FIELD.inputName);
-  if (birdsInput instanceof HTMLInputElement) {
-    birdsInput.addEventListener("input", sync);
-  }
   sync();
 }
 
-export function bindStyleColorFields(form) {
+/**
+ * Walk every bound style color control on the form, resolving the shared
+ * hidden-input / control / picker / clear-button lookup once. Controls without
+ * their hidden input or `.hosted-color-control` wrapper are skipped.
+ *
+ * @param {HTMLFormElement} form
+ * @param {(entry: {
+ *   mode: string,
+ *   field: object,
+ *   fieldDefault: string,
+ *   valueInput: HTMLInputElement,
+ *   control: HTMLElement,
+ *   picker: Element | null,
+ *   clearButton: Element | null,
+ * }) => void} fn
+ */
+function forEachStyleControl(form, fn) {
   if (!(form instanceof HTMLFormElement)) return;
 
   for (const mode of STYLE_MODES) {
@@ -184,54 +181,60 @@ export function bindStyleColorFields(form) {
       const control = valueInput.closest(".hosted-color-control");
       if (!(control instanceof HTMLElement)) continue;
 
-      if (control.dataset.styleColorBound === "true") continue;
-      control.dataset.styleColorBound = "true";
-
       const picker = control.querySelector("[data-style-picker]");
       const clearButton = control.querySelector("[data-style-clear]");
-      const swatch = control.querySelector(".hosted-color-swatch");
-
-      const syncFromValue = () => {
-        syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault });
-      };
-
-      if (picker instanceof HTMLInputElement) {
-        picker.addEventListener("input", () => {
-          valueInput.value = picker.value;
-          syncFromValue();
-          valueInput.dispatchEvent(new Event("input", { bubbles: true }));
-        });
-      }
-
-      if (swatch instanceof HTMLLabelElement) {
-        swatch.addEventListener("click", (event) => {
-          if (!isTransparentStyleValue(valueInput.value)) return;
-          event.preventDefault();
-          valueInput.value = fieldDefault;
-          if (picker instanceof HTMLInputElement) {
-            picker.value = fieldDefault;
-            syncFromValue();
-            picker.click();
-          }
-          valueInput.dispatchEvent(new Event("input", { bubbles: true }));
-        });
-      }
-
-      if (clearButton instanceof HTMLButtonElement) {
-        clearButton.addEventListener("click", () => {
-          const makeTransparent = !isTransparentStyleValue(valueInput.value);
-          valueInput.value = makeTransparent ? STYLE_TRANSPARENT : fieldDefault;
-          if (!makeTransparent && picker instanceof HTMLInputElement) {
-            picker.value = fieldDefault;
-          }
-          syncFromValue();
-          valueInput.dispatchEvent(new Event("input", { bubbles: true }));
-        });
-      }
-
-      syncFromValue();
+      fn({ mode, field, fieldDefault, valueInput, control, picker, clearButton });
     }
   }
+}
+
+export function bindStyleColorFields(form) {
+  forEachStyleControl(form, ({ fieldDefault, valueInput, control, picker, clearButton }) => {
+    if (control.dataset.styleColorBound === "true") return;
+    control.dataset.styleColorBound = "true";
+
+    const swatch = control.querySelector(".hosted-color-swatch");
+
+    const syncFromValue = () => {
+      syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault });
+    };
+
+    if (picker instanceof HTMLInputElement) {
+      picker.addEventListener("input", () => {
+        valueInput.value = picker.value;
+        syncFromValue();
+        valueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    if (swatch instanceof HTMLLabelElement) {
+      swatch.addEventListener("click", (event) => {
+        if (!isTransparentStyleValue(valueInput.value)) return;
+        event.preventDefault();
+        valueInput.value = fieldDefault;
+        if (picker instanceof HTMLInputElement) {
+          picker.value = fieldDefault;
+          syncFromValue();
+          picker.click();
+        }
+        valueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    if (clearButton instanceof HTMLButtonElement) {
+      clearButton.addEventListener("click", () => {
+        const makeTransparent = !isTransparentStyleValue(valueInput.value);
+        valueInput.value = makeTransparent ? STYLE_TRANSPARENT : fieldDefault;
+        if (!makeTransparent && picker instanceof HTMLInputElement) {
+          picker.value = fieldDefault;
+        }
+        syncFromValue();
+        valueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    syncFromValue();
+  });
 }
 
 function syncStyleColorControlUI({ control, valueInput, picker, clearButton }) {
@@ -272,22 +275,9 @@ function syncStyleColorControlUI({ control, valueInput, picker, clearButton }) {
 }
 
 export function syncStyleColorFields(form) {
-  if (!(form instanceof HTMLFormElement)) return;
-
-  for (const mode of STYLE_MODES) {
-    for (const field of STYLE_FIELDS) {
-      const fieldDefault = mode === "dark" ? field.darkValue : field.defaultValue;
-      const valueInput = form.querySelector(`input[type="hidden"][name="${styleInputName(mode, field)}"]`);
-      if (!(valueInput instanceof HTMLInputElement)) continue;
-
-      const control = valueInput.closest(".hosted-color-control");
-      if (!(control instanceof HTMLElement)) continue;
-
-      const picker = control.querySelector("[data-style-picker]");
-      const clearButton = control.querySelector("[data-style-clear]");
-      syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault });
-    }
-  }
+  forEachStyleControl(form, ({ fieldDefault, valueInput, control, picker, clearButton }) => {
+    syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault });
+  });
 }
 
 const STYLE_OVERRIDE_FIELDS = STYLE_FIELDS.filter((field) => field.overrideUI);

@@ -1004,12 +1004,19 @@
   --townsquare-avatar-walk-filter: ;
   --townsquare-avatar-shade-filter: ;
   --townsquare-avatar-light-filter: ;
+  /* Horizontal position rides the compositor: --avatar-x (0–100, set per frame
+     by renderAvatar) is a percentage of the stage width via cqw, and the
+     trailing translateX(-50%) centres the figure on it. Keeping position off
+     `left` means walking never dirties layout. Jump/high-five keyframes reuse
+     --avatar-pos so their hop composes on top of the live position. */
+  --avatar-pos: translateX(calc(var(--avatar-x, 50) * 1cqw)) translateX(-50%);
   position: absolute;
   bottom: 53px;
+  left: 0;
   width: 18px;
   height: 46px;
-  transform: translateX(-50%);
-  transition: left 80ms linear;
+  transform: var(--avatar-pos);
+  transition: transform 80ms linear;
   /* --speak-order: most recent speaker stacks on top when columns must overlap */
   z-index: var(--speak-order, 0);
 }
@@ -1351,10 +1358,10 @@
 }
 
 @keyframes presence-jump {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  12% { transform: translateX(-50%) translateY(1px) scaleY(0.96); }
-  45% { transform: translateX(-50%) translateY(-30px) scaleY(1.03); }
-  78% { transform: translateX(-50%) translateY(-6px); }
+  0%, 100% { transform: var(--avatar-pos) translateY(0); }
+  12% { transform: var(--avatar-pos) translateY(1px) scaleY(0.96); }
+  45% { transform: var(--avatar-pos) translateY(-30px) scaleY(1.03); }
+  78% { transform: var(--avatar-pos) translateY(-6px); }
 }
 
 @keyframes presence-jump-body {
@@ -1421,9 +1428,9 @@
 }
 
 @keyframes presence-high-five-root {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  42% { transform: translateX(-50%) translateY(-2px); }
-  56% { transform: translateX(-50%) translateY(1px); }
+  0%, 100% { transform: var(--avatar-pos) translateY(0); }
+  42% { transform: var(--avatar-pos) translateY(-2px); }
+  56% { transform: var(--avatar-pos) translateY(1px); }
 }
 
 @keyframes presence-high-five-body {

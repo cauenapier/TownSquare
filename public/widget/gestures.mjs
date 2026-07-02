@@ -27,11 +27,17 @@ export function renderProps(container, props = []) {
 }
 
 /**
+ * Position a figure horizontally. Rather than writing `left` (a layout
+ * property that forces a reflow every walking frame), we feed the normalized x
+ * as a `--avatar-x` percentage into a compositor-only `translateX(... * 1cqw)`
+ * (see the `.townsquare-avatar` transform in widget.css), so movement stays off
+ * the layout path.
+ *
  * @param {AvatarView} avatar
  * @param {number} x
  */
 export function renderAvatar(avatar, x) {
-  avatar.el.style.left = `${(x * 100).toFixed(2)}%`;
+  avatar.el.style.setProperty("--avatar-x", (x * 100).toFixed(2));
 }
 
 /**

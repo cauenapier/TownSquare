@@ -27,8 +27,7 @@ import { createWidgetPluginRuntime } from "./widget/plugins.mjs";
 import { renderShell, wireHelpPanel } from "./widget/shell.mjs";
 import {
   closeTrays,
-  startGameLoop,
-  stopGameLoop,
+  wireGameLoop,
   triggerHighFive,
   triggerJump,
   unwireKeyboard,
@@ -432,8 +431,7 @@ export function mountTownSquare(root, options = {}) {
     disposers.push(() => unwireKeyboard(ctx));
     disposers.push(() => unwireStagePointer(ctx));
   }
-  startGameLoop(ctx);
-  disposers.push(() => stopGameLoop(ctx));
+  disposers.push(wireGameLoop(ctx));
   disposers.push(() => closeTrays(ctx));
 
   return {
