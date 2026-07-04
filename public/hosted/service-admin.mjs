@@ -39,6 +39,7 @@ const siteNoMatchesEl = document.getElementById("site-no-matches");
 const trafficFlowsEl = document.getElementById("traffic-flows");
 const platformStatsCardsEl = document.getElementById("platform-stats-cards");
 const visitorTrendChartEl = document.getElementById("visitor-trend-chart");
+const messageTrendChartEl = document.getElementById("message-trend-chart");
 const verifiedTrendChartEl = document.getElementById("verified-trend-chart");
 const topSitesListEl = document.getElementById("top-sites-list");
 const dormantSitesListEl = document.getElementById("dormant-sites-list");
@@ -82,6 +83,9 @@ const TABLE_COLUMNS = [
   { key: "lastSeenAt", label: "Last seen", render: (site) => formatTime(site.lastSeenAt) },
   { key: "lastSeenUrl", label: "Last URL", link: true, render: (site) => site.lastSeenUrl || "" },
   { key: "messageCount", label: "Messages", render: (site) => String(site.messageCount ?? 0) },
+  { key: "messagesDaily", label: "Msgs today", render: (site) => String(site.messageStats?.daily ?? 0) },
+  { key: "messagesWeekly", label: "Msgs (7d)", render: (site) => String(site.messageStats?.weekly ?? 0) },
+  { key: "messagesMonthly", label: "Msgs (30d)", render: (site) => String(site.messageStats?.monthly ?? 0) },
   { key: "lastMessageAt", label: "Last message", render: (site) => formatTime(site.lastMessageAt) },
   { key: "activeVisitors", label: "Active", render: (site) => String(site.activeVisitors ?? 0) },
   { key: "visitorsDaily", label: "Daily", render: (site) => String(site.visitorStats?.daily ?? 0) },
@@ -518,6 +522,12 @@ function siteSortValue(site, key) {
     case "mapClickTotal":
     case "blockedCount":
       return Number(site[key] ?? 0);
+    case "messagesDaily":
+      return Number(site.messageStats?.daily ?? 0);
+    case "messagesWeekly":
+      return Number(site.messageStats?.weekly ?? 0);
+    case "messagesMonthly":
+      return Number(site.messageStats?.monthly ?? 0);
     case "visitorsDaily":
       return Number(site.visitorStats?.daily ?? 0);
     case "visitorsWeekly":
@@ -926,6 +936,8 @@ function buildPlatformStats(sites, platform = null) {
   let activeSites30d = 0;
   let visitorsWeekly = 0;
   let chattingThisWeek = 0;
+  let messagesToday = 0;
+  let messagesWeekly = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -938,6 +950,8 @@ function buildPlatformStats(sites, platform = null) {
     if (weekly > 0) activeSites7d += 1;
     if (monthly > 0) activeSites30d += 1;
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * DAY_MS) chattingThisWeek += 1;
+    messagesToday += site.messageStats?.daily ?? 0;
+    messagesWeekly += site.messageStats?.weekly ?? 0;
   }
 
   return {
@@ -948,7 +962,10 @@ function buildPlatformStats(sites, platform = null) {
     activeSites30d,
     visitorsWeekly,
     chattingThisWeek,
+    messagesToday,
+    messagesWeekly,
     dailySeries: [],
+    messageDailySeries: [],
   };
 }
 
@@ -967,17 +984,10 @@ function buildVerifiedSitesSeries(sites, windowDays = VERIFIED_CHART_DAYS) {
   const startDay = today - windowDays + 1;
   const series = [];
 
-  for (let day = startDay; day <= today; day += 7) {
-    const bucketEnd = Math.min(day + 6, today);
-    const cutoff = (bucketEnd + 1) * DAY_MS;
+  for (let day = startDay; day <= today; day += 1) {
+    const cutoff = (day + 1) * DAY_MS;
     const count = verifiedAt.filter((at) => at < cutoff).length;
-    series.push({ day: bucketEnd, count });
-  }
-
-  if (series.length === 0 || series[series.length - 1].day !== today) {
-    const cutoff = (today + 1) * DAY_MS;
-    const count = verifiedAt.filter((at) => at < cutoff).length;
-    series.push({ day: today, count });
+    series.push({ day, count });
   }
 
   return series;
@@ -1012,12 +1022,14 @@ function renderStatsBarChart(container, series, {
 
   for (const [index, entry] of series.entries()) {
     const count = entry.count ?? 0;
+    const labeled = index % labelEvery === 0 || index === series.length - 1;
     const wrap = document.createElement("div");
     wrap.className = "service-stats-chart__bar-wrap";
 
     const value = document.createElement("span");
     value.className = "service-stats-chart__value";
-    value.textContent = String(count);
+    value.textContent = labeled ? String(count) : "";
+    wrap.title = `${formatChartDay(entry.day)}: ${count}`;
 
     const bar = document.createElement("div");
     bar.className = `service-stats-chart__bar${barClass ? ` ${barClass}` : ""}`;
@@ -1025,9 +1037,7 @@ function renderStatsBarChart(container, series, {
 
     const label = document.createElement("span");
     label.className = "service-stats-chart__label";
-    label.textContent = index % labelEvery === 0 || index === series.length - 1
-      ? formatChartDay(entry.day)
-      : "";
+    label.textContent = labeled ? formatChartDay(entry.day) : "";
 
     wrap.append(value, bar, label);
     container.append(wrap);
@@ -1046,6 +1056,8 @@ function renderPlatformStats(platform) {
     { value: platform.activeSites30d, label: "Active sites (30d)" },
     { value: platform.visitorsWeekly, label: "Unique visitors (7d)" },
     { value: platform.chattingThisWeek, label: "Chatting this week" },
+    { value: platform.messagesToday ?? 0, label: "Messages today" },
+    { value: platform.messagesWeekly ?? 0, label: "Messages (7d)" },
   ];
 
   for (const card of cards) {
@@ -1073,11 +1085,19 @@ function renderVisitorTrendChart(dailySeries) {
   });
 }
 
+function renderMessageTrendChart(messageDailySeries) {
+  renderStatsBarChart(messageTrendChartEl, messageDailySeries, {
+    emptyText: "No message history yet.",
+    ariaLabelPrefix: `Message trend for the last ${messageDailySeries?.length || 0} days`,
+    scaleFromZero: true,
+  });
+}
+
 function renderVerifiedSitesChart(sites) {
   const series = buildVerifiedSitesSeries(sites);
   renderStatsBarChart(verifiedTrendChartEl, series, {
     emptyText: "No verified websites yet.",
-    ariaLabelPrefix: `Verified sites by week over the last ${VERIFIED_CHART_DAYS} days`,
+    ariaLabelPrefix: `Verified sites by day over the last ${VERIFIED_CHART_DAYS} days`,
     barClass: "service-stats-chart__bar--growth",
     scaleFromZero: false,
   });
@@ -1153,6 +1173,7 @@ function renderStatistics(sites, platform = null) {
   const stats = buildPlatformStats(sites, platform);
   renderPlatformStats(stats);
   renderVisitorTrendChart(stats.dailySeries);
+  renderMessageTrendChart(stats.messageDailySeries);
   renderVerifiedSitesChart(sites);
   renderSiteHealthLists(sites);
 }

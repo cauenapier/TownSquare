@@ -7,6 +7,7 @@ const { ensurePluginData, getPluginData, setPluginData } = require("./server/plu
 const { plugins } = require("./server/plugins");
 const { atomicWriteJson } = require("./server/atomic-write");
 const { createVisitorStats } = require("./server/visitor-stats");
+const { createMessageStats } = require("./server/message-stats");
 const { registerPublicPlugins } = require("./plugins");
 const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
 const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
@@ -85,6 +86,7 @@ const STAGING_PAGE_ENABLED = envFlag("ENABLE_STAGING_PAGE");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const VISITOR_STATS_FILE = path.join(DATA_DIR, "visitor-stats.json");
+const MESSAGE_STATS_FILE = path.join(DATA_DIR, "message-stats.json");
 const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
 let ALLOWED_ORIGINS = new Set();
 const DEFAULT_DEV_ORIGINS = new Set([
@@ -1790,6 +1792,7 @@ function serviceAdminSite(site) {
     updatedAt: site.updatedAt,
     activeVisitors: scene ? countActiveVisitors(scene) : 0,
     visitorStats: visitorStats.getStats(site.siteKey),
+    messageStats: messageStats.getStats(site.siteKey),
     connectionClicks,
     connectionClickTotal: Object.values(connectionClicks).reduce(
       (sum, entry) => sum + (entry?.count || 0),
@@ -1810,6 +1813,8 @@ function buildServiceAdminPlatformStats(sites) {
   let activeSites30d = 0;
   let visitorsWeekly = 0;
   let chattingThisWeek = 0;
+  let messagesToday = 0;
+  let messagesWeekly = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -1822,6 +1827,8 @@ function buildServiceAdminPlatformStats(sites) {
     if (weekly > 0) activeSites7d += 1;
     if (monthly > 0) activeSites30d += 1;
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;
+    messagesToday += site.messageStats?.daily ?? 0;
+    messagesWeekly += site.messageStats?.weekly ?? 0;
   }
 
   return {
@@ -1832,7 +1839,10 @@ function buildServiceAdminPlatformStats(sites) {
     activeSites30d,
     visitorsWeekly,
     chattingThisWeek,
+    messagesToday,
+    messagesWeekly,
     dailySeries: visitorStats.getAggregateDailySeries(7),
+    messageDailySeries: messageStats.getAggregateDailySeries(7),
   };
 }
 
@@ -2877,6 +2887,7 @@ function rememberSiteLastSeenUrl(site, readingUrl) {
 let sitesByKey = new Map();
 const scenes = new Map();
 const visitorStats = createVisitorStats({ filePath: VISITOR_STATS_FILE });
+const messageStats = createMessageStats({ filePath: MESSAGE_STATS_FILE });
 let nextConnectionId = 1;
 
 function finalizeDisconnect(identity) {
@@ -3412,6 +3423,7 @@ function handleSay(client, message) {
     const lastSavedMessageAt = client.site.lastMessageAt || 0;
     client.site.messageCount = (client.site.messageCount || 0) + 1;
     client.site.lastMessageAt = now;
+    messageStats.recordMessage(client.site.siteKey, now);
     if (now - lastSavedMessageAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       saveSites();
     }
@@ -3628,6 +3640,8 @@ async function startServer() {
 
   visitorStats.load();
   visitorStats.start();
+  messageStats.load();
+  messageStats.start();
 
   const shared = await import("./public/shared/shared-constants.mjs");
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
@@ -3719,6 +3733,8 @@ function shutdown(signal) {
   try {
     visitorStats.stop();
     visitorStats.flush();
+    messageStats.stop();
+    messageStats.flush();
   } catch (error) {
     console.error("Error flushing visitor stats on shutdown", error);
   }
