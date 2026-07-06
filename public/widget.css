@@ -26,42 +26,77 @@
   box-sizing: border-box;
 }
 
+/* ============================================================================
+   LAYOUT SYSTEM
+
+   The widget has three independent vertical zones:
+
+   ┌─────────────────────────┐
+   │    Controls (UI)         │  z-index: overlay
+   │                         │
+   │ ┌─────────────────────┐ │
+   │ │  STAGE (sky)        │ │  180px (flex in expanded mode)
+   │ │  [scene + figures]  │ │
+   │ │                     │ │
+   │ └─────────────────────┘ │
+   │ ───────────────────────── │  ground line (1px border-top)
+   │       GROUND (nameplate) │  40px
+   │ ─────────────────────────┤
+   │    ACTION-ZONE (toolbar) │  60px
+   │     [composer + actions] │
+   └─────────────────────────┘
+
+   Key coordinate systems:
+   - Props/figures position relative to stage: bottom: 0 = ground line
+   - Controls/toolbar position absolutely within zones
+   - Ground line: stage bottom edge = --ts-zone-ground-y
+
+   ============================================================================ */
+
 .townsquare {
-  --ts-stage-height: 180px;
-  /* Space below the stage for the touch toolbar (see .townsquare__toolbar). */
-  --ts-toolbar-reserve: 80px;
-  /* The scene's vertical anchor. --ts-ground-offset is the height of the ground
-     band from the stage's bottom edge; the band's 1px top border is the ground
-     line, so the walkable plane is the band's top edge — exactly --ts-ground-offset
-     up. A fixed px so it holds at any stage height, including the tall expanded
-     stage. --ts-ground-level is that same plane, named for what stands on it:
-     every prop/figure is bottom-anchored to it, and every SVG's art is authored
-     to reach its viewBox bottom edge (see the props in site-config-core.mjs and
-     figure.mjs), so element bottom = art baseline = the line, at any scale. The
-     fixed-px stroke rounding (vector-effect: non-scaling-stroke) overlaps the
-     1px line slightly, which is what "standing on the line" looks like. */
-  --ts-ground-offset: 40px;
-  /* Ground level is at the bottom of the stage (where the ground line is).
-     Props are positioned relative to stage, so bottom: 0 puts them at the stage bottom. */
-  --ts-ground-level: 0px;
-  /* Bench seat plank height above the plane: plank centerline y=8 in the 18-unit
-     bench art rendered 1:1 px (site-config-core.mjs BENCH_SVG). */
-  --ts-bench-seat-height: 10px;
+  /* Zone heights: stage (flexible in expanded), ground (fixed nameplate band),
+     action-zone (fixed toolbar area). */
+  --ts-zone-stage-height: 180px;
+  --ts-zone-ground-height: 40px;
+  --ts-zone-action-height: 60px;
+
+  /* Total height reserve (stage + action, ground not counted as it overlays stage). */
+  --ts-layout-height-reserve: calc(var(--ts-zone-stage-height) + var(--ts-zone-action-height));
+
+  /* Ground line coordinate system: props bottom-anchor to this plane. */
+  --ts-ground-level: 0px;  /* Anchored to stage bottom edge (relative to stage) */
+
+  /* Prop positioning details. */
+  --ts-bench-seat-height: 10px;  /* Bench plank centerline offset from ground plane */
+
+  /* UI spacing: control/toolbar/status positioning within zones. */
+  --ts-controls-inset: 8px;      /* Controls panel from top-right */
+  --ts-controls-gap: 6px;        /* Gap between control buttons */
+  --ts-status-inset: 8px;        /* Status row from top-left */
+  --ts-toolbar-inset: 10px;      /* Toolbar horizontal margin in action-zone */
+  --ts-toolbar-bottom: 7px;      /* Toolbar vertical position from action-zone bottom */
+  --ts-toolbar-gap: 8px;         /* Gap between toolbar items */
+
+  /* Z-index layers (semantic naming). */
+  --ts-z-base: 1;
+  --ts-z-ui: 2147483001;         /* Controls, actions, toolbar: above scene */
+  --ts-z-ui-above: 2147483002;   /* Toolbar (above floating actions) */
+
   position: relative;
-  min-height: calc(var(--ts-stage-height) + var(--ts-toolbar-reserve));
+  min-height: var(--ts-layout-height-reserve);
   overflow: hidden;
   background: transparent;
 }
 
 .townsquare__controls {
   position: absolute;
-  z-index: 2147483001;
-  top: 8px;
+  z-index: var(--ts-z-ui);
+  top: var(--ts-controls-inset);
   right: 4px;
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: var(--ts-controls-gap);
 }
 
 .townsquare__control {
@@ -171,27 +206,27 @@
   }
 }
 
-/* Action zone: dedicated space below the scene for UI chrome (buttons, toolbar).
-   Painted only when a customization layer is active (preview or pasted site CSS).
-   Positioned relative so toolbar is positioned within it, showing the background.
-   Min-height fits the toolbar (42px + 7px bottom margin + 2px safety margin). */
+/* ACTION-ZONE: toolbar and action buttons area at widget bottom.
+   Positioned relative so toolbar anchors within it (shows zone background).
+   Min-height: toolbar ~42px + bottom inset ~7px + safety margin ~2px ≈ 60px. */
 .townsquare__action-zone {
   position: relative;
   background: transparent;
-  min-height: 60px;
+  min-height: var(--ts-zone-action-height);
 }
 
 #townsquare-root[data-townsquare-surface] .townsquare__action-zone {
   background: var(--action-zone-fill, var(--page));
 }
 
+/* Action buttons: jump and high-five (desktop floating position, hide on touch). */
 .townsquare__actions {
   position: absolute;
-  z-index: 2147483001;
+  z-index: var(--ts-z-ui);
   right: 8px;
   bottom: 12px;
   display: flex;
-  gap: 8px;
+  gap: var(--ts-toolbar-gap);
 }
 
 .townsquare__action {
@@ -291,10 +326,11 @@
   text-decoration: underline;
 }
 
+/* STATUS ROW: contains nameplate and other status elements. Positioned at top-left. */
 .townsquare__status {
   position: absolute;
-  z-index: 2147483001;
-  top: 8px;
+  z-index: var(--ts-z-ui);
+  top: var(--ts-status-inset);
   left: 4px;
   right: 124px;
   display: flex;
@@ -313,46 +349,36 @@
 
 .townsquare__stage {
   position: relative;
-  height: var(--ts-stage-height);
+  height: var(--ts-zone-stage-height);
   border-radius: var(--r) var(--r) 0 0;
   background: transparent;
-  /* horizontal touch swipes walk; vertical gestures still pan the host page */
+  /* Horizontal touch swipes walk; vertical gestures still pan the host page. */
   touch-action: pan-y pinch-zoom;
-  /* Speech bubbles, trays, and composers size against the stage (cqw), not the
-     viewport — otherwise a long line in a narrow embed renders wider than the
-     stage and bleeds past its clipped edge. */
+  /* Size speech bubbles/trays/composers against stage width (cqw), not viewport,
+     so long lines don't bleed past the clipped stage edge. */
   container-type: inline-size;
 }
 
-/* The ground band: independent zone between stage (sky) and action-zone.
-   Fixed height with the ground line as its top border.
-   Painted only when a customization layer is active (preview or pasted site CSS). */
+/* GROUND ZONE: nameplate band between stage and action-zone.
+   Fixed height with ground line as top border (marks walkable plane for props).
+   Independent zone, painted only with data-townsquare-surface (preview or pasted CSS). */
 .townsquare__ground {
-  height: var(--ts-ground-offset);
+  height: var(--ts-zone-ground-height);
   background: transparent;
   border-top: 1px solid transparent;
-}
-
-/* Three independent zones with flat colors:
-   - Stage (sky): --scene
-   - Ground band: --ground-fill with --ground-line top border
-   - Action-zone: --action-zone-fill
-
-   Painted only when a customization layer is active: the live preview / overlay
-   set data-townsquare-surface via applySiteStyle (with an inline palette), and
-   host embeds set it at mount (see townsquare.mjs) so this paints straight from
-   the palette tokens the site pastes in (buildSiteCss). The palette tokens are
-   the only thing a hosted site pastes — the paint lives here, in one place.
-
-   --page/--ground are pre-rename token names; var() fallbacks keep CSS pasted
-   before the rename painting. */
-#townsquare-root[data-townsquare-surface] .townsquare__stage {
-  background: var(--scene);
 }
 
 #townsquare-root[data-townsquare-surface] .townsquare__ground {
   background: var(--ground-fill, var(--page));
   border-top: 1px solid var(--ground-line, var(--ground));
+}
+
+/* ZONE THEMING: each zone colored when data-townsquare-surface is active.
+   Live preview sets this via applySiteStyle; hosted embeds set it at mount.
+   Only palette tokens are pasted (buildSiteCss) — all color paint is here.
+   Fallbacks (--page, --ground) maintain compatibility with pre-rename CSS. */
+#townsquare-root[data-townsquare-surface] .townsquare__stage {
+  background: var(--scene);
 }
 
 .townsquare .prop {
@@ -788,13 +814,17 @@
   flex: 0 0 var(--ts-keyboard-scroll-room, 0px);
 }
 
+/* EXPANDED MODE: stage flex-grows, controls/status repositioned with larger insets. */
+.townsquare--expanded {
+  --ts-controls-inset: 10px;
+  --ts-status-inset: 10px;
+}
+
 .townsquare--expanded .townsquare__controls {
-  top: 10px;
   right: 18px;
 }
 
 .townsquare--expanded .townsquare__status {
-  top: 10px;
   left: 18px;
   right: 148px;
 }
@@ -2122,21 +2152,19 @@
   .townsquare-avatar__composer { min-width: min(260px, 80cqw); }
 }
 
-/* ── Bottom toolbar ──
-   Chat lives in a fixed bar at the bottom of the widget — for every pointer
-   type — instead of floating under the (moving) figure: an always-visible
-   input, the rename pencil, and the jump / high-five actions. The figure keeps
-   a compact identity label, peer name tags are never covered, and the virtual
-   keyboard can't clip any of it. The space is reserved via --ts-toolbar-reserve. */
+/* TOOLBAR: fixed bar at action-zone bottom (replaces floating composer).
+   Always visible, houses composer input, rename pencil, and action buttons.
+   Figure keeps compact identity; peer nameplates never covered; virtual
+   keyboard can't clip any UI. Touch-optimized with 42px target sizes. */
 .townsquare__toolbar {
   position: absolute;
-  z-index: 2147483002;
-  left: 10px;
-  right: 10px;
-  bottom: 7px;
+  z-index: var(--ts-z-ui-above);
+  left: var(--ts-toolbar-inset);
+  right: var(--ts-toolbar-inset);
+  bottom: var(--ts-toolbar-bottom);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--ts-toolbar-gap);
 }
 
 /* Actions (jump / high-five) are docked into the toolbar, so the floating
