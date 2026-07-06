@@ -27,4 +27,5 @@ npm-debug.log*
 /scripts/admin/*
 
 # Local Claude Code worktrees
-.claude/worktrees/
+.claude/
+.cursor/

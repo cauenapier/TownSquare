@@ -43,7 +43,9 @@ import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
  * @property {HTMLButtonElement} [profileButton]
  * @property {HTMLFormElement} [profileForm]
  * @property {HTMLInputElement} [profileInput]
+ * @property {HTMLButtonElement} [colorButton]
  * @property {Array<HTMLButtonElement>} [colorSwatches]
+ * @property {HTMLElement} [colorMenu]
  * @property {HTMLFormElement} [composer]
  * @property {HTMLInputElement} [input]
  * @property {HTMLButtonElement} [send]
@@ -208,7 +210,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
   nameEl.className = "townsquare-avatar__plate-name";
 
   const profileButton = document.createElement("button");
-  profileButton.className = "townsquare-avatar__profile-button";
+  profileButton.className = "townsquare-avatar__profile-button townsquare__button townsquare__button--sm";
   profileButton.type = "button";
   profileButton.innerHTML = PENCIL_ICON;
   profileButton.setAttribute("aria-label", "Edit character");
@@ -256,8 +258,22 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
   profileInput.autocomplete = "off";
   profileInput.setAttribute("aria-label", "Display name");
 
+  const colorButton = document.createElement("button");
+  colorButton.className = "townsquare-avatar__color-button";
+  colorButton.type = "button";
+  colorButton.setAttribute("aria-label", "Choose character color");
+  colorButton.setAttribute("aria-haspopup", "dialog");
+  colorButton.setAttribute("aria-expanded", "false");
+
+  const colorMenu = document.createElement("div");
+  colorMenu.className = "townsquare-avatar__color-menu";
+  colorMenu.hidden = true;
+  colorMenu.setAttribute("role", "dialog");
+  colorMenu.setAttribute("aria-label", "Choose character color");
+
   const swatches = document.createElement("div");
   swatches.className = "townsquare-avatar__swatches";
+  colorMenu.appendChild(swatches);
 
   /** @type {Array<HTMLButtonElement>} */
   const colorSwatches = colors.map((swatchColor) => {
@@ -277,7 +293,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
   profileDone.innerHTML = ENTER_ICON;
   profileDone.setAttribute("aria-label", "Save character");
 
-  profileForm.append(profileInput, swatches, profileDone);
+  profileForm.append(profileInput, colorButton, colorMenu, profileDone);
 
   const composer = document.createElement("form");
   composer.className = "townsquare-avatar__composer";
@@ -308,10 +324,8 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
   if (toolbarMode) {
     composer.classList.add("townsquare-avatar__composer--docked");
     composer.hidden = false;
-    below.append(selfId, ownerRoleEl);
-    // profileForm is absolutely positioned above the bar via CSS, so its order
-    // among the toolbar's flex children doesn't matter.
-    toolbarHost.append(composer, profileButton, profileForm);
+    below.append(selfId, ownerRoleEl, profileForm);
+    toolbarHost.append(composer, profileButton);
   } else {
     below.append(plateRow, ownerRoleEl, profileForm, composer);
   }
@@ -329,7 +343,9 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     profileButton,
     profileForm,
     profileInput,
+    colorButton,
     colorSwatches,
+    colorMenu,
     composer,
     input,
     send,
@@ -338,8 +354,15 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     staticSelfLabel: toolbarMode,
   };
 
+  const closeColorMenu = () => {
+    colorMenu.hidden = true;
+    colorButton.setAttribute("aria-expanded", "false");
+  };
+
   const closeProfile = () => {
+    closeColorMenu();
     profileForm.hidden = true;
+    el.classList.remove("townsquare-avatar--profile-open");
     profileButton.setAttribute("aria-expanded", "false");
   };
 
@@ -360,6 +383,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     // rename editor must not try to close it.
     if (!toolbarMode && !composer.hidden) closeComposer();
     profileForm.hidden = false;
+    el.classList.add("townsquare-avatar--profile-open");
     profileButton.setAttribute("aria-expanded", "true");
     profileInput.value = nameEl.dataset.value || "";
     profileInput.focus();
@@ -387,9 +411,24 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     }
   });
 
+  colorButton.addEventListener("click", () => {
+    const open = colorMenu.hidden;
+    colorMenu.hidden = !open;
+    colorButton.setAttribute("aria-expanded", String(open));
+  });
+
+  colorMenu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeColorMenu();
+      colorButton.focus();
+    }
+  });
+
   for (const swatch of colorSwatches) {
     swatch.addEventListener("click", () => {
       submitProfile(swatch.dataset.color || color);
+      closeColorMenu();
     });
   }
 
@@ -516,6 +555,10 @@ export function setAvatarProfile(avatar, profile = {}) {
   }
   if (avatar.dot) {
     avatar.dot.style.background = color || "";
+  }
+  if (avatar.colorButton) {
+    avatar.colorButton.style.setProperty("--swatch", color || "");
+    avatar.colorButton.title = color || "Choose character color";
   }
   if (avatar.crownEl) {
     avatar.crownEl.hidden = !isOwner;

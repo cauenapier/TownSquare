@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TownSquare Button Styles Review</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      color: #2a2926;
+      background: #f5f3f1;
+      padding: 40px 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 2em; margin-bottom: 10px; }
+    .subtitle { color: #666; margin-bottom: 40px; font-size: 1.1em; }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 32px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .section h2 {
+      font-size: 1.6em;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #e6e1d9;
+      padding-bottom: 12px;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .button-sample {
+      border: 1px solid #e6e1d9;
+      border-radius: 8px;
+      padding: 20px;
+      background: #fafbf9;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .button-sample h3 {
+      font-size: 0.95em;
+      margin: 0;
+      color: #2a2926;
+      font-weight: 600;
+    }
+
+    .button-sample-code {
+      font-size: 0.85em;
+      color: #666;
+      font-family: "Courier New", monospace;
+      margin: 8px 0;
+    }
+
+    .button-demo {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      min-height: 50px;
+    }
+
+    /* Control buttons (top-right) */
+    .townsquare__control {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid rgba(170, 160, 150, 0.76);
+      border-radius: 8px;
+      background: rgba(245, 243, 241, 0.78);
+      color: #8b8480;
+      box-shadow: 0 4px 12px -10px rgba(42, 41, 38, 0.38);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .townsquare__control:hover,
+    .townsquare__control:focus-visible,
+    .townsquare__control--active {
+      color: #2a2926;
+      border-color: #aaa096;
+      background: #f5f3f1;
+    }
+
+    /* Action buttons (bottom-right, jump/high-five) */
+    .townsquare__action {
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid rgba(170, 160, 150, 0.76);
+      border-radius: 8px;
+      background: rgba(245, 243, 241, 0.84);
+      color: #2a2926;
+      box-shadow: 0 8px 20px -14px rgba(42, 41, 38, 0.42);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      font: 700 18px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .townsquare__action:hover,
+    .townsquare__action:focus-visible {
+      border-color: #aaa096;
+      background: #f5f3f1;
+    }
+
+    /* Profile/Edit button */
+    .townsquare-avatar__profile-button {
+      flex: 0 0 auto;
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 0;
+      border-radius: 8px;
+      background: #f5f3f1;
+      color: #8b8480;
+      box-shadow: 0 1px 3px rgba(60, 40, 20, 0.14);
+      cursor: pointer;
+    }
+
+    .townsquare-avatar__profile-button:hover,
+    .townsquare-avatar__profile-button[aria-expanded="true"] {
+      color: #2a2926;
+    }
+
+    /* Help button */
+    .help-button {
+      font: 650 0.92rem/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 8px 12px;
+      border: 1px solid rgba(170, 160, 150, 0.76);
+      border-radius: 8px;
+      background: rgba(245, 243, 241, 0.78);
+      color: #8b8480;
+      cursor: pointer;
+    }
+
+    .help-button:hover {
+      color: #2a2926;
+      border-color: #aaa096;
+      background: #f5f3f1;
+    }
+
+    .info-box {
+      background: #eef3f8;
+      border-left: 4px solid #4a8fd4;
+      padding: 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .info-box h4 { margin-top: 0; }
+    .info-box p { margin: 8px 0; }
+    .info-box ul { margin: 8px 0; padding-left: 20px; }
+
+    .issue-box {
+      background: #fef3f2;
+      border-left: 4px solid #d84030;
+      padding: 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .issue-box h4 { margin-top: 0; color: #d84030; }
+
+    .solution-box {
+      background: #f0f9f4;
+      border-left: 4px solid #2d6e4e;
+      padding: 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .solution-box h4 { margin-top: 0; color: #2d6e4e; }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 16px 0;
+    }
+
+    .comparison-item {
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #e6e1d9;
+    }
+
+    .comparison-item h4 { margin-top: 0; margin-bottom: 8px; }
+    .comparison-item code {
+      display: block;
+      background: #fafbf9;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      margin: 8px 0;
+      overflow-x: auto;
+    }
+
+    .comparison-before { background: #fef3f2; }
+    .comparison-after { background: #f0f9f4; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+
+    table th, table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e6e1d9;
+    }
+
+    table th {
+      background: #fafbf9;
+      font-weight: 600;
+    }
+
+    table tr:hover {
+      background: #fafbf9;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.85em;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    .tag-control { background: #dbe9f1; color: #1a5294; }
+    .tag-action { background: #e8d5f2; color: #6b2d7f; }
+    .tag-profile { background: #f5e5d3; color: #8b5a0c; }
+    .tag-help { background: #d4e8d4; color: #2d5a2d; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔘 TownSquare Button Styles Review</h1>
+    <p class="subtitle">Comprehensive analysis of button components and refactoring recommendations</p>
+
+    <!-- CURRENT STATE -->
+    <div class="section">
+      <h2>Current Button Styles</h2>
+
+      <div class="button-grid">
+        <!-- Control Button -->
+        <div class="button-sample">
+          <div>
+            <h3><span class="tag tag-control">CONTROLS</span> Avatar Profile & Expand</h3>
+            <span class="button-sample-code">townsquare__control</span>
+          </div>
+          <div class="button-demo">
+            <button class="townsquare__control" title="Edit">✎</button>
+            <button class="townsquare__control" title="Expand">⛶</button>
+          </div>
+          <div>
+            <strong>Size:</strong> 30×30px<br>
+            <strong>Location:</strong> Top-right controls<br>
+            <strong>Style:</strong> Rounded button with backdrop blur
+          </div>
+        </div>
+
+        <!-- Action Button -->
+        <div class="button-sample">
+          <div>
+            <h3><span class="tag tag-action">ACTIONS</span> Jump & High-Five</h3>
+            <span class="button-sample-code">townsquare__action</span>
+          </div>
+          <div class="button-demo">
+            <button class="townsquare__action">↑</button>
+            <button class="townsquare__action">✋</button>
+          </div>
+          <div>
+            <strong>Size:</strong> 42×42px<br>
+            <strong>Location:</strong> Bottom-right (now docked in toolbar)<br>
+            <strong>Style:</strong> Larger, bold emoji/icons
+          </div>
+        </div>
+
+        <!-- Profile Button -->
+        <div class="button-sample">
+          <div>
+            <h3><span class="tag tag-profile">PROFILE</span> Edit Character</h3>
+            <span class="button-sample-code">townsquare-avatar__profile-button</span>
+          </div>
+          <div class="button-demo">
+            <button class="townsquare-avatar__profile-button">✎</button>
+          </div>
+          <div>
+            <strong>Size:</strong> 30×30px<br>
+            <strong>Location:</strong> Docked in toolbar<br>
+            <strong>Style:</strong> Flat, minimal shadow
+          </div>
+        </div>
+
+        <!-- Help Button -->
+        <div class="button-sample">
+          <div>
+            <h3><span class="tag tag-help">HELP</span> Help Panel</h3>
+            <span class="button-sample-code">help-button (custom)</span>
+          </div>
+          <div class="button-demo">
+            <button class="help-button">?</button>
+          </div>
+          <div>
+            <strong>Size:</strong> ~30×30px (text-based)<br>
+            <strong>Location:</strong> Top-right controls<br>
+            <strong>Style:</strong> Text-based, similar to controls
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FINDINGS -->
+    <div class="section">
+      <h2>Key Findings & Issues</h2>
+
+      <div class="issue-box">
+        <h4>❌ Inconsistent Class Naming</h4>
+        <p>Three different naming patterns for essentially the same component type:</p>
+        <ul>
+          <li><code>townsquare__control</code> (controls at top-right)</li>
+          <li><code>townsquare__action</code> (actions at bottom)</li>
+          <li><code>townsquare-avatar__profile-button</code> (avatar toolbar)</li>
+          <li><code>help-button</code> (inline, no consistent class)</li>
+        </ul>
+      </div>
+
+      <div class="issue-box">
+        <h4>❌ Duplicate Style Definitions</h4>
+        <p><strong>townsquare__control</strong> (30×30) and <strong>townsquare__action</strong> (42×42) share ~80% of their CSS:</p>
+        <ul>
+          <li>Same border, border-radius, background blur</li>
+          <li>Same hover/focus states</li>
+          <li>Same color transitions</li>
+          <li>Only differs: size, shadow, and font weight</li>
+        </ul>
+      </div>
+
+      <div class="issue-box">
+        <h4>❌ Profile Button Isolated from System (Incidental, Not Intentional)</h4>
+        <p><code>townsquare-avatar__profile-button</code> has different styles <strong>purely because it's defined in avatar.mjs instead of shell.mjs</strong>—no design reason for the differences:</p>
+        <ul>
+          <li>Missing border (has <code>border: 0</code>)</li>
+          <li>Solid background instead of frosted/transparent style</li>
+          <li>No backdrop blur effect</li>
+          <li>Smaller shadow (<code>var(--bshadow)</code> vs full filter)</li>
+          <li>Different hover (color only, doesn't enhance border/background)</li>
+        </ul>
+        <p><strong>Verdict:</strong> This is technical debt from code organization, not intentional design. Should match the other 30×30 controls visually.</p>
+      </div>
+
+      <div class="issue-box">
+        <h4>❌ Help Button Lacks Semantic Class</h4>
+        <p>Help button is styled inline without a consistent class system, making it hard to:</p>
+        <ul>
+          <li>Maintain consistent appearance</li>
+          <li>Apply theme updates across the board</li>
+          <li>Distinguish it from other controls visually</li>
+        </ul>
+      </div>
+
+      <div class="issue-box">
+        <h4>⚠️  Toolbar Button Sizing</h4>
+        <p>In touch mode (<code>@media (pointer: coarse)</code>):</p>
+        <ul>
+          <li>Controls scale to 40×40px (good for touch)</li>
+          <li>Profile/action buttons don't scale—inconsistent touch targets</li>
+          <li>Toolbar buttons should all be 42×42px for consistency</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- RECOMMENDATIONS -->
+    <div class="section">
+      <h2>Refactoring Recommendation: Simple & Clean</h2>
+
+      <div class="solution-box">
+        <h4>✓ Consolidate into Single System</h4>
+        <p><strong>Goal:</strong> Remove all duplication, use semantic naming, keep it simple.</p>
+        <p>Merge three separate button classes (`.townsquare__control`, `.townsquare__action`, `.townsquare-avatar__profile-button`) into one base class with two size variants. That's it.</p>
+      </div>
+
+      <h3 style="margin-top: 24px; margin-bottom: 16px;">Why Profile Button is Different (Code Organization)</h3>
+
+      <div class="comparison">
+        <div class="comparison-item comparison-before">
+          <h4>.townsquare__control</h4>
+          <code style="font-size: 0.8em;">
+border: 1px solid var(--hair-2)
+background: color-mix(...78%)
+backdrop-filter: blur(8px)
+box-shadow: 0 4px 12px -10px
+          </code>
+        </div>
+        <div class="comparison-item comparison-before">
+          <h4>.townsquare-avatar__profile-button</h4>
+          <code style="font-size: 0.8em;">
+border: 0  ← missing!
+background: var(--surface)
+← no blur!
+box-shadow: var(--bshadow)
+          </code>
+        </div>
+      </div>
+
+      <p style="text-align: center; color: #666; margin: 16px 0;">
+        <strong>These differences are incidental (code location), not intentional (design)</strong>
+      </p>
+
+      <h3 style="margin-top: 24px; margin-bottom: 16px;">Before & After</h3>
+
+      <div class="comparison">
+        <div class="comparison-item comparison-before">
+          <h4>❌ Current: 3 Classes</h4>
+          <code style="font-size: 0.85em;">
+.townsquare__control
+.townsquare__action
+.townsquare-avatar__profile-button
+          </code>
+          <p style="margin: 8px 0 0; color: #666;">~80% duplicate styles</p>
+        </div>
+        <div class="comparison-item comparison-after">
+          <h4>✓ Refactored: 1 Base + 2 Variants</h4>
+          <code style="font-size: 0.85em;">
+.townsquare__button
+.townsquare__button--sm
+.townsquare__button--md
+          </code>
+          <p style="margin: 8px 0 0; color: #2d6e4e;">All shared styles in base class</p>
+        </div>
+      </div>
+
+      <h3>Detailed Changes</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Current Class</th>
+            <th>New Class</th>
+            <th>Size</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag tag-control">Avatar Edit Pencil</span></td>
+            <td><code>townsquare-avatar__profile-button</code></td>
+            <td><code>townsquare__button townsquare__button--sm</code></td>
+            <td>30×30 (42×42 touch)</td>
+            <td><strong>Make match expand button—no reason to be different</strong></td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-control">Expand</span></td>
+            <td><code>townsquare__control</code></td>
+            <td><code>townsquare__button townsquare__button--sm</code></td>
+            <td>30×30 (40×40 touch)</td>
+            <td>Top-right controls</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-action">Jump / High-Five</span></td>
+            <td><code>townsquare__action</code></td>
+            <td><code>townsquare__button townsquare__button--md</code></td>
+            <td>42×42</td>
+            <td>Action buttons, docked in toolbar</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-help">Help (?)</span></td>
+            <td><code>(inline or undeclared)</code></td>
+            <td><code>townsquare__button townsquare__button--sm</code></td>
+            <td>30×30 (40×40 touch)</td>
+            <td>Top-right controls, text-based</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 24px; margin-bottom: 16px;">The Refactored CSS (Minimal & Clean)</h3>
+      <div style="background: #f5f3f1; padding: 16px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.85em; overflow-x: auto;">
+<pre style="margin: 0;">/* Base: all buttons share these styles */
+.townsquare__button {
+  display: inline-grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface) 78%, transparent);
+  color: var(--ink-soft);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  box-shadow: 0 4px 12px -10px rgba(42, 41, 38, 0.38);
+}
+
+/* All states */
+.townsquare__button:hover,
+.townsquare__button:focus-visible,
+.townsquare__button[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: var(--hair-2);
+  background: var(--surface);
+}
+
+.townsquare__button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}</pre>
+      </div>
+
+      <h3 style="margin-top: 24px; margin-bottom: 16px;">Size Variants</h3>
+      <div style="background: #f5f3f1; padding: 16px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.85em; overflow-x: auto;">
+<pre style="margin: 0;">/* Small: 30×30 (expand, help, edit pencil) */
+.townsquare__button--sm {
+  width: 30px;
+  height: 30px;
+}
+
+.townsquare__button--sm svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Medium: 42×42 (jump, high-five actions) */
+.townsquare__button--md {
+  width: 42px;
+  height: 42px;
+  box-shadow: 0 8px 20px -14px rgba(42, 41, 38, 0.42);
+  background: color-mix(in oklab, var(--surface) 84%, transparent);
+  font: 700 18px/1 var(--font);
+}
+
+.townsquare__button--md svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* Touch: scale small buttons up */
+@media (pointer: coarse) {
+  .townsquare__button--sm {
+    width: 40px;
+    height: 40px;
+  }
+
+  .townsquare__button--sm svg {
+    width: 18px;
+    height: 18px;
+  }
+}</pre>
+      </div>
+    </div>
+
+    <!-- IMPLEMENTATION PLAN -->
+    <div class="section">
+      <h2>Implementation Steps</h2>
+
+      <ol style="line-height: 2.2; margin: 0; padding-left: 24px;">
+        <li><strong>Update widget.css</strong>
+          <ul style="margin: 6px 0 12px;">
+            <li>Create <code>.townsquare__button</code> with all shared styles (border, blur, shadow, hover states)</li>
+            <li>Create <code>.townsquare__button--sm</code> (30×30, touch: 40×40)</li>
+            <li>Create <code>.townsquare__button--md</code> (42×42)</li>
+            <li>Delete old: <code>.townsquare__control</code>, <code>.townsquare__action</code>, <code>.townsquare-avatar__profile-button</code></li>
+          </ul>
+        </li>
+        <li><strong>Update avatar.mjs</strong> — Change pencil button class: <code>townsquare-avatar__profile-button</code> → <code>townsquare__button townsquare__button--sm</code></li>
+        <li><strong>Update shell.mjs</strong> — Change button classes:
+          <ul style="margin: 6px 0 12px;">
+            <li>Expand button: <code>townsquare__control</code> → <code>townsquare__button townsquare__button--sm</code></li>
+            <li>Help button: <code>townsquare__control</code> → <code>townsquare__button townsquare__button--sm</code></li>
+            <li>Jump/High-five buttons: <code>townsquare__action</code> → <code>townsquare__button townsquare__button--md</code></li>
+          </ul>
+        </li>
+        <li><strong>Test:</strong> Desktop, touch, expanded mode, dark/light themes, focus/hover states</li>
+      </ol>
+
+      <div class="info-box" style="margin-top: 24px;">
+        <h4>What This Fixes</h4>
+        <ul>
+          <li><strong>Removes duplication:</strong> ~50% less CSS (shared base class)</li>
+          <li><strong>Single source of truth:</strong> Update hover/focus/color in one place</li>
+          <li><strong>Clear semantics:</strong> `.townsquare__button` is obvious; `--sm` and `--md` are self-documenting</li>
+          <li><strong>No over-engineering:</strong> Just 3 classes; minimal complexity</li>
+          <li><strong>Maintainable:</strong> Future button changes are trivial</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- TOOLBAR ORGANIZATION -->
+    <div class="section">
+      <h2>Toolbar Organization Recommendation</h2>
+
+      <p>Current toolbar order (left to right in desktop mode):</p>
+      <div style="background: #f5f3f1; padding: 16px; border-radius: 8px; margin: 12px 0;">
+        <code style="font-size: 1em;">Input | Pencil (edit) | Jump | High-Five</code>
+      </div>
+
+      <p>This is <strong>optimal</strong> because:</p>
+      <ul>
+        <li>✓ Input takes up the most space (flex: 1)</li>
+        <li>✓ Edit button is next to input (editing context)</li>
+        <li>✓ Action buttons (jump/high-five) on the right (secondary actions)</li>
+        <li>✓ Matches reading direction (LTR)</li>
+      </ul>
+
+      <div class="info-box">
+        <h4>Optional: Add Help Button to Toolbar?</h4>
+        <p>Currently the help button (?) is in the top-right controls. Alternatives:</p>
+        <ul>
+          <li><strong>Keep it top-right:</strong> Good visibility, doesn't clutter toolbar</li>
+          <li><strong>Move to toolbar right:</strong> Would make order: Input | Edit | ? | Jump | Hi5 (busier)</li>
+          <li><strong>Recommendation:</strong> Keep in top-right for now—cleaner toolbar, help is secondary</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- SUMMARY TABLE -->
+    <div class="section">
+      <h2>Quick Reference: Button Locations</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Location</th>
+            <th>Buttons</th>
+            <th>New Class</th>
+            <th>Size</th>
+            <th>Z-Index</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Top-Right</strong><br>Controls panel</td>
+            <td>Expand, Help (?)</td>
+            <td><code>townsquare__button --sm</code></td>
+            <td>30×30<br>(40×40 touch)</td>
+            <td>--ts-z-ui</td>
+          </tr>
+          <tr>
+            <td><strong>Bottom-Right</strong><br>(Desktop only)</td>
+            <td>Jump, High-Five</td>
+            <td><code>townsquare__button --md</code></td>
+            <td>42×42</td>
+            <td>--ts-z-ui</td>
+          </tr>
+          <tr>
+            <td><strong>Bottom Toolbar</strong><br>(Docked)</td>
+            <td>Input | Edit Pencil | Jump | Hi5</td>
+            <td>Input: none<br>Buttons: <code>townsquare__button --sm/--md</code></td>
+            <td>30/42×30/42</td>
+            <td>--ts-z-ui-above</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

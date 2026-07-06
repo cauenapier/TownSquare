@@ -37,7 +37,7 @@ export function renderShell(container) {
   controls.className = "townsquare__controls";
 
   const expandButton = document.createElement("button");
-  expandButton.className = "townsquare__control townsquare__control--expand";
+  expandButton.className = "townsquare__button townsquare__button--sm townsquare__button--expand";
   expandButton.type = "button";
   expandButton.innerHTML = EXPAND_ICON;
   expandButton.setAttribute("aria-label", "Expand widget");
@@ -61,7 +61,7 @@ export function renderShell(container) {
   enableToggleLabel.append(enableToggle, enableToggleTrack);
 
   const helpButton = document.createElement("button");
-  helpButton.className = "townsquare__control townsquare__help-button";
+  helpButton.className = "townsquare__button townsquare__button--sm townsquare__help-button";
   helpButton.type = "button";
   helpButton.setAttribute("aria-label", "About TownSquare");
   helpButton.setAttribute("aria-expanded", "false");
@@ -121,14 +121,14 @@ export function renderShell(container) {
   actions.className = "townsquare__actions";
 
   const jumpButton = document.createElement("button");
-  jumpButton.className = "townsquare__action";
+  jumpButton.className = "townsquare__button townsquare__button--md";
   jumpButton.type = "button";
   jumpButton.innerHTML = JUMP_ICON;
   jumpButton.setAttribute("aria-label", "Jump");
   jumpButton.title = "Jump";
 
   const highFiveButton = document.createElement("button");
-  highFiveButton.className = "townsquare__action";
+  highFiveButton.className = "townsquare__button townsquare__button--md";
   highFiveButton.type = "button";
   highFiveButton.textContent = "🙌";
   highFiveButton.setAttribute("aria-label", "High five");
