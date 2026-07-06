@@ -41,6 +41,16 @@
       </section>
 
       <section class="hosted-panel" id="admin-view" aria-labelledby="admin-title" hidden>
+        <div id="notifications-banner" class="notifications-banner" role="status" aria-live="polite" aria-label="Site notifications" hidden>
+          <div class="notifications-banner-content">
+            <div class="notifications-banner-message">
+              <span id="notifications-count"></span>
+            </div>
+            <button type="button" class="hosted-quiet-button" id="notifications-close">Dismiss</button>
+          </div>
+          <div class="notifications-list" id="notifications-list"></div>
+        </div>
+
         <div class="hosted-head">
           <div>
             <p class="eyebrow">TownSquare admin</p>

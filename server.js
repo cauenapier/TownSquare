@@ -1508,6 +1508,80 @@ function handleAdminLogout(req, res) {
   sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookie(requestIsSecure(req)) });
 }
 
+function handleGetAdminNotifications(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notifications = resolved.site.siteNotifications || [];
+    sendJson(res, 200, { notifications });
+  });
+}
+
+function handlePostAdminNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    if (!Array.isArray(resolved.site.siteNotifications)) {
+      resolved.site.siteNotifications = [];
+    }
+
+    resolved.site.siteNotifications.push(notification);
+    touchSite(resolved.site);
+    saveSites();
+
+    sendJson(res, 201, { notification });
+  });
+}
+
+function handleMarkAdminNotificationRead(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notificationId = String(body.notificationId || "").trim();
+    if (!notificationId) {
+      sendJson(res, 400, { error: "notificationId is required" });
+      return;
+    }
+
+    const notifications = resolved.site.siteNotifications || [];
+    const notification = notifications.find((n) => n.id === notificationId);
+    if (!notification) {
+      sendJson(res, 404, { error: "Notification not found" });
+      return;
+    }
+
+    notification.readAt = Date.now();
+    touchSite(resolved.site);
+    saveSites();
+
+    sendJson(res, 200, { notification });
+  });
+}
+
 const ADMIN_ACTIONS = {
   updateSiteDetails(site, scene, body) {
     const originSettings = parseSiteOriginSettings(body, {
@@ -2483,6 +2557,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
       connectionLimit: DEFAULT_CONNECTION_LIMIT,
       moderationLog: [],
+      siteNotifications: [],
       plugins: {},
       pluginsEnabled: {},
     },
@@ -3043,6 +3118,21 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/admin/logout") {
     handleAdminLogout(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notifications") {
+    handleGetAdminNotifications(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/create") {
+    handlePostAdminNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/read") {
+    handleMarkAdminNotificationRead(req, res);
     return;
   }
 
