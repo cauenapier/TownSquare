@@ -2086,6 +2086,7 @@
   box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 1px rgba(42, 41, 38, 0.18);
 }
 
+
 .townsquare-avatar__profile-button {
   position: absolute;
   z-index: 1;
@@ -2094,7 +2095,7 @@
   opacity: 0;
   pointer-events: none;
   transform: translate(-4px, -50%);
-  transition: opacity 120ms ease, transform 120ms ease;
+  transition: opacity var(--ts-transition-short) ease, transform var(--ts-transition-short) ease;
 }
 
 .townsquare-avatar__profile-button svg {
