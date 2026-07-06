@@ -57,7 +57,9 @@
   /* Zone heights: stage (flexible in expanded), ground (fixed nameplate band),
      action-zone (fixed toolbar area). */
   --ts-zone-stage-height: 180px;
-  --ts-zone-ground-height: 40px;
+  /* 44px, not a round 40: the self nameplate needs top offset (9px) + badge
+     height (~34px) = 43px of room, or it clips into the action-zone below. */
+  --ts-zone-ground-height: 44px;
   --ts-zone-action-height: 60px;
 
   /* Total height reserve (stage + action, ground not counted as it overlays stage). */
