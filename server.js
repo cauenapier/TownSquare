@@ -84,6 +84,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const DEV_TOOLS_ENABLED = envFlag("ENABLE_DEV_TOOLS");
 const STAGING_PAGE_ENABLED = envFlag("ENABLE_STAGING_PAGE");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
+const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const VISITOR_STATS_FILE = path.join(DATA_DIR, "visitor-stats.json");
 const MESSAGE_STATS_FILE = path.join(DATA_DIR, "message-stats.json");
@@ -1516,7 +1517,7 @@ function handleGetAdminNotifications(req, res) {
       return;
     }
 
-    const notifications = resolved.site.siteNotifications || [];
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
     sendJson(res, 200, { notifications });
   });
 }
@@ -1541,13 +1542,12 @@ function handlePostAdminNotification(req, res) {
       readAt: null,
     };
 
-    if (!Array.isArray(resolved.site.siteNotifications)) {
-      resolved.site.siteNotifications = [];
+    if (!notificationsBySiteKey.has(resolved.site.siteKey)) {
+      notificationsBySiteKey.set(resolved.site.siteKey, []);
     }
 
-    resolved.site.siteNotifications.push(notification);
-    touchSite(resolved.site);
-    saveSites();
+    notificationsBySiteKey.get(resolved.site.siteKey).push(notification);
+    saveNotifications();
 
     sendJson(res, 201, { notification });
   });
@@ -1567,7 +1567,7 @@ function handleMarkAdminNotificationRead(req, res) {
       return;
     }
 
-    const notifications = resolved.site.siteNotifications || [];
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
     const notification = notifications.find((n) => n.id === notificationId);
     if (!notification) {
       sendJson(res, 404, { error: "Notification not found" });
@@ -1575,8 +1575,7 @@ function handleMarkAdminNotificationRead(req, res) {
     }
 
     notification.readAt = Date.now();
-    touchSite(resolved.site);
-    saveSites();
+    saveNotifications();
 
     sendJson(res, 200, { notification });
   });
@@ -2557,7 +2556,6 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
       connectionLimit: DEFAULT_CONNECTION_LIMIT,
       moderationLog: [],
-      siteNotifications: [],
       plugins: {},
       pluginsEnabled: {},
     },
@@ -2699,6 +2697,39 @@ function flushSites() {
 function touchSite(site) {
   site.updatedAt = Date.now();
   scheduleSitesSave();
+}
+
+// Notifications are stored separately from sites to avoid losing on restart
+let notificationsBySiteKey = new Map();
+
+function loadNotifications() {
+  try {
+    const raw = fs.readFileSync(NOTIFICATIONS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.notifications)) return;
+    parsed.notifications.forEach((notif) => {
+      if (!notif.siteKey) return;
+      if (!notificationsBySiteKey.has(notif.siteKey)) {
+        notificationsBySiteKey.set(notif.siteKey, []);
+      }
+      notificationsBySiteKey.get(notif.siteKey).push(notif);
+    });
+  } catch (error) {
+    // File doesn't exist or is invalid; start fresh
+  }
+}
+
+function saveNotifications() {
+  const allNotifications = [];
+  for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+    for (const notif of notifs) {
+      allNotifications.push({ ...notif, siteKey });
+    }
+  }
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const tmpFile = `${NOTIFICATIONS_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify({ notifications: allNotifications }, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmpFile, NOTIFICATIONS_FILE);
 }
 
 // Visitor connection clicks are high-frequency, so we mirror the lastSeen save
@@ -3795,6 +3826,8 @@ async function startServer() {
   if (sitesMigratedOnLoad) {
     saveSites();
   }
+
+  loadNotifications();
 
   visitorStats.load();
   visitorStats.start();
