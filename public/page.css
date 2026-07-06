@@ -154,8 +154,13 @@ body {
 }
 
 .hosted-preview-dock .townsquare__stage {
-  height: 100%;
-  min-height: 120px;
+  /* Stage fills the dock height minus the ground + action-zone bands below it,
+     so those zones (and their buttons) stay inside the fixed-height dock
+     instead of being pushed past its overflow:hidden edge. Floor is well below
+     the ~74px the default dock height actually leaves for the stage, so it
+     only guards against the calc going negative on extreme viewports. */
+  height: calc(100% - var(--ts-zone-ground-height) - var(--ts-zone-action-height));
+  min-height: 48px;
 }
 
 .dev-page {
