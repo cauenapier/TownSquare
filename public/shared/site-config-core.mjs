@@ -117,7 +117,7 @@ export const STYLE_FIELDS = Object.freeze([
   // The action zone (UI chrome area below the stage). Defaults to the ground fill
   // for visual continuity, but can be customized independently. Shares the legacy
   // "page" key with groundFill for backward compatibility with pre-refactor palettes.
-  Object.freeze({ key: "actionZoneFill", legacyKey: "page", label: "Action zone", defaultValue: "#efede9", darkValue: "#181917", cssVar: "--action-zone-fill", overrideUI: false }),
+  Object.freeze({ key: "actionZoneFill", legacyKey: "page", label: "Action zone", defaultValue: "#efede9", darkValue: "#181917", cssVar: "--action-zone-fill", overrideUI: true }),
   Object.freeze({ key: "surface", label: "Buttons and Tags", defaultValue: "#fdf8f4", darkValue: "#24231f", cssVar: "--surface", overrideUI: true }),
   Object.freeze({ key: "ink", label: "Ink", defaultValue: "#2a2926", darkValue: "#f2eee6", cssVar: "--ink", overrideUI: true }),
   Object.freeze({ key: "accent", label: "Accent", defaultValue: "#c8641f", darkValue: "#df8a43", cssVar: "--you", overrideUI: true }),
