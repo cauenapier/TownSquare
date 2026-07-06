@@ -1811,10 +1811,29 @@
   gap: 6px;
 }
 
-.townsquare-avatar__plate {
+.townsquare-avatar__plate,
+.townsquare-avatar__plate-chat {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.townsquare-avatar__plate {
+  position: relative;
+}
+
+.townsquare-avatar__plate::after,
+.townsquare-avatar__self-id::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -46px;
+  width: 46px;
+  height: 100%;
+  z-index: 0;
+}
+
+.townsquare-avatar__plate-chat {
   padding: 6px 13px 6px 11px;
   border: 0;
   border-radius: 11px;
@@ -1825,11 +1844,10 @@
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
-.townsquare-avatar__plate:hover { transform: translateY(-1px); }
-.townsquare-avatar__plate:focus-visible,
+.townsquare-avatar__plate:hover .townsquare-avatar__plate-chat { transform: translateY(-1px); }
+.townsquare-avatar__plate-chat:focus-visible,
 .townsquare-avatar__color-button:focus-visible,
-.townsquare-avatar__swatch:focus-visible,
-.townsquare-avatar__profile-done:focus-visible {
+.townsquare-avatar__swatch:focus-visible {
   outline: 2px solid var(--you);
   outline-offset: 2px;
 }
@@ -1848,6 +1866,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--you);
+  transition: transform 160ms ease, width 160ms ease, height 160ms ease;
 }
 
 .townsquare-avatar__plate-name {
@@ -1991,55 +2010,25 @@
   color: var(--ink-faint);
 }
 
-.townsquare-avatar__profile-done {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  box-shadow: var(--bshadow);
-  cursor: pointer;
-}
-
-.townsquare-avatar__profile-done:hover {
-  color: var(--ink);
-}
-
-.townsquare-avatar__profile-done svg {
-  width: 15px;
-  height: 15px;
-}
-
 .townsquare-avatar__profile {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 7px);
-  display: grid;
-  grid-template-columns: minmax(86px, 120px) 30px 30px;
+  position: relative;
+  display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 3px 7px;
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--tray-shadow);
-  transform: translateX(-50%);
+  min-width: 142px;
 }
 
 .townsquare-avatar__profile[hidden] { display: none; }
 
 .townsquare-avatar__profile-input {
   min-width: 0;
+  width: 112px;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 2px;
   border: 1px solid var(--hair);
   border-radius: 7px;
   outline: 0;
-  background: var(--surface-2);
+  background: color-mix(in oklab, var(--surface-2) 82%, transparent);
   color: var(--ink);
   font-family: var(--font);
   font-size: 13px;
@@ -2049,14 +2038,15 @@
 .townsquare-avatar__profile-input::placeholder { color: var(--ink-faint); }
 
 .townsquare-avatar__color-button {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 2px solid var(--surface);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--swatch, var(--you));
   box-shadow: 0 0 0 1px var(--hair), inset 0 0 0 1px rgba(42, 41, 38, 0.18);
   cursor: pointer;
+  animation: townsquare-color-dot-grow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .townsquare-avatar__color-button:hover,
@@ -2067,8 +2057,8 @@
 .townsquare-avatar__color-menu {
   position: absolute;
   z-index: 2;
-  bottom: calc(100% + 6px);
-  left: 50%;
+  bottom: calc(100% + 10px);
+  left: 12px;
   padding: 8px;
   border-radius: 9px;
   background: var(--surface);
@@ -2098,6 +2088,67 @@
 .townsquare-avatar__swatch[aria-pressed="true"] {
   border-color: var(--surface);
   box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 1px rgba(42, 41, 38, 0.18);
+}
+
+.townsquare-avatar__profile-button {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: calc(100% + 8px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.townsquare-avatar__profile-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.townsquare-avatar__self-id:hover .townsquare-avatar__profile-button,
+.townsquare-avatar__self-id:focus-within .townsquare-avatar__profile-button,
+.townsquare-avatar__plate:hover .townsquare-avatar__profile-button,
+.townsquare-avatar__plate:focus-within .townsquare-avatar__profile-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+}
+
+@media (pointer: coarse) {
+  .townsquare-avatar__profile-button {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(0, -50%);
+  }
+
+  .townsquare-avatar__profile-button svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.townsquare-avatar--profile-open .townsquare-avatar__self-id {
+  gap: 7px;
+}
+
+.townsquare-avatar--profile-open .townsquare-avatar__plate::after,
+.townsquare-avatar--profile-open .townsquare-avatar__self-id::after {
+  display: none;
+}
+
+.townsquare-avatar--profile-open .townsquare-avatar__self-id > :is(.townsquare-avatar__plate-dot, .townsquare-avatar__owner-crown, .townsquare-avatar__plate-name, .townsquare-avatar__profile-button),
+.townsquare-avatar--profile-open .townsquare-avatar__plate > :is(.townsquare-avatar__plate-chat, .townsquare-avatar__profile-button) {
+  display: none;
+}
+
+@keyframes townsquare-color-dot-grow {
+  from {
+    transform: scale(0.36);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 .townsquare-avatar__composer {
@@ -2181,7 +2232,7 @@
 }
 
 /* TOOLBAR: fixed bar at action-zone bottom (replaces floating composer).
-   Always visible, houses composer input, rename pencil, and action buttons.
+   Always visible, houses composer input and action buttons.
    Figure keeps compact identity; peer nameplates never covered; virtual
    keyboard can't clip any UI. Touch-optimized with 42px target sizes. */
 .townsquare__toolbar {
@@ -2212,19 +2263,9 @@
   padding: 3px 7px 3px 19px;
 }
 
-/* Pencil button in toolbar matches action buttons' touch target. */
-.townsquare__toolbar .townsquare__button--sm {
-  width: 42px;
-  height: 42px;
-}
-
-.townsquare__toolbar .townsquare__button--sm svg {
-  width: 17px;
-  height: 17px;
-}
-
 /* Compact identity under the figure: display name, or "you" when unset. */
 .townsquare-avatar__self-id {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;

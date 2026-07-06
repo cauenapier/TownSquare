@@ -180,6 +180,65 @@
       border-color: #aaa096;
       background: #f5f3f1;
     }
+    .name-tag-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      padding: 5px 11px;
+      border-radius: 11px;
+      background: #fdf8f4;
+      box-shadow: 0 9px 16px -10px rgba(60, 40, 20, 0.3), 0 2px 5px -2px rgba(60, 40, 20, 0.16);
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #c8641f;
+    }
+    .name-tag-demo::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: -46px;
+      width: 46px;
+      height: 100%;
+    }
+    .name-tag-demo__dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #c8641f;
+    }
+    .name-tag-demo__edit {
+      position: absolute;
+      left: calc(100% + 8px);
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .name-tag-demo__edit svg {
+      width: 13px;
+      height: 13px;
+    }
+    .name-tag-demo--editing {
+      min-width: 165px;
+      height: 40px;
+      color: #2a2926;
+    }
+    .name-tag-demo__big-dot {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #fdf8f4;
+      border-radius: 999px;
+      background: #c8641f;
+      box-shadow: 0 0 0 1px #e6e1d9, inset 0 0 0 1px rgba(42, 41, 38, 0.18);
+    }
+    .name-tag-demo__input {
+      width: 112px;
+      height: 30px;
+      border: 1px solid #e6e1d9;
+      border-radius: 7px;
+      background: #fafbf9;
+      padding: 0 2px;
+      font: 520 13px/1.2 inherit;
+    }
     .info-box {
       background: #eef3f8;
       border-left: 4px solid #4a8fd4;
@@ -290,6 +349,7 @@
       <nav>
         <a href="#buttons">Buttons</a>
         <a href="#forms">Forms</a>
+        <a href="#identity-tags">Identity Tags</a>
         <a href="#dialogs">Dialogs & Modals</a>
         <a href="#lists">Lists & Cards</a>
       </nav>
@@ -685,7 +745,8 @@
         <div class="info-box">
           <h4>Implementation</h4>
           <p><strong>Classes:</strong> <code>.townsquare__button</code> + <code>.townsquare__button--sm</code> or <code>--md</code></p>
-          <p><strong>Files:</strong> <code>widget.css:102–158</code>, <code>shell.mjs:40, 64, 124, 131</code></p>
+          <p><strong>Usage:</strong> controls, actions, and the self name-tag edit affordance share this base. The name-tag pencil uses the small button shell with a slightly smaller icon so it does not overpower the tag.</p>
+          <p><strong>Source:</strong> <code>public/widget.css</code>, <code>public/widget/shell.mjs</code>, <code>public/widget/avatar.mjs</code></p>
         </div>
       </section>
 
@@ -712,16 +773,72 @@
 
         <h3>Color Swatches</h3>
         <ul class="checklist">
-          <li>Size: 18×18px circles</li>
+          <li>Palette swatches: 20×20px circles</li>
+          <li>Inline current-color control: 24×24px circle in the active name editor</li>
           <li>Border: 2px <code>--surface</code> when active, transparent by default</li>
           <li>Focus: 2px <code>--you</code> outline</li>
-          <li>Grid: 3 columns, 5px gap</li>
+          <li>Grid: 4 columns, 6px gap</li>
         </ul>
+      </section>
+
+      <!-- IDENTITY TAGS -->
+      <section id="identity-tags">
+        <h2><span class="tag tag-component">COMPONENTS</span> Identity Tags</h2>
+
+        <p>The self identity tag stays compact in its resting state. Editing is progressive: the pencil appears beside the tag, then the tag itself becomes the editor after activation.</p>
+
+        <h3>Resting State</h3>
+        <div class="button-demo">
+          <span class="name-tag-demo">
+            <span class="name-tag-demo__dot"></span>
+            <span>you</span>
+            <button class="demo-button demo-button--sm name-tag-demo__edit" title="Edit character" aria-label="Edit character">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path>
+              </svg>
+            </button>
+          </span>
+          <span style="color: #7c766c; font-size: 0.9em;">Pencil appears outside the tag on hover/focus; touch keeps it reachable.</span>
+        </div>
+
+        <ul class="checklist">
+          <li>The pencil does not reserve layout space inside the resting tag.</li>
+          <li>A transparent hover bridge keeps hover active between the tag and pencil.</li>
+          <li>The pencil uses <code>.townsquare__button --sm</code>; only the glyph is reduced.</li>
+          <li>On coarse pointers, the pencil is visible/reachable instead of hover-only.</li>
+        </ul>
+
+        <h3>Editing State</h3>
+        <div class="button-demo">
+          <span class="name-tag-demo name-tag-demo--editing">
+            <button class="name-tag-demo__big-dot" title="Choose character color" aria-label="Choose character color"></button>
+            <input class="name-tag-demo__input" value="display name" aria-label="Display name">
+          </span>
+          <span style="color: #7c766c; font-size: 0.9em;">The tag converts in place into the input and color control.</span>
+        </div>
+
+        <ul class="checklist">
+          <li>Clicking the pencil opens an inline input inside the name tag, not a modal.</li>
+          <li>The small identity dot becomes a larger clickable color dot.</li>
+          <li>The color palette opens above the tag, anchored to the enlarged dot.</li>
+          <li>Changes save live as the input or color changes; blur/Escape closes the editor.</li>
+        </ul>
+
+        <div class="info-box">
+          <h4>Source of Truth</h4>
+          <p>Keep implementation details in sync with <code>public/widget/avatar.mjs</code> and <code>public/widget.css</code>. The label collision solver in <code>public/widget/bubble-layout.mjs</code> accounts for the open editor width so the tag remains clamped on narrow screens.</p>
+        </div>
       </section>
 
       <!-- DIALOGS -->
       <section id="dialogs">
         <h2><span class="tag tag-component">COMPONENTS</span> Dialogs & Modals</h2>
+
+        <div class="info-box">
+          <h4>Not Used for Rename</h4>
+          <p>The self rename/color flow is an inline identity-tag editor, not a dialog. Use the modal pattern only for overlays such as help, message board, and connections.</p>
+        </div>
 
         <h3>Modal Pattern</h3>
         <ul class="checklist">
@@ -788,6 +905,7 @@
           <li>Border-radius: 11px</li>
           <li>Shadow: <code>--bshadow</code></li>
           <li>Owner variant: Special gold-tinted background</li>
+          <li>Self tag: edit affordance appears outside the tag so the resting label remains compact</li>
         </ul>
       </section>
 
@@ -812,7 +930,7 @@
             </tr>
             <tr>
               <td>140–220ms</td>
-              <td>State changes (bubbles, overlays, toggles)</td>
+              <td>State changes (bubbles, overlays, toggles, inline color dot)</td>
               <td>ease</td>
             </tr>
             <tr>
@@ -903,6 +1021,7 @@
           <li><strong>Raised hand</strong>: 🙌 emoji appears above avatar</li>
           <li><strong>Reading away</strong>: 22% opacity fade + "Zz" indicator</li>
           <li><strong>Asleep</strong>: Full fade out after long idle (respects focus state)</li>
+          <li><strong>Profile editing</strong>: Self name tag expands in place into input + color dot</li>
         </ul>
       </section>
 
@@ -912,9 +1031,10 @@
 
         <h3>ARIA & Semantics</h3>
         <ul class="checklist">
-          <li><code>aria-label</code> on all icon buttons (expand, help, jump, high-five)</li>
+          <li><code>aria-label</code> on all icon buttons (expand, help, edit, jump, high-five)</li>
           <li><code>aria-expanded</code> on toggles and profile editor</li>
           <li><code>aria-pressed</code> on expand button (reflects expanded state)</li>
+          <li><code>aria-pressed</code> on color swatches to identify the selected color</li>
           <li><code>aria-hidden="true"</code> on decorative SVGs</li>
           <li><code>role="img"</code> on semantic emojis (crown, hand)</li>
           <li>Semantic HTML: <code>&lt;button&gt;</code>, <code>&lt;input&gt;</code>, <code>&lt;section&gt;</code>, <code>&lt;dialog&gt;</code></li>
@@ -925,6 +1045,7 @@
           <li>Clear <code>:focus-visible</code> outlines (2px widget, 3px public pages)</li>
           <li>2–3px <code>outline-offset</code> for breathing room</li>
           <li>Focus restored after modal closes</li>
+          <li>Inline profile editor selects the current name on open and closes on blur/Escape</li>
           <li>Tab order follows DOM structure</li>
           <li>Escape key closes dialogs</li>
         </ul>
@@ -964,6 +1085,7 @@
         <h3>Touch Targets</h3>
         <ul class="checklist">
           <li>Minimum 30px buttons (40px on touch devices)</li>
+          <li>Name-tag edit pencil is visible/reachable on coarse pointers because hover is unavailable</li>
           <li>Avatar tap zones: 34–58px via pseudo-element <code>::before</code></li>
           <li>8px+ spacing between interactive elements</li>
           <li>@media (pointer: coarse) auto-enlarges controls</li>

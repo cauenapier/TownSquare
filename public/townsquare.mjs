@@ -394,9 +394,9 @@ export function mountTownSquare(root, options = {}) {
   highFiveButton.addEventListener("click", onHighFiveClick);
   disposers.push(() => jumpButton.removeEventListener("click", onJumpClick));
   disposers.push(() => highFiveButton.removeEventListener("click", onHighFiveClick));
-  // Gather the action buttons into the bottom toolbar beside the docked composer
-  // and pencil (createAvatar already placed those). Moving the nodes keeps their
-  // click listeners intact. Final bar order: input, pencil, jump, hi5.
+  // Gather the action buttons into the bottom toolbar beside the docked composer.
+  // The rename pencil now belongs to the self name tag. Moving the nodes keeps
+  // their click listeners intact. Final bar order: input, jump, hi5.
   toolbar.append(jumpButton, highFiveButton);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel);
   disposers.push(unwireHelpPanel);

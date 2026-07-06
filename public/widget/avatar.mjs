@@ -101,8 +101,9 @@ const PENCIL_ICON = `
  * On touch devices the floating nameplate under the figure is fragile (edge
  * clipping, virtual keyboard cover, overlap with peers), so callers can pass
  * `toolbarHost` to dock a fixed bottom bar instead: an always-visible chat
- * input plus the rename pencil (and, wired by the mount, the action buttons).
- * The under-figure label then shows the display name, or "you" when unset.
+ * input and, wired by the mount, the action buttons. The under-figure label
+ * still owns the rename affordance and shows the display name, or "you" when
+ * unset.
  *
  * @param {{
  *   isSelf: boolean,
@@ -217,30 +218,33 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
   profileButton.setAttribute("aria-expanded", "false");
   profileButton.title = "Edit character";
 
-  // Desktop: a "you · say something" pill that opens the inline composer, with
-  // the pencil beside it. Toolbar mode drops the pill (the input is always
-  // visible in the bar) and keeps only the static identity label.
+  // Desktop: a "you · say something" pill opens the inline composer. The
+  // rename pencil lives inside the identity tag in both layouts; toolbar mode
+  // drops the chat pill because the input is always visible in the bar.
   let plate = null;
   let plateRow = null;
+  let plateChatButton = null;
   let selfId = null;
   if (toolbarMode) {
     selfId = document.createElement("div");
     selfId.className = "townsquare-avatar__self-id";
-    selfId.append(dot, crownEl, nameEl);
   } else {
-    plate = document.createElement("button");
+    plate = document.createElement("div");
     plate.className = "townsquare-avatar__plate";
-    plate.type = "button";
-    plate.setAttribute("aria-label", "Say something");
 
+    plateChatButton = document.createElement("button");
+    plateChatButton.className = "townsquare-avatar__plate-chat";
+    plateChatButton.type = "button";
+    plateChatButton.setAttribute("aria-label", "Say something");
     const hint = document.createElement("span");
     hint.className = "townsquare-avatar__plate-hint";
     hint.textContent = "· say something";
-    plate.append(dot, crownEl, nameEl, hint);
+    plateChatButton.append(dot, crownEl, nameEl, hint);
+    plate.appendChild(plateChatButton);
 
     plateRow = document.createElement("div");
     plateRow.className = "townsquare-avatar__plate-row";
-    plateRow.append(plate, profileButton);
+    plateRow.appendChild(plate);
   }
 
   const ownerRoleEl = createOwnerRoleEl();
@@ -287,13 +291,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     return swatch;
   });
 
-  const profileDone = document.createElement("button");
-  profileDone.className = "townsquare-avatar__profile-done";
-  profileDone.type = "submit";
-  profileDone.innerHTML = ENTER_ICON;
-  profileDone.setAttribute("aria-label", "Save character");
-
-  profileForm.append(profileInput, colorButton, colorMenu, profileDone);
+  profileForm.append(colorButton, profileInput, colorMenu);
 
   const composer = document.createElement("form");
   composer.className = "townsquare-avatar__composer";
@@ -324,10 +322,12 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
   if (toolbarMode) {
     composer.classList.add("townsquare-avatar__composer--docked");
     composer.hidden = false;
-    below.append(selfId, ownerRoleEl, profileForm);
-    toolbarHost.append(composer, profileButton);
+    selfId.append(dot, crownEl, nameEl, profileButton, profileForm);
+    below.append(selfId, ownerRoleEl);
+    toolbarHost.appendChild(composer);
   } else {
-    below.append(plateRow, ownerRoleEl, profileForm, composer);
+    plate.append(profileButton, profileForm);
+    below.append(plateRow, ownerRoleEl, composer);
   }
   el.appendChild(below);
 
@@ -387,6 +387,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     profileButton.setAttribute("aria-expanded", "true");
     profileInput.value = nameEl.dataset.value || "";
     profileInput.focus();
+    profileInput.select();
   };
 
   const toggleProfile = () => {
@@ -409,6 +410,14 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
       event.preventDefault();
       closeProfile();
     }
+  });
+
+  profileForm.addEventListener("focusout", () => {
+    requestAnimationFrame(() => {
+      if (profileForm.hidden || profileForm.contains(document.activeElement)) return;
+      submitProfile();
+      closeProfile();
+    });
   });
 
   colorButton.addEventListener("click", () => {
@@ -466,7 +475,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
     onTypingChange?.(false);
   };
 
-  plate?.addEventListener("click", openComposer);
+  plateChatButton?.addEventListener("click", openComposer);
   selfAvatar.openComposer = openComposer;
 
   input.addEventListener("input", () => {
