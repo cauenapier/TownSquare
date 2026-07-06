@@ -22,11 +22,11 @@ const MIME_TYPES = {
 
 // Friendly URLs → the HTML file that backs them.
 const ALIASES = new Map([
-  ["/register", "/hosted/register.html"],
-  ["/admin", "/hosted/admin.html"],
-  ["/admin/chat", "/hosted/chat.html"],
-  ["/service-admin", "/hosted/service-admin.html"],
-  ["/map", "/map.html"],
+  ["/register", "/admin/hosted/register.html"],
+  ["/admin", "/admin/hosted/admin.html"],
+  ["/admin/chat", "/admin/hosted/chat.html"],
+  ["/service-admin", "/admin/hosted/service-admin.html"],
+  ["/map", "/map/map.html"],
   ["/overlay", "/overlay.html"],
   ["/dev", "/dev/dev.html"],
   ["/walk-sandbox", "/dev/walk-sandbox.html"],

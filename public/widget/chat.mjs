@@ -18,7 +18,7 @@ import {
 } from "./constants.mjs";
 import { createBubble, createTrayRow } from "./avatar.mjs";
 import { sendToServer } from "./protocol.mjs";
-import { MSG } from "../shared/protocol.mjs";
+import { MSG } from "../../shared/protocol.mjs";
 
 /**
  * @typedef {import("./avatar.mjs").AvatarView} AvatarView

@@ -18,7 +18,7 @@
  * With neither available the counter renders as plain, non-interactive text.
  */
 
-import { normalizeAbsoluteOrigin } from "./shared/url.mjs";
+import { normalizeAbsoluteOrigin } from "../shared/url.mjs";
 
 const STYLE_ID = "townsquare-counter-style";
 const DEFAULT_POLL_MS = 20000;

@@ -10,7 +10,7 @@ import {
   MAX_WATER_POINTS,
   MAX_WATER_STROKES,
   validateMapWorld,
-} from "../shared/map-world.mjs";
+} from "../../../shared/map-world.mjs";
 import {
   createAutoRefresh,
   createCredentialStore,

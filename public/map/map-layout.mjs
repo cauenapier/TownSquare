@@ -1,4 +1,4 @@
-import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH } from "./shared/map-world.mjs";
+import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH } from "../../shared/map-world.mjs";
 
 const SITE_LAYOUT = {
   baseEdgeInset: 150,

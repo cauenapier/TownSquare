@@ -223,9 +223,9 @@ function parseHttpOrigin(value) {
   }
 }
 
-/** @type {Map<string, import("./public/shared/scene-props.mjs").SceneProp>} */
+/** @type {Map<string, import("./shared/scene-props.mjs").SceneProp>} */
 let PROPS_BY_ID = new Map();
-/** @type {Array<import("./public/shared/bird-perches.mjs").BirdPerch>} */
+/** @type {Array<import("./shared/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
 // Shared realtime protocol vocabulary, assigned from protocol.mjs in
 // loadSharedModules() before the server starts listening.
@@ -245,7 +245,7 @@ let sanitizeSiteStyle;
 let buildSceneProps;
 let buildBirdPerches;
 let buildSiteCss;
-/** @type {(prop: import("./public/shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
+/** @type {(prop: import("./shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 /** @type {(storedWorld: object, siteCount: number) => object} */
@@ -3679,7 +3679,7 @@ async function startServer() {
   messageStats.load();
   messageStats.start();
 
-  const shared = await import("./public/shared/shared-constants.mjs");
+  const shared = await import("./shared/shared-constants.mjs");
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
   MAX_DISPLAY_NAME_LEN = shared.DISPLAY_NAME_MAX;
   MAX_READING_LABEL_LEN = shared.READING_LABEL_MAX;
@@ -3705,13 +3705,13 @@ async function startServer() {
 
 async function loadSharedModules() {
   const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
-    import("./public/shared/site-config-core.mjs"),
-    import("./public/shared/scene-props.mjs"),
-    import("./public/shared/bird-perches.mjs"),
-    import("./public/shared/scene-prop-geometry.mjs"),
-    import("./public/shared/map-world.mjs"),
-    import("./public/shared/url.mjs"),
-    import("./public/shared/protocol.mjs"),
+    import("./shared/site-config-core.mjs"),
+    import("./shared/scene-props.mjs"),
+    import("./shared/bird-perches.mjs"),
+    import("./shared/scene-prop-geometry.mjs"),
+    import("./shared/map-world.mjs"),
+    import("./shared/url.mjs"),
+    import("./shared/protocol.mjs"),
   ]);
 
   MSG = protocol.MSG;

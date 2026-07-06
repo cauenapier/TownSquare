@@ -11,8 +11,8 @@ import {
   renderScenePositionFields,
   renderStyleOverrideFields,
   sanitizeSceneConfig,
-} from "../shared/site-config.mjs";
-import { getMatchingWwwOrigin } from "../shared/url.mjs";
+} from "../../../shared/site-config.mjs";
+import { getMatchingWwwOrigin } from "../../../shared/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 
 const registerView = document.getElementById("register-view");

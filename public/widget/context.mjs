@@ -72,9 +72,9 @@
  * @property {string} browserId
  * @property {Map<string, PeerState>} peers
  * @property {import("./chat.mjs").ChatScope} chat Per-mount chat state shared by all avatars.
- * @property {Array<import("../shared/scene-props.mjs").SceneProp>} sceneProps
- * @property {Map<string, import("../shared/scene-props.mjs").SceneProp>} propsById
- * @property {Map<string, import("../shared/bird-perches.mjs").BirdPerch>} birdPerchesById
+ * @property {Array<import("../../shared/scene-props.mjs").SceneProp>} sceneProps
+ * @property {Map<string, import("../../shared/scene-props.mjs").SceneProp>} propsById
+ * @property {Map<string, import("../../shared/bird-perches.mjs").BirdPerch>} birdPerchesById
  * @property {number} chatThrottleMs Slow-mode cooldown from the server.
  * @property {ReturnType<import("./plugins.mjs").createWidgetPluginRuntime>} widgetPlugins
  * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
@@ -104,11 +104,11 @@
  * @property {Map<number, import("./birds.mjs").BirdView>} [birds]
  * @property {HTMLElement} [birdLayer]
  * @property {HTMLElement} [cloudLayer]
- * @property {{ left: Array<import("../shared/site-config.mjs").Connection>, right: Array<import("../shared/site-config.mjs").Connection> } | null} [connectionsBySide]
+ * @property {{ left: Array<import("../../shared/site-config.mjs").Connection>, right: Array<import("../../shared/site-config.mjs").Connection> } | null} [connectionsBySide]
  * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]
  * @property {import("./modal.mjs").WidgetModal | null} [connectionsModal]
  * @property {"left"|"right"|null} [nearSide] Edge whose signpost the avatar can currently activate.
- * @property {{ board: import("../shared/site-config.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: import("./modal.mjs").WidgetModal | null } | null} [messageBoard]
+ * @property {{ board: import("../../shared/site-config.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: import("./modal.mjs").WidgetModal | null } | null} [messageBoard]
  * @property {{ scene: boolean, style: boolean, connections: boolean, messageBoard: boolean }} [inlineConfig] Which config fields the host pinned inline (power-user overrides that live updates must not touch).
  * @property {(config?: { scene?: unknown, styleConfig?: Record<string, unknown>, connections?: unknown, messageBoard?: unknown }) => void} [applyLiveConfig] Apply server-pushed config, honouring inline overrides.
  */

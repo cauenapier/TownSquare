@@ -1,4 +1,4 @@
-import { normalizeAbsoluteOrigin } from "./shared/url.mjs";
+import { normalizeAbsoluteOrigin } from "../../shared/url.mjs";
 
 export function buildMapEdges(sites) {
   const siteKeyByOrigin = new Map();
