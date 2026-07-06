@@ -63,6 +63,14 @@ const mapDensityValueEl = document.getElementById("map-density-value");
 const serviceAdminTabs = document.getElementById("service-admin-tabs");
 const tabButtons = serviceAdminTabs ? [...serviceAdminTabs.querySelectorAll("[data-tab]")] : [];
 const tabPanels = [...document.querySelectorAll(".hosted-tabpanel")];
+const sendNotificationForm = document.getElementById("send-notification-form");
+const notificationMessageEl = document.getElementById("notification-message");
+const sendNotificationBtn = document.getElementById("send-notification-btn");
+const sendNotificationStatus = document.getElementById("send-notification-status");
+const notificationsStatsTotalEl = document.getElementById("stat-total");
+const notificationsStatsReadEl = document.getElementById("stat-read");
+const notificationsStatsUnreadEl = document.getElementById("stat-unread");
+const recentNotificationsListEl = document.getElementById("recent-notifications-list");
 
 const STORAGE_KEY = "townsquare-service-admin-password";
 const TABLE_PREFS_KEY = "townsquare-service-admin-table";
@@ -1454,8 +1462,100 @@ bindCopy(copyTokenButton, { text: () => newAdminTokenEl.value, source: newAdminT
 
 rememberMeEl.checked = rememberMe;
 
+// Notification management
+function createStatusSetter2(el, { toggleHidden = false } = {}) {
+  return function setStatus(message, isError = false) {
+    el.textContent = message;
+    el.className = isError ? "hosted-status--error" : "";
+    if (toggleHidden) {
+      el.hidden = !message;
+    }
+  };
+}
+
+const setSendNotificationStatus = createStatusSetter2(sendNotificationStatus, { toggleHidden: true });
+
+sendNotificationForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const message = notificationMessageEl.value.trim();
+  if (!message) {
+    setSendNotificationStatus("Message is required", true);
+    return;
+  }
+
+  sendNotificationBtn.disabled = true;
+  setSendNotificationStatus("Sending to all sites...");
+
+  try {
+    const response = await postJson("/api/service-admin/notifications/send", {
+      password,
+      message,
+    });
+
+    if (!response.ok) {
+      setSendNotificationStatus("Failed to send notifications", true);
+      return;
+    }
+
+    notificationMessageEl.value = "";
+    setSendNotificationStatus(`✓ Sent to ${response.body.sitesNotified} sites`);
+    setTimeout(() => setSendNotificationStatus(""), 3000);
+    await loadNotificationsStats();
+  } catch (error) {
+    setSendNotificationStatus("Error sending notifications", true);
+    console.error(error);
+  } finally {
+    sendNotificationBtn.disabled = false;
+  }
+});
+
+async function loadNotificationsStats() {
+  try {
+    const response = await postJson("/api/service-admin/notifications/stats", { password });
+    if (!response.ok) return;
+
+    const data = response.body;
+    const { stats, recent } = data;
+
+    notificationsStatsTotalEl.textContent = stats.total;
+    notificationsStatsReadEl.textContent = stats.read;
+    notificationsStatsUnreadEl.textContent = stats.unread;
+
+    recentNotificationsListEl.replaceChildren();
+    if (recent.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "hosted-note";
+      empty.textContent = "No notifications sent yet.";
+      recentNotificationsListEl.appendChild(empty);
+      return;
+    }
+
+    for (const notif of recent) {
+      const row = document.createElement("div");
+      row.className = "notification-row";
+
+      const msgEl = document.createElement("div");
+      msgEl.className = "notification-row-message";
+      msgEl.textContent = notif.message;
+
+      const metaEl = document.createElement("div");
+      metaEl.className = "notification-row-meta";
+      const createdAt = new Date(notif.createdAt).toLocaleString();
+      const status = notif.readAt ? `Read ${new Date(notif.readAt).toLocaleString()}` : "Unread";
+      metaEl.innerHTML = `<div>${createdAt}</div><div>${status}</div>`;
+
+      row.appendChild(msgEl);
+      row.appendChild(metaEl);
+      recentNotificationsListEl.appendChild(row);
+    }
+  } catch (error) {
+    console.error("Error loading notification stats:", error);
+  }
+}
+
 if (password) {
   loadSites();
+  void loadNotificationsStats();
 } else {
   showLogin();
 }

@@ -84,6 +84,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const DEV_TOOLS_ENABLED = envFlag("ENABLE_DEV_TOOLS");
 const STAGING_PAGE_ENABLED = envFlag("ENABLE_STAGING_PAGE");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
+const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const VISITOR_STATS_FILE = path.join(DATA_DIR, "visitor-stats.json");
 const MESSAGE_STATS_FILE = path.join(DATA_DIR, "message-stats.json");
@@ -1508,6 +1509,78 @@ function handleAdminLogout(req, res) {
   sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookie(requestIsSecure(req)) });
 }
 
+function handleGetAdminNotifications(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
+    sendJson(res, 200, { notifications });
+  });
+}
+
+function handlePostAdminNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    if (!notificationsBySiteKey.has(resolved.site.siteKey)) {
+      notificationsBySiteKey.set(resolved.site.siteKey, []);
+    }
+
+    notificationsBySiteKey.get(resolved.site.siteKey).push(notification);
+    saveNotifications();
+
+    sendJson(res, 201, { notification });
+  });
+}
+
+function handleMarkAdminNotificationRead(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notificationId = String(body.notificationId || "").trim();
+    if (!notificationId) {
+      sendJson(res, 400, { error: "notificationId is required" });
+      return;
+    }
+
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
+    const notification = notifications.find((n) => n.id === notificationId);
+    if (!notification) {
+      sendJson(res, 404, { error: "Notification not found" });
+      return;
+    }
+
+    notification.readAt = Date.now();
+    saveNotifications();
+
+    sendJson(res, 200, { notification });
+  });
+}
+
 const ADMIN_ACTIONS = {
   updateSiteDetails(site, scene, body) {
     const originSettings = parseSiteOriginSettings(body, {
@@ -2025,6 +2098,68 @@ function handleServiceAdminAction(req, res) {
     }
 
     sendJson(res, 200, SERVICE_ADMIN_ACTIONS[action](req, site, body));
+  });
+}
+
+function handleServiceAdminSendNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    let notificationCount = 0;
+    for (const site of sitesByKey.values()) {
+      if (!notificationsBySiteKey.has(site.siteKey)) {
+        notificationsBySiteKey.set(site.siteKey, []);
+      }
+      notificationsBySiteKey.get(site.siteKey).push(notification);
+      notificationCount++;
+    }
+
+    saveNotifications();
+    sendJson(res, 201, { notification, sitesNotified: notificationCount });
+  });
+}
+
+function handleServiceAdminNotificationsStats(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    let totalNotifications = 0;
+    let readCount = 0;
+    let unreadCount = 0;
+    const allNotifications = [];
+
+    for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+      for (const notif of notifs) {
+        totalNotifications++;
+        if (notif.readAt) {
+          readCount++;
+        } else {
+          unreadCount++;
+        }
+        allNotifications.push(notif);
+      }
+    }
+
+    const recentNotifications = allNotifications
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 10);
+
+    sendJson(res, 200, {
+      stats: { total: totalNotifications, read: readCount, unread: unreadCount },
+      recent: recentNotifications,
+    });
   });
 }
 
@@ -2626,6 +2761,39 @@ function touchSite(site) {
   scheduleSitesSave();
 }
 
+// Notifications are stored separately from sites to avoid losing on restart
+let notificationsBySiteKey = new Map();
+
+function loadNotifications() {
+  try {
+    const raw = fs.readFileSync(NOTIFICATIONS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.notifications)) return;
+    parsed.notifications.forEach((notif) => {
+      if (!notif.siteKey) return;
+      if (!notificationsBySiteKey.has(notif.siteKey)) {
+        notificationsBySiteKey.set(notif.siteKey, []);
+      }
+      notificationsBySiteKey.get(notif.siteKey).push(notif);
+    });
+  } catch (error) {
+    // File doesn't exist or is invalid; start fresh
+  }
+}
+
+function saveNotifications() {
+  const allNotifications = [];
+  for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+    for (const notif of notifs) {
+      allNotifications.push({ ...notif, siteKey });
+    }
+  }
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const tmpFile = `${NOTIFICATIONS_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify({ notifications: allNotifications }, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmpFile, NOTIFICATIONS_FILE);
+}
+
 // Visitor connection clicks are high-frequency, so we mirror the lastSeen save
 // pattern: tally in memory on every click and flush the whole registry to disk
 // at most once per interval. Losing up to a minute of clicks on a crash is fine
@@ -3046,6 +3214,21 @@ function handleHttpRequest(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/admin/notifications") {
+    handleGetAdminNotifications(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/create") {
+    handlePostAdminNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/read") {
+    handleMarkAdminNotificationRead(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/action") {
     handleAdminAction(req, res);
     return;
@@ -3068,6 +3251,16 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/service-admin/action") {
     handleServiceAdminAction(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/send") {
+    handleServiceAdminSendNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/stats") {
+    handleServiceAdminNotificationsStats(req, res);
     return;
   }
 
@@ -3705,6 +3898,8 @@ async function startServer() {
   if (sitesMigratedOnLoad) {
     saveSites();
   }
+
+  loadNotifications();
 
   visitorStats.load();
   visitorStats.start();
