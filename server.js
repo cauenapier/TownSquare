@@ -808,8 +808,12 @@ function buildEmbedSnippet(req, site) {
   // module import fires, shaving a round trip off a cross-origin embed. `async`
   // on the module lets it run the moment it arrives instead of waiting in the
   // defer queue, so the widget never delays the host page's own work.
+  // The style.css link serves site-specific palette tokens dynamically, so
+  // appearance changes are live without requiring manual updates. See the admin
+  // panel for options to override with custom CSS.
   return `<link rel="preconnect" href="${serverOrigin}" crossorigin />
 <link rel="stylesheet" href="${serverOrigin}/widget.css" />
+<link rel="stylesheet" href="${serverOrigin}/api/sites/${site.siteKey}/style.css" />
 <div id="townsquare-root"></div>
 <script type="module" async>
   import { mountTownSquare } from "${serverOrigin}/townsquare.mjs";
@@ -1347,6 +1351,29 @@ function handleSitePresence(req, res) {
 
   const scene = scenes.get(site.siteKey);
   sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+}
+
+/**
+ * Serve site-specific CSS with palette tokens. Allows appearance changes to be
+ * live without requiring manual CSS pasting. The embed snippet includes a <link>
+ * tag pointing here by default; users can optionally override with custom CSS
+ * in their own stylesheet for advanced customization.
+ */
+function handleSiteStyleCss(req, res, url) {
+  const siteKey = url.pathname.split("/")[3];
+  const site = sitesByKey.get(siteKey);
+
+  if (!site || site.disabled) {
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("Not found");
+    return;
+  }
+  const css = buildSiteCss(getStyleConfig(site));
+  res.writeHead(200, {
+    "content-type": "text/css; charset=utf-8",
+    "cache-control": "public, max-age=300", // 5 min cache; changes update within 5 mins
+  });
+  res.end(css);
 }
 
 function loadMapWorld() {
@@ -2981,6 +3008,11 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "GET" && url.pathname === "/api/site-presence") {
     handleSitePresence(req, res);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname.match(/^\/api\/sites\/[^/]+\/style\.css$/)) {
+    handleSiteStyleCss(req, res, url);
     return;
   }
 

@@ -201,7 +201,7 @@
             <h2>Scene customization</h2>
           </div>
           <p class="hosted-note">
-            Edit the scene, colors, and message board with a live preview. Changes only go live on your site once you press Publish. Colors are delivered as CSS — re-copy the Customization CSS below after publishing color changes.
+            Edit the scene, colors, and message board with a live preview. Changes only go live on your site once you press Publish. Your colors are delivered automatically — see the Embed snippet section for details.
           </p>
 
           <form class="hosted-form" id="customization-form">
@@ -319,18 +319,18 @@
           </section>
         </section>
 
-        <!-- Embed output — install-once snippet + colors CSS. -->
+        <!-- Embed output — install-once snippet with live colors. -->
         <section class="hosted-section" id="install-section">
           <h2>Embed snippet</h2>
           <p class="hosted-note">
-            Paste this once where you want the square to appear. It only carries your site identity — your scene, neighbour links, and message board are delivered live by TownSquare, so anything you change above shows up on your site automatically, no re-pasting needed.
+            <strong>Recommended:</strong> Paste this once where you want the square to appear. It carries your site identity and colors — everything you change above (scene, colors, neighbour links, message board) shows up on your site automatically, no re-pasting needed. Your appearance changes are live the moment you hit Publish.
           </p>
           <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-snippet">Copy snippet</button>
           </div>
           <p class="hosted-note hosted-footnote">
-            Power user? You can pin any field (<code>scene</code>, <code>connections</code>, <code>messageBoard</code>) directly in the snippet's options. A field you set there is yours to manage in code and stops updating from this dashboard — just like the CSS below.
+            <strong>Power user?</strong> You can pin any field (<code>scene</code>, <code>connections</code>, <code>messageBoard</code>) directly in the snippet's options, or add custom CSS on your own site to override colors. See "Custom CSS override" below.
           </p>
         </section>
 
@@ -384,12 +384,17 @@
         </section>
 
         <section class="hosted-section" id="style-section">
-          <h2>Customization CSS (colors)</h2>
-          <p class="hosted-note">Colors are the one thing delivered as CSS so your own stylesheet can override them. Paste this into your site's stylesheet, and re-copy it after changing colors above. (Scene, links, and the message board don't need this — they're live.)</p>
+          <h2>Custom CSS override (optional)</h2>
+          <p class="hosted-note">
+            <strong>For advanced customization only.</strong> If you want to override the colors from your own website's stylesheet instead of using the automatic updates above, paste this CSS. Your custom CSS will take priority and won't update when you change colors here — you'd need to re-copy it manually.
+          </p>
           <textarea id="style-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-style">Copy CSS</button>
           </div>
+          <p class="hosted-note hosted-footnote">
+            <strong>When to use this:</strong> You want full control over colors in your site's own stylesheet, or you want to coordinate TownSquare colors with the rest of your site's design. Otherwise, stick with the standard snippet above — it's simpler and updates automatically.
+          </p>
         </section>
 
         </div>
