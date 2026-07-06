@@ -61,6 +61,7 @@
           <button type="button" class="hosted-tab" data-tab="map" role="tab" aria-selected="false" aria-controls="tab-map">Map</button>
           <button type="button" class="hosted-tab is-active" data-tab="sites" role="tab" aria-selected="true" aria-controls="tab-sites">Sites</button>
           <button type="button" class="hosted-tab" data-tab="statistics" role="tab" aria-selected="false" aria-controls="tab-statistics">Statistics</button>
+          <button type="button" class="hosted-tab" data-tab="notifications" role="tab" aria-selected="false" aria-controls="tab-notifications">Notifications</button>
         </nav>
 
         <div class="hosted-tabpanel" id="tab-map" role="tabpanel" data-tab="map" hidden>
@@ -218,6 +219,54 @@
           </div>
           <div class="service-traffic" id="traffic-flows" aria-live="polite"></div>
         </section>
+        </div>
+
+        <div class="hosted-tabpanel" id="tab-notifications" role="tabpanel" data-tab="notifications" hidden>
+          <section class="hosted-section" aria-labelledby="send-notification-title">
+            <div class="hosted-section-head">
+              <h2 id="send-notification-title">Send notification</h2>
+              <p class="hosted-note">Broadcast a message to all site owners.</p>
+            </div>
+            <form class="hosted-form" id="send-notification-form">
+              <label>
+                <span>Message</span>
+                <textarea id="notification-message" name="message" rows="3" placeholder="Your notification message..." maxlength="1000" required></textarea>
+              </label>
+              <div class="hosted-actions">
+                <button type="submit" id="send-notification-btn">Send to all sites</button>
+              </div>
+              <p class="hosted-status" id="send-notification-status" role="status" hidden></p>
+            </form>
+          </section>
+
+          <section class="hosted-section" aria-labelledby="notifications-stats-title">
+            <div class="hosted-section-head">
+              <h2 id="notifications-stats-title">Notifications statistics</h2>
+              <p class="hosted-note">Overview of all sent notifications and engagement.</p>
+            </div>
+            <div class="notifications-stats" id="notifications-stats">
+              <div class="stat-card">
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-label">Total sent</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-read">0</div>
+                <div class="stat-label">Read</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-unread">0</div>
+                <div class="stat-label">Unread</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="hosted-section" aria-labelledby="recent-notifications-title">
+            <div class="hosted-section-head">
+              <h2 id="recent-notifications-title">Recent notifications</h2>
+              <p class="hosted-note">Last 10 notifications sent to site owners.</p>
+            </div>
+            <div id="recent-notifications-list" aria-live="polite"></div>
+          </section>
         </div>
       </section>
     </main>

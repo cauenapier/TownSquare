@@ -2685,3 +2685,60 @@ body {
     background: rgba(255, 255, 255, 0.1);
   }
 }
+
+/* Service admin notifications statistics */
+.notifications-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  padding: 16px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.notification-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.notification-row-message {
+  word-break: break-word;
+  color: var(--ink);
+}
+
+.notification-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
+}

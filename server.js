@@ -2101,6 +2101,68 @@ function handleServiceAdminAction(req, res) {
   });
 }
 
+function handleServiceAdminSendNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    let notificationCount = 0;
+    for (const site of sitesByKey.values()) {
+      if (!notificationsBySiteKey.has(site.siteKey)) {
+        notificationsBySiteKey.set(site.siteKey, []);
+      }
+      notificationsBySiteKey.get(site.siteKey).push(notification);
+      notificationCount++;
+    }
+
+    saveNotifications();
+    sendJson(res, 201, { notification, sitesNotified: notificationCount });
+  });
+}
+
+function handleServiceAdminNotificationsStats(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    let totalNotifications = 0;
+    let readCount = 0;
+    let unreadCount = 0;
+    const allNotifications = [];
+
+    for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+      for (const notif of notifs) {
+        totalNotifications++;
+        if (notif.readAt) {
+          readCount++;
+        } else {
+          unreadCount++;
+        }
+        allNotifications.push(notif);
+      }
+    }
+
+    const recentNotifications = allNotifications
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 10);
+
+    sendJson(res, 200, {
+      stats: { total: totalNotifications, read: readCount, unread: unreadCount },
+      recent: recentNotifications,
+    });
+  });
+}
+
 function send(ws, message) {
   if (ws.readyState !== ws.OPEN) return;
   ws.send(JSON.stringify(message));
@@ -3189,6 +3251,16 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/service-admin/action") {
     handleServiceAdminAction(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/send") {
+    handleServiceAdminSendNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/stats") {
+    handleServiceAdminNotificationsStats(req, res);
     return;
   }
 
