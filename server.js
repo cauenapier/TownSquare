@@ -2122,7 +2122,7 @@ function handleServiceAdminSendNotification(req, res) {
       if (!notificationsBySiteKey.has(site.siteKey)) {
         notificationsBySiteKey.set(site.siteKey, []);
       }
-      notificationsBySiteKey.get(site.siteKey).push(notification);
+      notificationsBySiteKey.get(site.siteKey).push({ ...notification });
       notificationCount++;
     }
 
@@ -2135,31 +2135,24 @@ function handleServiceAdminNotificationsStats(req, res) {
   readJsonBody(req, res, (body) => {
     if (!isServiceAdminAuthorized(req, body, res)) return;
 
-    let totalNotifications = 0;
-    let readCount = 0;
-    let unreadCount = 0;
-    const allNotifications = [];
-
-    for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+    const messagesById = new Map();
+    for (const notifs of notificationsBySiteKey.values()) {
       for (const notif of notifs) {
-        totalNotifications++;
-        if (notif.readAt) {
-          readCount++;
-        } else {
-          unreadCount++;
+        let entry = messagesById.get(notif.id);
+        if (!entry) {
+          entry = { id: notif.id, message: notif.message, createdAt: notif.createdAt, total: 0, read: 0 };
+          messagesById.set(notif.id, entry);
         }
-        allNotifications.push(notif);
+        entry.total++;
+        if (notif.readAt) entry.read++;
       }
     }
 
-    const recentNotifications = allNotifications
+    const recentNotifications = Array.from(messagesById.values())
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 10);
 
-    sendJson(res, 200, {
-      stats: { total: totalNotifications, read: readCount, unread: unreadCount },
-      recent: recentNotifications,
-    });
+    sendJson(res, 200, { recent: recentNotifications });
   });
 }
 

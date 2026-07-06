@@ -67,9 +67,6 @@ const sendNotificationForm = document.getElementById("send-notification-form");
 const notificationMessageEl = document.getElementById("notification-message");
 const sendNotificationBtn = document.getElementById("send-notification-btn");
 const sendNotificationStatus = document.getElementById("send-notification-status");
-const notificationsStatsTotalEl = document.getElementById("stat-total");
-const notificationsStatsReadEl = document.getElementById("stat-read");
-const notificationsStatsUnreadEl = document.getElementById("stat-unread");
 const recentNotificationsListEl = document.getElementById("recent-notifications-list");
 
 const STORAGE_KEY = "townsquare-service-admin-password";
@@ -1514,12 +1511,7 @@ async function loadNotificationsStats() {
     const response = await postJson("/api/service-admin/notifications/stats", { password });
     if (!response.ok) return;
 
-    const data = response.body;
-    const { stats, recent } = data;
-
-    notificationsStatsTotalEl.textContent = stats.total;
-    notificationsStatsReadEl.textContent = stats.read;
-    notificationsStatsUnreadEl.textContent = stats.unread;
+    const { recent } = response.body;
 
     recentNotificationsListEl.replaceChildren();
     if (recent.length === 0) {
@@ -1541,8 +1533,7 @@ async function loadNotificationsStats() {
       const metaEl = document.createElement("div");
       metaEl.className = "notification-row-meta";
       const createdAt = new Date(notif.createdAt).toLocaleString();
-      const status = notif.readAt ? `Read ${new Date(notif.readAt).toLocaleString()}` : "Unread";
-      metaEl.innerHTML = `<div>${createdAt}</div><div>${status}</div>`;
+      metaEl.innerHTML = `<div>${createdAt}</div><div>${notif.read}/${notif.total} read</div>`;
 
       row.appendChild(msgEl);
       row.appendChild(metaEl);
