@@ -123,12 +123,12 @@
 }
 
 .townsquare__button:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
 }
 
 .townsquare__button:disabled {
-  opacity: 0.42;
+  opacity: var(--ts-opacity-disabled);
   cursor: default;
 }
 
@@ -214,7 +214,7 @@
 }
 
 .townsquare__enable-toggle-input:focus-visible + .townsquare__enable-toggle-track {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
 }
 
@@ -248,10 +248,6 @@
   gap: var(--ts-toolbar-gap);
 }
 
-
-.townsquare__help-button {
-  font: 650 0.92rem/1 var(--font);
-}
 
 .townsquare__help-scrim {
   position: fixed;
@@ -419,7 +415,7 @@
   width: 22px;
   height: 38px;
   opacity: 0.6;
-  transition: opacity 120ms ease, color 120ms ease;
+  transition: opacity var(--ts-transition-short) ease, color var(--ts-transition-short) ease;
 }
 
 .townsquare-signpost__sign svg {
@@ -450,7 +446,7 @@
 }
 
 .townsquare-signpost:focus-visible .townsquare-signpost__sign {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -505,7 +501,7 @@
   width: 100%;
   height: 100%;
   opacity: 0.6;
-  transition: opacity 120ms ease, color 120ms ease;
+  transition: opacity var(--ts-transition-short) ease, color var(--ts-transition-short) ease;
 }
 
 .townsquare-board__art svg {
@@ -535,7 +531,7 @@
 }
 
 .townsquare-board:focus-visible .townsquare-board__art {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -663,7 +659,7 @@
 .townsquare-connections__panel {
   position: relative;
   z-index: 1;
-  width: min(280px, 86%);
+  width: min(320px, 86%);
   max-height: 86%;
   overflow: auto;
   padding: 14px 16px;
@@ -1074,7 +1070,7 @@
   width: 18px;
   height: 46px;
   transform: var(--avatar-pos);
-  transition: transform 80ms linear;
+  transition: transform var(--ts-transition-micro) linear;
   /* --speak-order: most recent speaker stacks on top when columns must overlap */
   z-index: var(--speak-order, 0);
 }
@@ -1150,7 +1146,7 @@
 }
 .townsquare-avatar.townsquare-avatar--walking { --townsquare-avatar-walk-filter: drop-shadow(0 2px 5px rgba(0,0,0,0.12)); }
 .townsquare-avatar--jumping {
-  animation: presence-jump 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: presence-jump var(--ts-transition-long) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .townsquare-avatar--high-five {
   animation: presence-high-five-root 760ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1539,7 +1535,7 @@
 .townsquare-avatar--sitting svg :is(g.figure-core, g.joint),
 .townsquare-avatar--resting svg :is(g.figure-core, g.joint) {
   animation: none !important;
-  transition: transform 220ms ease;
+  transition: transform var(--ts-transition-standard) ease;
 }
 
 .townsquare-avatar--sitting svg g.figure-core { transform: translateY(0) rotate(0); }
@@ -1841,7 +1837,7 @@
   box-shadow: var(--bshadow);
   cursor: pointer;
   font-family: var(--font);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform var(--ts-transition-short) ease, box-shadow var(--ts-transition-short) ease;
 }
 
 .townsquare-avatar__plate:hover .townsquare-avatar__plate-chat { transform: translateY(-1px); }
@@ -1923,7 +1919,7 @@
 .townsquare-avatar__owner-crown[hidden] { display: none; }
 
 .townsquare-avatar__owner-crown:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
