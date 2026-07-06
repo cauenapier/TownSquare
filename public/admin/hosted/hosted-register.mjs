@@ -1,4 +1,4 @@
-import { bindCopy } from "../lib/ui-common.mjs";
+import { bindCopy } from "../../lib/ui-common.mjs";
 import { setStatus } from "./hosted-common.mjs";
 import {
   applyConfigToForm,
@@ -11,7 +11,7 @@ import {
   renderScenePositionFields,
   renderStyleOverrideFields,
   sanitizeSceneConfig,
-} from "../../../shared/site-config.mjs";
+} from "../../lib/site-config.mjs";
 import { getMatchingWwwOrigin } from "../../../shared/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 

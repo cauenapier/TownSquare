@@ -2,11 +2,11 @@
  * Static scene/style preview for hosted registration and admin customization forms.
  */
 
-import { mountTownSquare } from "../townsquare.mjs";
+import { mountTownSquare } from "../../townsquare.mjs";
 
 /**
  * @typedef {Object} CustomizationPreviewConfig
- * @property {import("../../../shared/site-config.mjs").SceneConfig} scene
+ * @property {import("../../lib/site-config.mjs").SceneConfig} scene
  * @property {Record<string, string>} style Flat palette for the active preview theme.
  */
 

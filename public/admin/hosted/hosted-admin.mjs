@@ -1,4 +1,4 @@
-import { bindCopy } from "../lib/ui-common.mjs";
+import { bindCopy } from "../../lib/ui-common.mjs";
 import { createStatusSetter, el, formatTime, safeLink } from "./hosted-common.mjs";
 import { createAdminSession } from "./hosted-admin-session.mjs";
 import { createAdminPluginRuntime } from "./admin-plugins.mjs";
@@ -24,9 +24,9 @@ import {
   sanitizeMessageBoard,
   sanitizeSceneConfig,
   sanitizeSiteStyle,
-} from "../../../shared/site-config.mjs";
+} from "../../lib/site-config.mjs";
 import { getMatchingWwwOrigin } from "../../../shared/url.mjs";
-import { mountTownSquareCounter, COUNTER_VARIANTS } from "../townsquare-counter.mjs";
+import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../../../shared/shared-constants.mjs";
 

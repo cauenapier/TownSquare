@@ -1,4 +1,4 @@
-import { bindCopy, createSvgElement } from "../lib/ui-common.mjs";
+import { bindCopy, createSvgElement } from "../../lib/ui-common.mjs";
 import { buildMapEdges } from "../map-connections.mjs";
 import { layoutMapSites } from "../map-layout.mjs";
 import { createCityMarker, renderMapEdge } from "../map-render.mjs";
