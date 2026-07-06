@@ -40,14 +40,17 @@
      figure.mjs), so element bottom = art baseline = the line, at any scale. The
      fixed-px stroke rounding (vector-effect: non-scaling-stroke) overlaps the
      1px line slightly, which is what "standing on the line" looks like. */
-  --ts-ground-offset: 52px;
-  --ts-ground-level: var(--ts-ground-offset);
+  --ts-ground-offset: 40px;
+  /* Ground level is at the bottom of the stage (where the ground line is).
+     Props are positioned relative to stage, so bottom: 0 puts them at the stage bottom. */
+  --ts-ground-level: 0px;
   /* Bench seat plank height above the plane: plank centerline y=8 in the 18-unit
      bench art rendered 1:1 px (site-config-core.mjs BENCH_SVG). */
   --ts-bench-seat-height: 10px;
   position: relative;
   min-height: calc(var(--ts-stage-height) + var(--ts-toolbar-reserve));
   overflow: hidden;
+  background: transparent;
 }
 
 .townsquare__controls {
@@ -166,6 +169,20 @@
   .townsquare__enable-toggle-track::after {
     transition: none;
   }
+}
+
+/* Action zone: dedicated space below the scene for UI chrome (buttons, toolbar).
+   Painted only when a customization layer is active (preview or pasted site CSS).
+   Positioned relative so toolbar is positioned within it, showing the background.
+   Min-height fits the toolbar (42px + 7px bottom margin + 2px safety margin). */
+.townsquare__action-zone {
+  position: relative;
+  background: transparent;
+  min-height: 60px;
+}
+
+#townsquare-root[data-townsquare-surface] .townsquare__action-zone {
+  background: var(--action-zone-fill, var(--page));
 }
 
 .townsquare__actions {
@@ -307,30 +324,28 @@
   container-type: inline-size;
 }
 
-/* The ground: a flat band filling the bottom --ts-ground-offset of the stage,
-   with its top border drawn as the ground line. Anchored to the stage's bottom
-   edge (not a percentage) so it holds its height at any stage height — the
-   default 180px stage and the tall flex-sized expanded stage alike. Painted
-   only when a customization layer is active (preview or pasted site CSS). */
+/* The ground band: independent zone between stage (sky) and action-zone.
+   Fixed height with the ground line as its top border.
+   Painted only when a customization layer is active (preview or pasted site CSS). */
 .townsquare__ground {
-  position: absolute;
-  inset: auto 0 0;
   height: var(--ts-ground-offset);
   background: transparent;
+  border-top: 1px solid transparent;
 }
 
-/* Sky and ground are two flat colors: --scene fills the whole stage as the sky,
-   the .townsquare__ground band paints --ground-fill over the bottom on top of
-   it, and the band's top border is the --ground-line where they meet.
-   --page/--ground are the pre-rename token names; the var() fallbacks keep CSS
-   pasted before the rename painting (the stock values also live under those
-   names in tokens.css, so the fallback chain covers the defaults too).
+/* Three independent zones with flat colors:
+   - Stage (sky): --scene
+   - Ground band: --ground-fill with --ground-line top border
+   - Action-zone: --action-zone-fill
 
    Painted only when a customization layer is active: the live preview / overlay
    set data-townsquare-surface via applySiteStyle (with an inline palette), and
    host embeds set it at mount (see townsquare.mjs) so this paints straight from
    the palette tokens the site pastes in (buildSiteCss). The palette tokens are
-   the only thing a hosted site pastes — the paint lives here, in one place. */
+   the only thing a hosted site pastes — the paint lives here, in one place.
+
+   --page/--ground are pre-rename token names; var() fallbacks keep CSS pasted
+   before the rename painting. */
 #townsquare-root[data-townsquare-surface] .townsquare__stage {
   background: var(--scene);
 }
@@ -1981,7 +1996,7 @@
   grid-template-columns: minmax(86px, 120px) auto 30px;
   align-items: center;
   gap: 7px;
-  padding: 7px;
+  padding: 3px 7px;
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--tray-shadow);
@@ -2130,12 +2145,15 @@
   display: none;
 }
 
-/* The docked composer fills the bar instead of floating on its own. */
+/* The docked composer fills the bar instead of floating on its own.
+   Maintains its visual styling (background and shadow) while filling the toolbar.
+   Reduce padding to fit within the action-zone without overflow. */
 .townsquare__toolbar .townsquare-avatar__composer--docked {
   position: static;
   flex: 1 1 auto;
   min-width: 0;
   max-width: none;
+  padding: 3px 7px 3px 19px;
 }
 
 /* Pencil matches the action buttons' touch target inside the bar. */

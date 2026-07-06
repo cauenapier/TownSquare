@@ -147,16 +147,22 @@ export function renderShell(container) {
   const stageEl = document.createElement("div");
   stageEl.className = "townsquare__stage";
 
+  // Ground band: independent zone between stage and action area
   const ground = document.createElement("div");
   ground.className = "townsquare__ground";
-  stageEl.appendChild(ground);
 
   // Touch-only bottom bar. Empty until coarse-pointer mounts dock the composer,
   // pencil, and action buttons into it; hidden via CSS on fine pointers.
   const toolbar = document.createElement("div");
   toolbar.className = "townsquare__toolbar";
 
-  element.append(controls, actions, statusRow, stageEl, toolbar);
+  // Action zone: dedicated space below the scene for UI chrome with customizable styling.
+  const actionZone = document.createElement("div");
+  actionZone.className = "townsquare__action-zone";
+  actionZone.append(actions, toolbar);
+
+  // Three independent zones: stage (sky) / ground / action-zone
+  element.append(controls, statusRow, stageEl, ground, actionZone);
   container.append(element, helpScrim);
   return {
     app: element,
@@ -172,6 +178,7 @@ export function renderShell(container) {
     jumpButton,
     highFiveButton,
     toolbar,
+    actionZone,
   };
 }
 
