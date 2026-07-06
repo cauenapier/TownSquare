@@ -419,6 +419,41 @@ async function checkLegacyPastedPalette(page, httpOrigin) {
   });
 }
 
+// --- responsive sizing: verify zone colors remain correct at various viewports ---
+async function checkResponsiveSizes(page, httpOrigin) {
+  // Common device sizes to test: mobile, tablet, desktop
+  const VIEWPORTS = [
+    { name: "mobile-small", width: 375, height: 667 },   // iPhone SE
+    { name: "mobile-large", width: 480, height: 800 },   // Android
+    { name: "tablet", width: 768, height: 1024 },        // iPad
+    { name: "desktop-sm", width: 1024, height: 768 },    // Small desktop
+    { name: "desktop-lg", width: 1920, height: 1080 },   // Large desktop
+  ];
+
+  const testPalette = PALETTES[0];  // Ocean palette for consistent testing
+
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto(`${httpOrigin}/dev/widget-color-test.html?mode=inline`, { waitUntil: "networkidle" });
+    await page.waitForSelector("#townsquare-root[data-townsquare-surface]");
+    await page.waitForFunction(() => window.__tsColor?.ready === true);
+    await page.waitForTimeout(300);
+
+    // Apply palette
+    await page.evaluate((p) => window.__tsColor.applyStyle(p), testPalette);
+    await page.waitForTimeout(120);
+
+    // Verify colors at this viewport
+    await assertStageColors(page, {
+      label: `responsive/${viewport.name}`,
+      screenshotPath: path.join(OUT_DIR, `responsive-${viewport.name}.png`),
+      skyHex: testPalette.sky,
+      groundHex: groundFillOf(testPalette),
+      actionZoneHex: actionZoneFillOf(testPalette),
+    });
+  }
+}
+
 async function main() {
   const external = Boolean(process.env.TOWNSQUARE_HTTP_ORIGIN);
   const managed = external ? null : await startManagedServer();
@@ -440,6 +475,7 @@ async function main() {
     await checkPastedPalette(page, httpOrigin, buildSiteCss);
     await checkLegacyPastedPalette(page, httpOrigin);
     await checkExpanded(page, httpOrigin);
+    await checkResponsiveSizes(page, httpOrigin);
     console.log(`Widget color test passed. Screenshots saved to ${OUT_DIR}`);
   } finally {
     await browser.close();
