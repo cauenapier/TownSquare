@@ -1497,9 +1497,8 @@ sendNotificationForm.addEventListener("submit", async (e) => {
       return;
     }
 
-    const data = await response.json();
     notificationMessageEl.value = "";
-    setSendNotificationStatus(`✓ Sent to ${data.sitesNotified} sites`);
+    setSendNotificationStatus(`✓ Sent to ${response.body.sitesNotified} sites`);
     setTimeout(() => setSendNotificationStatus(""), 3000);
     await loadNotificationsStats();
   } catch (error) {
@@ -1515,7 +1514,7 @@ async function loadNotificationsStats() {
     const response = await postJson("/api/service-admin/notifications/stats", { password });
     if (!response.ok) return;
 
-    const data = await response.json();
+    const data = response.body;
     const { stats, recent } = data;
 
     notificationsStatsTotalEl.textContent = stats.total;
