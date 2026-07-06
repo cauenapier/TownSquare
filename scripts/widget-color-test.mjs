@@ -296,7 +296,7 @@ async function checkExpanded(page, httpOrigin) {
     sky: sky.hex, groundFill: groundPage.hex, groundLine: "rgba(0, 0, 0, 0.25)",
   });
   await page.waitForTimeout(120);
-  await page.locator(".townsquare__control--expand").click();
+  await page.locator(".townsquare__button--expand").click();
   await page.waitForSelector(".townsquare--expanded");
   await page.waitForTimeout(300);
 
@@ -460,7 +460,7 @@ async function main() {
   const httpOrigin = external ? process.env.TOWNSQUARE_HTTP_ORIGIN : managed.httpOrigin;
 
   const { buildSiteCss } = await import(
-    pathToFileURL(path.join(__dirname, "..", "public", "shared", "site-config-core.mjs")).href
+    pathToFileURL(path.join(__dirname, "..", "public", "lib", "site-config-core.mjs")).href
   );
 
   fs.mkdirSync(OUT_DIR, { recursive: true });

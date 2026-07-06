@@ -326,7 +326,7 @@ async function assertCustomizationPersists() {
   assert(legacy.body.site.styleConfig?.dark?.accent === "#df8a43", "legacy flat style did not default the dark palette");
 
   // A palette stored under the pre-rename `scene` key loads as the current `sky`
-  // token (see STYLE_FIELDS `legacyKey` in public/shared/site-config-core.mjs).
+  // token (see STYLE_FIELDS `legacyKey` in public/lib/site-config-core.mjs).
   const legacySky = await postJson("/api/sites", {
     name: "Legacy Sky",
     origin: HTTP_ORIGIN,
