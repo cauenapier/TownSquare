@@ -30,9 +30,9 @@ import {
   POSITION_INPUT_MIN,
   POSITION_INPUT_MAX,
   POSITION_INPUT_STEP,
-} from "../../shared/site-config-core.mjs";
+} from "./site-config-core.mjs";
 
-export * from "../../shared/site-config-core.mjs";
+export * from "./site-config-core.mjs";
 
 // Every count-bearing scene field, birds included. Positioned fields carry a
 // `positionsKey`; birds are a bare count, so the position logic is guarded on

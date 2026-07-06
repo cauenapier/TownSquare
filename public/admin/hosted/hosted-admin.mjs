@@ -25,10 +25,10 @@ import {
   sanitizeSceneConfig,
   sanitizeSiteStyle,
 } from "../../lib/site-config.mjs";
-import { getMatchingWwwOrigin } from "../../../shared/url.mjs";
+import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
-import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../../../shared/shared-constants.mjs";
+import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../../lib/shared-constants.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");

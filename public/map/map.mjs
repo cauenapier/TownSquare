@@ -3,7 +3,7 @@ import { buildMapEdges } from "./map-connections.mjs";
 import { activityLevel, cityTier, layoutMapSites } from "./map-layout.mjs";
 import { createCityMarker, renderMapEdge, supporterStarSize } from "./map-render.mjs";
 import { renderSceneryLayer } from "./map-scenery.mjs";
-import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH, validateMapWorld } from "../../shared/map-world.mjs";
+import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH, validateMapWorld } from "../../lib/map-world.mjs";
 
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 2.8;

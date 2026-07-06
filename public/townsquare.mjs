@@ -14,7 +14,7 @@ import { setupMessageBoard, teardownMessageBoard } from "./widget/message-board.
 import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
 import { wireKeyboardInset } from "./widget/keyboard-inset.mjs";
-import { MSG } from "../shared/protocol.mjs";
+import { MSG } from "./lib/protocol.mjs";
 import { createAvatar, destroyAvatar } from "./widget/avatar.mjs";
 import {
   renderAvatar,
@@ -44,7 +44,7 @@ import {
   buildSceneProps,
   DEFAULT_SCENE_CONFIG,
   sanitizeSceneConfig,
-} from "../shared/site-config.mjs";
+} from "../lib/site-config.mjs";
 import {
   applyWidgetTheme,
   buildSocketUrl,

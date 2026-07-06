@@ -12,7 +12,7 @@ import {
   renderStyleOverrideFields,
   sanitizeSceneConfig,
 } from "../../lib/site-config.mjs";
-import { getMatchingWwwOrigin } from "../../../shared/url.mjs";
+import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 
 const registerView = document.getElementById("register-view");

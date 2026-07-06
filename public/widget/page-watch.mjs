@@ -8,7 +8,7 @@
 import { setAvatarProfile } from "./avatar.mjs";
 import { sendToServer } from "./protocol.mjs";
 import { readCurrentPage } from "./utils.mjs";
-import { MSG } from "../../shared/protocol.mjs";
+import { MSG } from "../../lib/protocol.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext

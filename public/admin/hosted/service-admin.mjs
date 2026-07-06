@@ -1,8 +1,8 @@
 import { bindCopy, createSvgElement } from "../../lib/ui-common.mjs";
-import { buildMapEdges } from "../map-connections.mjs";
-import { layoutMapSites } from "../map-layout.mjs";
-import { createCityMarker, renderMapEdge } from "../map-render.mjs";
-import { renderSceneryLayer } from "../map-scenery.mjs";
+import { buildMapEdges } from "../../map/map-connections.mjs";
+import { layoutMapSites } from "../../map/map-layout.mjs";
+import { createCityMarker, renderMapEdge } from "../../map/map-render.mjs";
+import { renderSceneryLayer } from "../../map/map-scenery.mjs";
 import {
   cloneMapWorld,
   MAP_PROP_TYPES,
@@ -10,7 +10,7 @@ import {
   MAX_WATER_POINTS,
   MAX_WATER_STROKES,
   validateMapWorld,
-} from "../../../shared/map-world.mjs";
+} from "../../lib/map-world.mjs";
 import {
   createAutoRefresh,
   createCredentialStore,
