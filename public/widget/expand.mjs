@@ -37,7 +37,7 @@ export function createExpandController({ app, expandButton, chatScope, getAvatar
     }
     expanded = next;
     app.classList.toggle("townsquare--expanded", expanded);
-    expandButton.classList.toggle("townsquare__control--active", expanded);
+    expandButton.classList.toggle("townsquare__button--active", expanded);
     expandButton.setAttribute("aria-pressed", String(expanded));
     expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
     setExpandedView(chatScope, expanded, getAvatars());

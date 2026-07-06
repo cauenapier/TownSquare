@@ -26,46 +26,85 @@
   box-sizing: border-box;
 }
 
+/* ============================================================================
+   LAYOUT SYSTEM
+
+   The widget has three independent vertical zones:
+
+   ┌─────────────────────────┐
+   │    Controls (UI)         │  z-index: overlay
+   │                         │
+   │ ┌─────────────────────┐ │
+   │ │  STAGE (sky)        │ │  180px (flex in expanded mode)
+   │ │  [scene + figures]  │ │
+   │ │                     │ │
+   │ └─────────────────────┘ │
+   │ ───────────────────────── │  ground line (1px border-top)
+   │       GROUND (nameplate) │  40px
+   │ ─────────────────────────┤
+   │    ACTION-ZONE (toolbar) │  60px
+   │     [composer + actions] │
+   └─────────────────────────┘
+
+   Key coordinate systems:
+   - Props/figures position relative to stage: bottom: 0 = ground line
+   - Controls/toolbar position absolutely within zones
+   - Ground line: stage bottom edge = --ts-zone-ground-y
+
+   ============================================================================ */
+
 .townsquare {
-  --ts-stage-height: 180px;
-  /* Space below the stage for the touch toolbar (see .townsquare__toolbar). */
-  --ts-toolbar-reserve: 80px;
-  /* The scene's vertical anchor. --ts-ground-offset is the height of the ground
-     band from the stage's bottom edge; the band's 1px top border is the ground
-     line, so the walkable plane is the band's top edge — exactly --ts-ground-offset
-     up. A fixed px so it holds at any stage height, including the tall expanded
-     stage. --ts-ground-level is that same plane, named for what stands on it:
-     every prop/figure is bottom-anchored to it, and every SVG's art is authored
-     to reach its viewBox bottom edge (see the props in site-config-core.mjs and
-     figure.mjs), so element bottom = art baseline = the line, at any scale. The
-     fixed-px stroke rounding (vector-effect: non-scaling-stroke) overlaps the
-     1px line slightly, which is what "standing on the line" looks like. */
-  --ts-ground-offset: 52px;
-  --ts-ground-level: var(--ts-ground-offset);
-  /* Bench seat plank height above the plane: plank centerline y=8 in the 18-unit
-     bench art rendered 1:1 px (site-config-core.mjs BENCH_SVG). */
-  --ts-bench-seat-height: 10px;
+  /* Zone heights: stage (flexible in expanded), ground (fixed nameplate band),
+     action-zone (fixed toolbar area). */
+  --ts-zone-stage-height: 180px;
+  /* 44px, not a round 40: the self nameplate needs top offset (9px) + badge
+     height (~34px) = 43px of room, or it clips into the action-zone below. */
+  --ts-zone-ground-height: 44px;
+  --ts-zone-action-height: 60px;
+
+  /* Total height reserve (stage + action, ground not counted as it overlays stage). */
+  --ts-layout-height-reserve: calc(var(--ts-zone-stage-height) + var(--ts-zone-action-height));
+
+  /* Ground line coordinate system: props bottom-anchor to this plane. */
+  --ts-ground-level: 0px;  /* Anchored to stage bottom edge (relative to stage) */
+
+  /* Prop positioning details. */
+  --ts-bench-seat-height: 10px;  /* Bench plank centerline offset from ground plane */
+
+  /* UI spacing: control/toolbar/status positioning within zones. */
+  --ts-controls-inset: 8px;      /* Controls panel from top-right */
+  --ts-controls-gap: 6px;        /* Gap between control buttons */
+  --ts-status-inset: 8px;        /* Status row from top-left */
+  --ts-toolbar-inset: 10px;      /* Toolbar horizontal margin in action-zone */
+  --ts-toolbar-bottom: 7px;      /* Toolbar vertical position from action-zone bottom */
+  --ts-toolbar-gap: 8px;         /* Gap between toolbar items */
+
+  /* Z-index layers (semantic naming). */
+  --ts-z-base: 1;
+  --ts-z-ui: 2147483001;         /* Controls, actions, toolbar: above scene */
+  --ts-z-ui-above: 2147483002;   /* Toolbar (above floating actions) */
+
   position: relative;
-  min-height: calc(var(--ts-stage-height) + var(--ts-toolbar-reserve));
+  min-height: var(--ts-layout-height-reserve);
   overflow: hidden;
+  background: transparent;
 }
 
 .townsquare__controls {
   position: absolute;
-  z-index: 2147483001;
-  top: 8px;
+  z-index: var(--ts-z-ui);
+  top: var(--ts-controls-inset);
   right: 4px;
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: var(--ts-controls-gap);
 }
 
-.townsquare__control {
+/* Unified button base: shared styles for all buttons */
+.townsquare__button {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
   margin: 0;
   padding: 0;
   border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
@@ -77,27 +116,47 @@
   cursor: pointer;
 }
 
-.townsquare__control:hover,
-.townsquare__control:focus-visible,
-.townsquare__control--active {
+.townsquare__button:hover,
+.townsquare__button:focus-visible,
+.townsquare__button--active {
   color: var(--ink);
   border-color: var(--hair-2);
   background: var(--surface);
 }
 
-.townsquare__control:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+.townsquare__button:focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
 }
 
-.townsquare__control:disabled {
-  opacity: 0.42;
+.townsquare__button:disabled {
+  opacity: var(--ts-opacity-disabled);
   cursor: default;
 }
 
-.townsquare__control svg {
+/* Small buttons: 30×30 (expand, help, edit) */
+.townsquare__button--sm {
+  width: 30px;
+  height: 30px;
+}
+
+.townsquare__button--sm svg {
   width: 16px;
   height: 16px;
+}
+
+/* Medium buttons: 42×42 (jump, high-five actions) */
+.townsquare__button--md {
+  width: 42px;
+  height: 42px;
+  box-shadow: 0 8px 20px -14px rgba(42, 41, 38, 0.42);
+  background: color-mix(in oklab, var(--surface) 84%, transparent);
+  font: 700 18px/1 var(--font);
+}
+
+.townsquare__button--md svg {
+  width: 19px;
+  height: 19px;
 }
 
 .townsquare__enable-toggle {
@@ -157,7 +216,7 @@
 }
 
 .townsquare__enable-toggle-input:focus-visible + .townsquare__enable-toggle-track {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
 }
 
@@ -168,51 +227,29 @@
   }
 }
 
+/* ACTION-ZONE: toolbar and action buttons area at widget bottom.
+   Positioned relative so toolbar anchors within it (shows zone background).
+   Min-height: toolbar ~42px + bottom inset ~7px + safety margin ~2px ≈ 60px. */
+.townsquare__action-zone {
+  position: relative;
+  background: transparent;
+  min-height: var(--ts-zone-action-height);
+}
+
+#townsquare-root[data-townsquare-surface] .townsquare__action-zone {
+  background: var(--action-zone-fill, var(--page));
+}
+
+/* Action buttons: jump and high-five (desktop floating position, hide on touch). */
 .townsquare__actions {
   position: absolute;
-  z-index: 2147483001;
+  z-index: var(--ts-z-ui);
   right: 8px;
   bottom: 12px;
   display: flex;
-  gap: 8px;
+  gap: var(--ts-toolbar-gap);
 }
 
-.townsquare__action {
-  display: inline-grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid color-mix(in oklab, var(--hair-2) 76%, transparent);
-  border-radius: 8px;
-  background: color-mix(in oklab, var(--surface) 84%, transparent);
-  color: var(--ink);
-  box-shadow: 0 8px 20px -14px rgba(42, 41, 38, 0.42);
-  backdrop-filter: blur(8px);
-  cursor: pointer;
-  font: 700 18px/1 var(--font);
-}
-
-.townsquare__action:hover,
-.townsquare__action:focus-visible {
-  border-color: var(--hair-2);
-  background: var(--surface);
-}
-
-.townsquare__action:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
-  outline-offset: 2px;
-}
-
-.townsquare__action svg {
-  width: 19px;
-  height: 19px;
-}
-
-.townsquare__help-button {
-  font: 650 0.92rem/1 var(--font);
-}
 
 .townsquare__help-scrim {
   position: fixed;
@@ -274,10 +311,11 @@
   text-decoration: underline;
 }
 
+/* STATUS ROW: contains nameplate and other status elements. Positioned at top-left. */
 .townsquare__status {
   position: absolute;
-  z-index: 2147483001;
-  top: 8px;
+  z-index: var(--ts-z-ui);
+  top: var(--ts-status-inset);
   left: 4px;
   right: 124px;
   display: flex;
@@ -296,48 +334,36 @@
 
 .townsquare__stage {
   position: relative;
-  height: var(--ts-stage-height);
+  height: var(--ts-zone-stage-height);
   border-radius: var(--r) var(--r) 0 0;
   background: transparent;
-  /* horizontal touch swipes walk; vertical gestures still pan the host page */
+  /* Horizontal touch swipes walk; vertical gestures still pan the host page. */
   touch-action: pan-y pinch-zoom;
-  /* Speech bubbles, trays, and composers size against the stage (cqw), not the
-     viewport — otherwise a long line in a narrow embed renders wider than the
-     stage and bleeds past its clipped edge. */
+  /* Size speech bubbles/trays/composers against stage width (cqw), not viewport,
+     so long lines don't bleed past the clipped stage edge. */
   container-type: inline-size;
 }
 
-/* The ground: a flat band filling the bottom --ts-ground-offset of the stage,
-   with its top border drawn as the ground line. Anchored to the stage's bottom
-   edge (not a percentage) so it holds its height at any stage height — the
-   default 180px stage and the tall flex-sized expanded stage alike. Painted
-   only when a customization layer is active (preview or pasted site CSS). */
+/* GROUND ZONE: nameplate band between stage and action-zone.
+   Fixed height with ground line as top border (marks walkable plane for props).
+   Independent zone, painted only with data-townsquare-surface (preview or pasted CSS). */
 .townsquare__ground {
-  position: absolute;
-  inset: auto 0 0;
-  height: var(--ts-ground-offset);
+  height: var(--ts-zone-ground-height);
   background: transparent;
-}
-
-/* Sky and ground are two flat colors: --scene fills the whole stage as the sky,
-   the .townsquare__ground band paints --ground-fill over the bottom on top of
-   it, and the band's top border is the --ground-line where they meet.
-   --page/--ground are the pre-rename token names; the var() fallbacks keep CSS
-   pasted before the rename painting (the stock values also live under those
-   names in tokens.css, so the fallback chain covers the defaults too).
-
-   Painted only when a customization layer is active: the live preview / overlay
-   set data-townsquare-surface via applySiteStyle (with an inline palette), and
-   host embeds set it at mount (see townsquare.mjs) so this paints straight from
-   the palette tokens the site pastes in (buildSiteCss). The palette tokens are
-   the only thing a hosted site pastes — the paint lives here, in one place. */
-#townsquare-root[data-townsquare-surface] .townsquare__stage {
-  background: var(--scene);
+  border-top: 1px solid transparent;
 }
 
 #townsquare-root[data-townsquare-surface] .townsquare__ground {
   background: var(--ground-fill, var(--page));
   border-top: 1px solid var(--ground-line, var(--ground));
+}
+
+/* ZONE THEMING: each zone colored when data-townsquare-surface is active.
+   Live preview sets this via applySiteStyle; hosted embeds set it at mount.
+   Only palette tokens are pasted (buildSiteCss) — all color paint is here.
+   Fallbacks (--page, --ground) maintain compatibility with pre-rename CSS. */
+#townsquare-root[data-townsquare-surface] .townsquare__stage {
+  background: var(--scene);
 }
 
 .townsquare .prop {
@@ -391,7 +417,7 @@
   width: 22px;
   height: 38px;
   opacity: 0.6;
-  transition: opacity 120ms ease, color 120ms ease;
+  transition: opacity var(--ts-transition-short) ease, color var(--ts-transition-short) ease;
 }
 
 .townsquare-signpost__sign svg {
@@ -422,7 +448,7 @@
 }
 
 .townsquare-signpost:focus-visible .townsquare-signpost__sign {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -477,7 +503,7 @@
   width: 100%;
   height: 100%;
   opacity: 0.6;
-  transition: opacity 120ms ease, color 120ms ease;
+  transition: opacity var(--ts-transition-short) ease, color var(--ts-transition-short) ease;
 }
 
 .townsquare-board__art svg {
@@ -507,7 +533,7 @@
 }
 
 .townsquare-board:focus-visible .townsquare-board__art {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -635,7 +661,7 @@
 .townsquare-connections__panel {
   position: relative;
   z-index: 1;
-  width: min(280px, 86%);
+  width: min(320px, 86%);
   max-height: 86%;
   overflow: auto;
   padding: 14px 16px;
@@ -736,7 +762,7 @@
   display: none;
 }
 
-.townsquare--quiet .townsquare__control--expand {
+.townsquare--quiet .townsquare__button--expand {
   display: none;
 }
 
@@ -773,13 +799,17 @@
   flex: 0 0 var(--ts-keyboard-scroll-room, 0px);
 }
 
+/* EXPANDED MODE: stage flex-grows, controls/status repositioned with larger insets. */
+.townsquare--expanded {
+  --ts-controls-inset: 10px;
+  --ts-status-inset: 10px;
+}
+
 .townsquare--expanded .townsquare__controls {
-  top: 10px;
   right: 18px;
 }
 
 .townsquare--expanded .townsquare__status {
-  top: 10px;
   left: 18px;
   right: 148px;
 }
@@ -1042,7 +1072,7 @@
   width: 18px;
   height: 46px;
   transform: var(--avatar-pos);
-  transition: transform 80ms linear;
+  transition: transform var(--ts-transition-micro) linear;
   /* --speak-order: most recent speaker stacks on top when columns must overlap */
   z-index: var(--speak-order, 0);
 }
@@ -1075,6 +1105,11 @@
   color: var(--you);
   z-index: 2147483001;
 }
+
+.townsquare-avatar--profile-open {
+  z-index: 2147483004;
+}
+
 .townsquare-avatar--peer { color: var(--other); }
 
 /* peers are clickable (recent-message tray); the cursor also marks the slim
@@ -1113,7 +1148,7 @@
 }
 .townsquare-avatar.townsquare-avatar--walking { --townsquare-avatar-walk-filter: drop-shadow(0 2px 5px rgba(0,0,0,0.12)); }
 .townsquare-avatar--jumping {
-  animation: presence-jump 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: presence-jump var(--ts-transition-long) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .townsquare-avatar--high-five {
   animation: presence-high-five-root 760ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1502,7 +1537,7 @@
 .townsquare-avatar--sitting svg :is(g.figure-core, g.joint),
 .townsquare-avatar--resting svg :is(g.figure-core, g.joint) {
   animation: none !important;
-  transition: transform 220ms ease;
+  transition: transform var(--ts-transition-standard) ease;
 }
 
 .townsquare-avatar--sitting svg g.figure-core { transform: translateY(0) rotate(0); }
@@ -1774,10 +1809,29 @@
   gap: 6px;
 }
 
-.townsquare-avatar__plate {
+.townsquare-avatar__plate,
+.townsquare-avatar__plate-chat {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.townsquare-avatar__plate {
+  position: relative;
+}
+
+.townsquare-avatar__plate::after,
+.townsquare-avatar__self-id::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -46px;
+  width: 46px;
+  height: 100%;
+  z-index: 0;
+}
+
+.townsquare-avatar__plate-chat {
   padding: 6px 13px 6px 11px;
   border: 0;
   border-radius: 11px;
@@ -1785,14 +1839,13 @@
   box-shadow: var(--bshadow);
   cursor: pointer;
   font-family: var(--font);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform var(--ts-transition-short) ease, box-shadow var(--ts-transition-short) ease;
 }
 
-.townsquare-avatar__plate:hover { transform: translateY(-1px); }
-.townsquare-avatar__plate:focus-visible,
-.townsquare-avatar__profile-button:focus-visible,
-.townsquare-avatar__swatch:focus-visible,
-.townsquare-avatar__profile-done:focus-visible {
+.townsquare-avatar__plate:hover .townsquare-avatar__plate-chat { transform: translateY(-1px); }
+.townsquare-avatar__plate-chat:focus-visible,
+.townsquare-avatar__color-button:focus-visible,
+.townsquare-avatar__swatch:focus-visible {
   outline: 2px solid var(--you);
   outline-offset: 2px;
 }
@@ -1800,11 +1853,18 @@
 .townsquare-avatar__plate[hidden],
 .townsquare-avatar__profile-button[hidden] { display: none; }
 
+.townsquare-avatar__profile-button[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: var(--hair-2);
+  background: var(--surface);
+}
+
 .townsquare-avatar__plate-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--you);
+  transition: transform 160ms ease, width 160ms ease, height 160ms ease;
 }
 
 .townsquare-avatar__plate-name {
@@ -1861,7 +1921,7 @@
 .townsquare-avatar__owner-crown[hidden] { display: none; }
 
 .townsquare-avatar__owner-crown:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--you) 48%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -1948,55 +2008,25 @@
   color: var(--ink-faint);
 }
 
-.townsquare-avatar__profile-button,
-.townsquare-avatar__profile-done {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  box-shadow: var(--bshadow);
-  cursor: pointer;
-}
-
-.townsquare-avatar__profile-button:hover,
-.townsquare-avatar__profile-button[aria-expanded="true"],
-.townsquare-avatar__profile-done:hover {
-  color: var(--ink);
-}
-
-.townsquare-avatar__profile-button svg,
-.townsquare-avatar__profile-done svg {
-  width: 15px;
-  height: 15px;
-}
-
 .townsquare-avatar__profile {
-  display: grid;
-  grid-template-columns: minmax(86px, 120px) auto 30px;
+  position: relative;
+  display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px;
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--tray-shadow);
+  min-width: 142px;
 }
 
 .townsquare-avatar__profile[hidden] { display: none; }
 
 .townsquare-avatar__profile-input {
   min-width: 0;
+  width: 112px;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 2px;
   border: 1px solid var(--hair);
   border-radius: 7px;
   outline: 0;
-  background: var(--surface-2);
+  background: color-mix(in oklab, var(--surface-2) 82%, transparent);
   color: var(--ink);
   font-family: var(--font);
   font-size: 13px;
@@ -2005,18 +2035,49 @@
 
 .townsquare-avatar__profile-input::placeholder { color: var(--ink-faint); }
 
+.townsquare-avatar__color-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--swatch, var(--you));
+  box-shadow: 0 0 0 1px var(--hair), inset 0 0 0 1px rgba(42, 41, 38, 0.18);
+  cursor: pointer;
+  animation: townsquare-color-dot-grow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.townsquare-avatar__color-button:hover,
+.townsquare-avatar__color-button[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 1px rgba(42, 41, 38, 0.18);
+}
+
+.townsquare-avatar__color-menu {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 10px);
+  left: 12px;
+  padding: 8px;
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--tray-shadow);
+  transform: translateX(-50%);
+}
+
+.townsquare-avatar__color-menu[hidden] { display: none; }
+
 .townsquare-avatar__swatches {
   display: grid;
-  grid-template-columns: repeat(3, 18px);
-  gap: 5px;
+  grid-template-columns: repeat(4, 20px);
+  gap: 6px;
 }
 
 .townsquare-avatar__swatch {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: 2px solid transparent;
-  border-radius: 50%;
+  border-radius: 999px;
   background: var(--swatch);
   box-shadow: inset 0 0 0 1px rgba(42, 41, 38, 0.18);
   cursor: pointer;
@@ -2025,6 +2086,68 @@
 .townsquare-avatar__swatch[aria-pressed="true"] {
   border-color: var(--surface);
   box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 1px rgba(42, 41, 38, 0.18);
+}
+
+
+.townsquare-avatar__profile-button {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: calc(100% + 8px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition: opacity var(--ts-transition-short) ease, transform var(--ts-transition-short) ease;
+}
+
+.townsquare-avatar__profile-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.townsquare-avatar__self-id:hover .townsquare-avatar__profile-button,
+.townsquare-avatar__self-id:focus-within .townsquare-avatar__profile-button,
+.townsquare-avatar__plate:hover .townsquare-avatar__profile-button,
+.townsquare-avatar__plate:focus-within .townsquare-avatar__profile-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+}
+
+@media (pointer: coarse) {
+  .townsquare-avatar__profile-button {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(0, -50%);
+  }
+
+  .townsquare-avatar__profile-button svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.townsquare-avatar--profile-open .townsquare-avatar__self-id {
+  gap: 7px;
+}
+
+.townsquare-avatar--profile-open .townsquare-avatar__plate::after,
+.townsquare-avatar--profile-open .townsquare-avatar__self-id::after {
+  display: none;
+}
+
+.townsquare-avatar--profile-open .townsquare-avatar__self-id > :is(.townsquare-avatar__plate-dot, .townsquare-avatar__owner-crown, .townsquare-avatar__plate-name, .townsquare-avatar__profile-button),
+.townsquare-avatar--profile-open .townsquare-avatar__plate > :is(.townsquare-avatar__plate-chat, .townsquare-avatar__profile-button) {
+  display: none;
+}
+
+@keyframes townsquare-color-dot-grow {
+  from {
+    transform: scale(0.36);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 .townsquare-avatar__composer {
@@ -2107,21 +2230,19 @@
   .townsquare-avatar__composer { min-width: min(260px, 80cqw); }
 }
 
-/* ── Bottom toolbar ──
-   Chat lives in a fixed bar at the bottom of the widget — for every pointer
-   type — instead of floating under the (moving) figure: an always-visible
-   input, the rename pencil, and the jump / high-five actions. The figure keeps
-   a compact identity label, peer name tags are never covered, and the virtual
-   keyboard can't clip any of it. The space is reserved via --ts-toolbar-reserve. */
+/* TOOLBAR: fixed bar at action-zone bottom (replaces floating composer).
+   Always visible, houses composer input and action buttons.
+   Figure keeps compact identity; peer nameplates never covered; virtual
+   keyboard can't clip any UI. Touch-optimized with 42px target sizes. */
 .townsquare__toolbar {
   position: absolute;
-  z-index: 2147483002;
-  left: 10px;
-  right: 10px;
-  bottom: 7px;
+  z-index: var(--ts-z-ui-above);
+  left: var(--ts-toolbar-inset);
+  right: var(--ts-toolbar-inset);
+  bottom: var(--ts-toolbar-bottom);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--ts-toolbar-gap);
 }
 
 /* Actions (jump / high-five) are docked into the toolbar, so the floating
@@ -2130,35 +2251,20 @@
   display: none;
 }
 
-/* The docked composer fills the bar instead of floating on its own. */
+/* The docked composer fills the bar instead of floating on its own.
+   Maintains its visual styling (background and shadow) while filling the toolbar.
+   Reduce padding to fit within the action-zone without overflow. */
 .townsquare__toolbar .townsquare-avatar__composer--docked {
   position: static;
   flex: 1 1 auto;
   min-width: 0;
   max-width: none;
-}
-
-/* Pencil matches the action buttons' touch target inside the bar. */
-.townsquare__toolbar .townsquare-avatar__profile-button {
-  width: 42px;
-  height: 42px;
-}
-
-.townsquare__toolbar .townsquare-avatar__profile-button svg {
-  width: 17px;
-  height: 17px;
-}
-
-/* Rename editor pops above the bar rather than docking in the row. */
-.townsquare__toolbar .townsquare-avatar__profile {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
-  z-index: 1;
+  padding: 3px 7px 3px 19px;
 }
 
 /* Compact identity under the figure: display name, or "you" when unset. */
 .townsquare-avatar__self-id {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2174,12 +2280,12 @@
 }
 
 @media (pointer: coarse) {
-  .townsquare__control {
+  .townsquare__button--sm {
     width: 40px;
     height: 40px;
   }
 
-  .townsquare__control svg {
+  .townsquare__button--sm svg {
     width: 18px;
     height: 18px;
   }

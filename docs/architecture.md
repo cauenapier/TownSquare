@@ -49,23 +49,25 @@ That separation is now reflected directly in the repo:
   (`presence`, `protocol`), input/motion (`movement`), ambient `birds`,
   host-page reading tags (`page-watch`), the fullscreen `expand` controller,
   the shared mount `context` typedef, and small `constants`/`math`/`utils`.
-- `public/shared/` (`shared-constants`, `scene-props`, `scene-prop-geometry`,
-  `bird-perches`, `site-config`) = protocol/scene/style definitions loaded by both
-  the browser widget and the CommonJS server (keep them browser/Node-agnostic).
-  `site-config` holds the scene/style defaults and `buildSiteCss` for per-site
-  customization.
-- `public/hosted/` = hosted setup/admin shells (register/admin/service-admin
-  HTML + scripts) sharing `public/hosted/hosted-common.mjs` and `public/lib/`.
+- `shared/` = protocol/scene/style definitions loaded by both the browser widget
+  and the CommonJS server (keep them browser/Node-agnostic). Includes `site-config-core`,
+  `protocol`, `map-world`, `shared-constants`, `scene-props`, `bird-perches`,
+  `scene-prop-geometry`, and `url` utilities. `site-config-core` holds the scene/style
+  defaults and `buildSiteCss` for per-site customization.
+- `public/lib/` = browser-served wrapper modules for server-shared code. These are
+  copies or re-exports of modules from `shared/` so the browser can access them
+  (the server is outside `/public/` and not served by the web server).
+- `public/admin/` = hosted setup/admin shells (register/admin/service-admin
+  HTML + scripts) sharing `public/admin/hosted/hosted-common.mjs` and importing from `public/lib/`.
+- `public/map/` = public map rendering and shared deterministic town layout;
+  the server persists operator-edited point props and water strokes under `DATA_DIR`.
+  Map world dimensions grow with verified site count; painted scenery stays anchored
+  while new empty margin expands outward.
 - `public/dev/` = dev tooling (`dev.html` + `dev-scene.mjs`, `walk-sandbox.*`).
   `dev-scene` mounts the real widget via `mountTownSquare`'s `simulate` mode
   (no socket, peers/birds visible) and only adds the wandering simulated crowd
   and reading-tuning panel — so the dev scene behaves exactly like production
   with no duplicated runtime logic.
-- `public/lib/` = generic browser helpers shared across pages (`ui-common.mjs`)
-- `public/map*.mjs` = public map rendering and shared deterministic town layout;
-  the server persists operator-edited point props and water strokes under `DATA_DIR`.
-  Map world dimensions grow with verified site count (see `public/shared/map-world.mjs`);
-  painted scenery stays anchored while new empty margin expands outward.
 - `server/plugins.js` = the small in-process plugin registry and hook contract.
 - `plugins/` = public feature modules registered by this distribution. These are
   trusted server modules, not remotely installed extensions. Telegram message

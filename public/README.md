@@ -10,7 +10,7 @@ See `../docs/architecture.md` for the system boundary; this file is just a map.
 
 ```
 townsquare.mjs   widget.css   tokens.css   page.css   design/
-widget/   shared/   hosted/   dev/   lib/
+widget/   admin/   map/   dev/   lib/
 ```
 
 - `townsquare.mjs` — the public mount API (`mountTownSquare(root, options)`),
@@ -18,8 +18,9 @@ widget/   shared/   hosted/   dev/   lib/
 - `widget/` — implementation split by concern (DOM/scene, chat bubbles,
   presence, protocol, movement, birds, page-watch, the `expand` controller,
   plus `constants`/`math`/`utils`). Start in `townsquare.mjs` and follow imports.
-- `shared/` — `shared-constants.mjs`, `scene-props.mjs`, `scene-prop-geometry.mjs`,
-  `bird-perches.mjs`, `site-config.mjs`, `map-world.mjs`, and `url.mjs` (shared validation/config).
+- `admin/` — hosted admin and register pages with setup UI.
+- `map/` — public TownSquare network map visualization.
+- `lib/` — server-shared modules wrapped for browser access (site-config, protocol, map-world, etc.).
 - `widget.css` / `tokens.css` / `page.css` / `design/` — see Styles below.
 
 ## Hosted pages — `hosted/`
@@ -34,19 +35,21 @@ The service-admin page also edits global map scenery through its authenticated A
 - `dev.html` + `dev-scene.mjs` — crowd simulator with live layout tuning (`/dev`).
 - `walk-sandbox.html` + `walk-sandbox.mjs` — walk-cycle inspector (`/walk-sandbox`).
 
-## Shared helpers — `lib/`
+## Shared utilities — `lib/`
 
-`ui-common.mjs` — generic DOM helpers (e.g. `bindCopy`) used by both the hosted
-pages and dev tooling.
+Browser-served wrappers for server-shared modules:
 
-## Shared with the server — `shared/`
+- `ui-common.mjs` — generic DOM helpers (e.g. `bindCopy`) used by hosted pages.
+- `site-config.mjs` / `site-config-core.mjs` — scene/style defaults, sanitizers, and `buildSiteCss`.
+- `protocol.mjs` — WebSocket message types shared by widget and server.
+- `map-world.mjs` — map dimension constants and validation.
+- `shared-constants.mjs` — character colors, limits, and utilities.
+- `scene-props.mjs` — default scene prop definitions.
+- `bird-perches.mjs` — bird perch definitions derived from scene props.
+- `scene-prop-geometry.mjs` — prop settle-zone helpers.
+- `url.mjs` — URL normalization and origin utilities.
 
-`shared-constants.mjs`, `scene-props.mjs`, `scene-prop-geometry.mjs`,
-`bird-perches.mjs`, and `site-config.mjs` are imported by **both** the browser
-widget and the CommonJS server (the server `import()`s them at startup). Keep them
-free of browser- or Node-only APIs so both sides of the protocol stay in lockstep.
-`site-config.mjs` holds the scene/style defaults, sanitizers, and `buildSiteCss`
-(the per-site Customization CSS the admin/register pages hand owners to paste).
+These are copies/wrappers of modules at `../shared/` (server-owned). The server imports from `../shared/` directly; the browser imports from `lib/` which is served. Keep server modules free of browser- or Node-only APIs so both sides stay in lockstep.
 
 ## URLs vs. files
 

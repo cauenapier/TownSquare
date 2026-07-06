@@ -14,7 +14,7 @@ import { setupMessageBoard, teardownMessageBoard } from "./widget/message-board.
 import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
 import { createExpandController } from "./widget/expand.mjs";
 import { wireKeyboardInset } from "./widget/keyboard-inset.mjs";
-import { MSG } from "./shared/protocol.mjs";
+import { MSG } from "./lib/protocol.mjs";
 import { createAvatar, destroyAvatar } from "./widget/avatar.mjs";
 import {
   renderAvatar,
@@ -44,7 +44,7 @@ import {
   buildSceneProps,
   DEFAULT_SCENE_CONFIG,
   sanitizeSceneConfig,
-} from "./shared/site-config.mjs";
+} from "../lib/site-config.mjs";
 import {
   applyWidgetTheme,
   buildSocketUrl,
@@ -394,9 +394,9 @@ export function mountTownSquare(root, options = {}) {
   highFiveButton.addEventListener("click", onHighFiveClick);
   disposers.push(() => jumpButton.removeEventListener("click", onJumpClick));
   disposers.push(() => highFiveButton.removeEventListener("click", onHighFiveClick));
-  // Gather the action buttons into the bottom toolbar beside the docked composer
-  // and pencil (createAvatar already placed those). Moving the nodes keeps their
-  // click listeners intact. Final bar order: input, pencil, jump, hi5.
+  // Gather the action buttons into the bottom toolbar beside the docked composer.
+  // The rename pencil now belongs to the self name tag. Moving the nodes keeps
+  // their click listeners intact. Final bar order: input, jump, hi5.
   toolbar.append(jumpButton, highFiveButton);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel);
   disposers.push(unwireHelpPanel);

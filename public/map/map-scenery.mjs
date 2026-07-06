@@ -1,6 +1,6 @@
-import { createSvgElement } from "./lib/ui-common.mjs";
+import { createSvgElement } from "../lib/ui-common.mjs";
 import { mountainPath, treeCrownPath, treeTrunkPath } from "./map-glyphs.mjs";
-import { MAP_WATER_RIVER_STYLE_MAX_WIDTH } from "./shared/map-world.mjs";
+import { MAP_WATER_RIVER_STYLE_MAX_WIDTH } from "../../lib/map-world.mjs";
 
 function smoothPath(points) {
   if (points.length === 1) return `M${points[0].x} ${points[0].y} l0.01 0`;

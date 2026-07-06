@@ -6,7 +6,8 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
+    "start": "node scripts/kill-port.js && node server.js",
+    "kill-port": "node scripts/kill-port.js",
     "check": "node --check server.js && find server plugins public scripts -type f \\( -name '*.js' -o -name '*.mjs' \\) -exec node --check {} \\;",
     "lint": "eslint .",
     "test": "node --test server/*.test.js",

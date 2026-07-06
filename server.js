@@ -84,6 +84,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const DEV_TOOLS_ENABLED = envFlag("ENABLE_DEV_TOOLS");
 const STAGING_PAGE_ENABLED = envFlag("ENABLE_STAGING_PAGE");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
+const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const VISITOR_STATS_FILE = path.join(DATA_DIR, "visitor-stats.json");
 const MESSAGE_STATS_FILE = path.join(DATA_DIR, "message-stats.json");
@@ -223,9 +224,9 @@ function parseHttpOrigin(value) {
   }
 }
 
-/** @type {Map<string, import("./public/shared/scene-props.mjs").SceneProp>} */
+/** @type {Map<string, import("./shared/scene-props.mjs").SceneProp>} */
 let PROPS_BY_ID = new Map();
-/** @type {Array<import("./public/shared/bird-perches.mjs").BirdPerch>} */
+/** @type {Array<import("./shared/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
 // Shared realtime protocol vocabulary, assigned from protocol.mjs in
 // loadSharedModules() before the server starts listening.
@@ -245,7 +246,7 @@ let sanitizeSiteStyle;
 let buildSceneProps;
 let buildBirdPerches;
 let buildSiteCss;
-/** @type {(prop: import("./public/shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
+/** @type {(prop: import("./shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 /** @type {(storedWorld: object, siteCount: number) => object} */
@@ -808,8 +809,12 @@ function buildEmbedSnippet(req, site) {
   // module import fires, shaving a round trip off a cross-origin embed. `async`
   // on the module lets it run the moment it arrives instead of waiting in the
   // defer queue, so the widget never delays the host page's own work.
+  // The style.css link serves site-specific palette tokens dynamically, so
+  // appearance changes are live without requiring manual updates. See the admin
+  // panel for options to override with custom CSS.
   return `<link rel="preconnect" href="${serverOrigin}" crossorigin />
 <link rel="stylesheet" href="${serverOrigin}/widget.css" />
+<link rel="stylesheet" href="${serverOrigin}/api/sites/${site.siteKey}/style.css" />
 <div id="townsquare-root"></div>
 <script type="module" async>
   import { mountTownSquare } from "${serverOrigin}/townsquare.mjs";
@@ -1349,6 +1354,29 @@ function handleSitePresence(req, res) {
   sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
 }
 
+/**
+ * Serve site-specific CSS with palette tokens. Allows appearance changes to be
+ * live without requiring manual CSS pasting. The embed snippet includes a <link>
+ * tag pointing here by default; users can optionally override with custom CSS
+ * in their own stylesheet for advanced customization.
+ */
+function handleSiteStyleCss(req, res, url) {
+  const siteKey = url.pathname.split("/")[3];
+  const site = sitesByKey.get(siteKey);
+
+  if (!site || site.disabled) {
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("Not found");
+    return;
+  }
+  const css = buildSiteCss(getStyleConfig(site));
+  res.writeHead(200, {
+    "content-type": "text/css; charset=utf-8",
+    "cache-control": "public, max-age=300", // 5 min cache; changes update within 5 mins
+  });
+  res.end(css);
+}
+
 function loadMapWorld() {
   const readWorld = (filePath) => validateMapWorld(JSON.parse(fs.readFileSync(filePath, "utf8")));
   try {
@@ -1479,6 +1507,78 @@ function handleAdminLogout(req, res) {
   const sessionId = cookies[adminSessions.cookieName];
   if (sessionId) adminSessions.destroy(sessionId);
   sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookie(requestIsSecure(req)) });
+}
+
+function handleGetAdminNotifications(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
+    sendJson(res, 200, { notifications });
+  });
+}
+
+function handlePostAdminNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    if (!notificationsBySiteKey.has(resolved.site.siteKey)) {
+      notificationsBySiteKey.set(resolved.site.siteKey, []);
+    }
+
+    notificationsBySiteKey.get(resolved.site.siteKey).push(notification);
+    saveNotifications();
+
+    sendJson(res, 201, { notification });
+  });
+}
+
+function handleMarkAdminNotificationRead(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notificationId = String(body.notificationId || "").trim();
+    if (!notificationId) {
+      sendJson(res, 400, { error: "notificationId is required" });
+      return;
+    }
+
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
+    const notification = notifications.find((n) => n.id === notificationId);
+    if (!notification) {
+      sendJson(res, 404, { error: "Notification not found" });
+      return;
+    }
+
+    notification.readAt = Date.now();
+    saveNotifications();
+
+    sendJson(res, 200, { notification });
+  });
 }
 
 const ADMIN_ACTIONS = {
@@ -1998,6 +2098,68 @@ function handleServiceAdminAction(req, res) {
     }
 
     sendJson(res, 200, SERVICE_ADMIN_ACTIONS[action](req, site, body));
+  });
+}
+
+function handleServiceAdminSendNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    let notificationCount = 0;
+    for (const site of sitesByKey.values()) {
+      if (!notificationsBySiteKey.has(site.siteKey)) {
+        notificationsBySiteKey.set(site.siteKey, []);
+      }
+      notificationsBySiteKey.get(site.siteKey).push(notification);
+      notificationCount++;
+    }
+
+    saveNotifications();
+    sendJson(res, 201, { notification, sitesNotified: notificationCount });
+  });
+}
+
+function handleServiceAdminNotificationsStats(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    let totalNotifications = 0;
+    let readCount = 0;
+    let unreadCount = 0;
+    const allNotifications = [];
+
+    for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+      for (const notif of notifs) {
+        totalNotifications++;
+        if (notif.readAt) {
+          readCount++;
+        } else {
+          unreadCount++;
+        }
+        allNotifications.push(notif);
+      }
+    }
+
+    const recentNotifications = allNotifications
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 10);
+
+    sendJson(res, 200, {
+      stats: { total: totalNotifications, read: readCount, unread: unreadCount },
+      recent: recentNotifications,
+    });
   });
 }
 
@@ -2599,6 +2761,39 @@ function touchSite(site) {
   scheduleSitesSave();
 }
 
+// Notifications are stored separately from sites to avoid losing on restart
+let notificationsBySiteKey = new Map();
+
+function loadNotifications() {
+  try {
+    const raw = fs.readFileSync(NOTIFICATIONS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.notifications)) return;
+    parsed.notifications.forEach((notif) => {
+      if (!notif.siteKey) return;
+      if (!notificationsBySiteKey.has(notif.siteKey)) {
+        notificationsBySiteKey.set(notif.siteKey, []);
+      }
+      notificationsBySiteKey.get(notif.siteKey).push(notif);
+    });
+  } catch (error) {
+    // File doesn't exist or is invalid; start fresh
+  }
+}
+
+function saveNotifications() {
+  const allNotifications = [];
+  for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+    for (const notif of notifs) {
+      allNotifications.push({ ...notif, siteKey });
+    }
+  }
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const tmpFile = `${NOTIFICATIONS_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify({ notifications: allNotifications }, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmpFile, NOTIFICATIONS_FILE);
+}
+
 // Visitor connection clicks are high-frequency, so we mirror the lastSeen save
 // pattern: tally in memory on every click and flush the whole registry to disk
 // at most once per interval. Losing up to a minute of clicks on a crash is fine
@@ -2984,6 +3179,11 @@ function handleHttpRequest(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname.match(/^\/api\/sites\/[^/]+\/style\.css$/)) {
+    handleSiteStyleCss(req, res, url);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/sites") {
     handleRegisterSite(req, res);
     return;
@@ -3014,6 +3214,21 @@ function handleHttpRequest(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/admin/notifications") {
+    handleGetAdminNotifications(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/create") {
+    handlePostAdminNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/read") {
+    handleMarkAdminNotificationRead(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/action") {
     handleAdminAction(req, res);
     return;
@@ -3036,6 +3251,16 @@ function handleHttpRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/service-admin/action") {
     handleServiceAdminAction(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/send") {
+    handleServiceAdminSendNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/stats") {
+    handleServiceAdminNotificationsStats(req, res);
     return;
   }
 
@@ -3674,12 +3899,14 @@ async function startServer() {
     saveSites();
   }
 
+  loadNotifications();
+
   visitorStats.load();
   visitorStats.start();
   messageStats.load();
   messageStats.start();
 
-  const shared = await import("./public/shared/shared-constants.mjs");
+  const shared = await import("./shared/shared-constants.mjs");
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
   MAX_DISPLAY_NAME_LEN = shared.DISPLAY_NAME_MAX;
   MAX_READING_LABEL_LEN = shared.READING_LABEL_MAX;
@@ -3705,13 +3932,13 @@ async function startServer() {
 
 async function loadSharedModules() {
   const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
-    import("./public/shared/site-config-core.mjs"),
-    import("./public/shared/scene-props.mjs"),
-    import("./public/shared/bird-perches.mjs"),
-    import("./public/shared/scene-prop-geometry.mjs"),
-    import("./public/shared/map-world.mjs"),
-    import("./public/shared/url.mjs"),
-    import("./public/shared/protocol.mjs"),
+    import("./shared/site-config-core.mjs"),
+    import("./shared/scene-props.mjs"),
+    import("./shared/bird-perches.mjs"),
+    import("./shared/scene-prop-geometry.mjs"),
+    import("./shared/map-world.mjs"),
+    import("./shared/url.mjs"),
+    import("./shared/protocol.mjs"),
   ]);
 
   MSG = protocol.MSG;

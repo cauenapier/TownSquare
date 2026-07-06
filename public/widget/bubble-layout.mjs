@@ -335,6 +335,8 @@ function measurePresences(presences, stageWidth) {
   for (const presence of presences) {
     const { avatar } = presence;
     const live = avatar.messages[avatar.messages.length - 1];
+    const belowWidth = avatar.below ? avatar.below.offsetWidth : 0;
+    const profileWidth = avatar.profileForm && !avatar.profileForm.hidden ? avatar.profileForm.offsetWidth : 0;
     measured.push({
       avatar,
       x: presence.x,
@@ -346,7 +348,7 @@ function measurePresences(presences, stageWidth) {
       hasBubble: avatar.above.childElementCount > 0,
       aboveWidth: avatar.above.offsetWidth,
       liveWidth: live ? live.el.offsetWidth : 0,
-      belowWidth: avatar.below ? avatar.below.offsetWidth : 0,
+      belowWidth: Math.max(belowWidth, profileWidth),
     });
   }
   return measured;

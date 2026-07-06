@@ -1,4 +1,4 @@
-import { createSvgElement } from "./lib/ui-common.mjs";
+import { createSvgElement } from "../lib/ui-common.mjs";
 import { mapEdgePath } from "./map-connections.mjs";
 import { cityTier } from "./map-layout.mjs";
 

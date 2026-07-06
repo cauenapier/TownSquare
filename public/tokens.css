@@ -55,6 +55,15 @@
   --fs-time: 12px;
   --fw-time: 500;
 
+  /* Motion & Transitions */
+  --ts-transition-micro: 80ms;
+  --ts-transition-short: 120ms;
+  --ts-transition-standard: 220ms;
+  --ts-transition-long: 560ms;
+
+  /* Opacity */
+  --ts-opacity-disabled: 0.42;
+
   /* Legacy aliases — host page chrome uses the same palette */
   --bg: var(--page);
   --text: var(--ink);

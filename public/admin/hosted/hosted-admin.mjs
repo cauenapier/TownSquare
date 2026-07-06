@@ -1,4 +1,4 @@
-import { bindCopy } from "../lib/ui-common.mjs";
+import { bindCopy } from "../../lib/ui-common.mjs";
 import { createStatusSetter, el, formatTime, safeLink } from "./hosted-common.mjs";
 import { createAdminSession } from "./hosted-admin-session.mjs";
 import { createAdminPluginRuntime } from "./admin-plugins.mjs";
@@ -24,11 +24,11 @@ import {
   sanitizeMessageBoard,
   sanitizeSceneConfig,
   sanitizeSiteStyle,
-} from "../shared/site-config.mjs";
-import { getMatchingWwwOrigin } from "../shared/url.mjs";
-import { mountTownSquareCounter, COUNTER_VARIANTS } from "../townsquare-counter.mjs";
+} from "../../lib/site-config.mjs";
+import { getMatchingWwwOrigin } from "../../lib/url.mjs";
+import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
-import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../shared/shared-constants.mjs";
+import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../../lib/shared-constants.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -95,6 +95,10 @@ const moderationStatusEl = document.getElementById("moderation-status");
 const moderationLog = document.getElementById("moderation-log");
 const pluginPanels = document.getElementById("plugin-panels");
 const pluginToggles = document.getElementById("plugin-toggles");
+const notificationsBanner = document.getElementById("notifications-banner");
+const notificationsClose = document.getElementById("notifications-close");
+const notificationsCount = document.getElementById("notifications-count");
+const notificationsList = document.getElementById("notifications-list");
 
 renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(customizationForm);
@@ -244,6 +248,8 @@ const session = createAdminSession({
     moderationSavedMessage = "";
     adminPlugins.clear();
     preview.destroy();
+    notificationsBanner.hidden = true;
+    notificationsList.replaceChildren();
     setActiveTab("site");
   },
 });
@@ -980,6 +986,8 @@ function render(data, { background = false } = {}) {
   } else {
     setStatus("Waiting for the snippet to load from your site. Updates automatically.");
   }
+
+  void fetchAndRenderNotifications();
 }
 
 /**
@@ -1104,5 +1112,76 @@ chatDisabledInput.addEventListener("change", () => session.action("setChatDisabl
 botProtectionInput.addEventListener("change", () => session.action("setBotProtection", { enabled: botProtectionInput.checked }));
 clearMessagesButton.addEventListener("click", () => session.action("clearMessages"));
 disableSiteButton.addEventListener("click", () => session.action("disableSite", { disabled: !currentSite.disabled }));
+
+notificationsClose.addEventListener("click", () => {
+  notificationsBanner.hidden = true;
+});
+
+async function fetchAndRenderNotifications() {
+  if (!currentSite) return;
+  try {
+    const response = await fetch("/api/admin/notifications", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    renderNotifications(data.notifications || []);
+  } catch (error) {
+    console.error("Failed to fetch notifications:", error);
+  }
+}
+
+function renderNotifications(notifications) {
+  const unread = notifications.filter((n) => !n.readAt);
+
+  if (unread.length === 0) {
+    notificationsBanner.hidden = true;
+    return;
+  }
+
+  notificationsBanner.hidden = false;
+  const count = unread.length;
+  notificationsCount.textContent = `${count} new notification${count === 1 ? "" : "s"}`;
+
+  notificationsList.replaceChildren();
+  for (const notif of unread) {
+    const item = document.createElement("div");
+    item.className = "notification-item unread";
+
+    const text = document.createElement("div");
+    text.className = "notification-item-text";
+    text.textContent = notif.message;
+
+    const actions = document.createElement("div");
+    actions.className = "notification-item-actions";
+
+    const markReadBtn = document.createElement("button");
+    markReadBtn.className = "notification-item-button";
+    markReadBtn.textContent = "Mark read";
+    markReadBtn.addEventListener("click", () => markNotificationRead(notif.id));
+
+    actions.appendChild(markReadBtn);
+    item.appendChild(text);
+    item.appendChild(actions);
+    notificationsList.appendChild(item);
+  }
+}
+
+async function markNotificationRead(notificationId) {
+  try {
+    const response = await fetch("/api/admin/notification/read", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ notificationId }),
+    });
+    if (response.ok) {
+      await fetchAndRenderNotifications();
+    }
+  } catch (error) {
+    console.error("Failed to mark notification as read:", error);
+  }
+}
 
 session.start();

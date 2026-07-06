@@ -2,7 +2,7 @@
  * Pure browser helpers used during widget mount and connection setup.
  */
 
-import { normalizeAbsoluteOrigin } from "../shared/url.mjs";
+import { normalizeAbsoluteOrigin } from "../../lib/url.mjs";
 import {
   BROWSER_ID_KEY,
   BROWSER_SECRET_KEY,

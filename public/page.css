@@ -154,8 +154,13 @@ body {
 }
 
 .hosted-preview-dock .townsquare__stage {
-  height: 100%;
-  min-height: 120px;
+  /* Stage fills the dock height minus the ground + action-zone bands below it,
+     so those zones (and their buttons) stay inside the fixed-height dock
+     instead of being pushed past its overflow:hidden edge. Floor is well below
+     the ~74px the default dock height actually leaves for the stage, so it
+     only guards against the calc going negative on extreme viewports. */
+  height: calc(100% - var(--ts-zone-ground-height) - var(--ts-zone-action-height));
+  min-height: 48px;
 }
 
 .dev-page {
@@ -2584,4 +2589,156 @@ body {
     max-width: calc(100% - 20px);
   }
   .map-detail { width: calc(100% - 20px); }
+}
+
+/* Notification banner */
+.notifications-banner {
+  background: #f0f4f8;
+  border: 1px solid #d0d8e0;
+  border-radius: 10px;
+  margin: 0 0 20px 0;
+  padding: 12px 14px;
+  color: var(--ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  .notifications-banner {
+    background: #1a202c;
+    border-color: #2d3748;
+  }
+}
+
+.notifications-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.notifications-banner-message {
+  flex: 1;
+}
+
+.notifications-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+@media (prefers-color-scheme: dark) {
+  .notification-item {
+    background: rgba(0, 0, 0, 0.2);
+  }
+}
+
+.notification-item.unread {
+  font-weight: 500;
+  opacity: 1;
+}
+
+.notification-item.read {
+  opacity: 0.7;
+}
+
+.notification-item-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.notification-item-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.notification-item-button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.notification-item-button:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  .notification-item-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Service admin notifications statistics */
+.notifications-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  padding: 16px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.notification-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.notification-row-message {
+  word-break: break-word;
+  color: var(--ink);
+}
+
+.notification-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
 }

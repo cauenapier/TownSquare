@@ -5,8 +5,8 @@
 import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } from "./connections.mjs";
 import { layoutStage, layoutConfigFor } from "./bubble-layout.mjs";
 import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
-import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
-import { MSG, GESTURE } from "../shared/protocol.mjs";
+import { findSettleProp } from "../../lib/scene-prop-geometry.mjs";
+import { MSG, GESTURE } from "../../lib/protocol.mjs";
 import { clamp } from "./math.mjs";
 import { sendToServer } from "./protocol.mjs";
 import { isTypingTarget } from "./utils.mjs";
@@ -45,7 +45,7 @@ export function resetPropSettle(ctx) {
 }
 
 /**
- * @param {import("../shared/scene-props.mjs").SceneProp} prop
+ * @param {import("../../lib/scene-props.mjs").SceneProp} prop
  * @param {number} requestedX
  * @returns {number}
  */
@@ -60,7 +60,7 @@ function findNearestSeatX(prop, requestedX) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {import("../shared/scene-props.mjs").SceneProp} prop
+ * @param {import("../../lib/scene-props.mjs").SceneProp} prop
  */
 function applyLocalPropSettle(ctx, prop) {
   const { self } = ctx;

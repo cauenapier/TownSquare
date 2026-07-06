@@ -326,7 +326,7 @@ async function assertCustomizationPersists() {
   assert(legacy.body.site.styleConfig?.dark?.accent === "#df8a43", "legacy flat style did not default the dark palette");
 
   // A palette stored under the pre-rename `scene` key loads as the current `sky`
-  // token (see STYLE_FIELDS `legacyKey` in public/shared/site-config-core.mjs).
+  // token (see STYLE_FIELDS `legacyKey` in public/lib/site-config-core.mjs).
   const legacySky = await postJson("/api/sites", {
     name: "Legacy Sky",
     origin: HTTP_ORIGIN,
@@ -1020,7 +1020,7 @@ async function assertMapWorldSizingPolicy() {
     computeMapWorldDimensions,
     resolveMapWorld,
     validateMapWorld,
-  } = await import("../public/shared/map-world.mjs");
+  } = await import("../shared/map-world.mjs");
 
   const min = computeMapWorldDimensions(0);
   assert(
@@ -1080,7 +1080,7 @@ async function assertMapWorldSizingPolicy() {
 async function assertServiceAdminCanEditMap() {
   if (!SERVICE_ADMIN_PASSWORD) return;
 
-  const { computeMapWorldDimensions, MAP_WORLD_MIN_WIDTH } = await import("../public/shared/map-world.mjs");
+  const { computeMapWorldDimensions, MAP_WORLD_MIN_WIDTH } = await import("../shared/map-world.mjs");
   const publicBefore = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
   const expected = computeMapWorldDimensions(publicBefore.sites.length);
   assert(publicBefore.world?.width >= MAP_WORLD_MIN_WIDTH, "public map did not include the world");

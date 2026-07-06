@@ -16,7 +16,7 @@ import {
 } from "./presence.mjs";
 import { getBrowserSecret, saveBrowserSecret } from "./utils.mjs";
 import { solveChallenge } from "./pow.mjs";
-import { MSG, GESTURE, BIRD_ACTION, CLOSE_REASON } from "../shared/protocol.mjs";
+import { MSG, GESTURE, BIRD_ACTION, CLOSE_REASON } from "../../lib/protocol.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext

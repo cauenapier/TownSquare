@@ -13,7 +13,7 @@ export {
   MIN_X,
   READING_LABEL_MAX,
   randomSpawnX,
-} from "../shared/shared-constants.mjs";
+} from "../../lib/shared-constants.mjs";
 
 /** Fallback chat cooldown before the server's live value arrives in `hello`. */
 export const DEFAULT_CHAT_THROTTLE_MS = 500;

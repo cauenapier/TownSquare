@@ -1,4 +1,4 @@
-import { bindCopy } from "../lib/ui-common.mjs";
+import { bindCopy } from "../../lib/ui-common.mjs";
 import { setStatus } from "./hosted-common.mjs";
 import {
   applyConfigToForm,
@@ -11,8 +11,8 @@ import {
   renderScenePositionFields,
   renderStyleOverrideFields,
   sanitizeSceneConfig,
-} from "../shared/site-config.mjs";
-import { getMatchingWwwOrigin } from "../shared/url.mjs";
+} from "../../lib/site-config.mjs";
+import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 
 const registerView = document.getElementById("register-view");
