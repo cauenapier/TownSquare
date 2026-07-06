@@ -43,6 +43,7 @@ const messageTrendChartEl = document.getElementById("message-trend-chart");
 const verifiedTrendChartEl = document.getElementById("verified-trend-chart");
 const topSitesListEl = document.getElementById("top-sites-list");
 const dormantSitesListEl = document.getElementById("dormant-sites-list");
+const ownerActivityListEl = document.getElementById("owner-activity-list");
 const tokenResult = document.getElementById("token-result");
 const newAdminTokenEl = document.getElementById("new-admin-token");
 const newAdminLink = document.getElementById("new-admin-link");
@@ -68,7 +69,7 @@ const TABLE_PREFS_KEY = "townsquare-service-admin-table";
 const REFRESH_INTERVAL_MS = 5000;
 const MAX_MAP_HISTORY_ITEMS = 20_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const VERIFIED_CHART_DAYS = 90;
+const VERIFIED_CHART_DAYS = 7;
 
 const TABLE_COLUMNS = [
   { key: "name", label: "Name" },
@@ -93,6 +94,8 @@ const TABLE_COLUMNS = [
   { key: "visitorsMonthly", label: "Monthly", render: (site) => String(site.visitorStats?.monthly ?? 0) },
   { key: "connectionClickTotal", label: "Outbound", render: (site) => String(site.connectionClickTotal ?? 0) },
   { key: "mapClickTotal", label: "Map clicks", render: (site) => String(site.mapClickTotal ?? 0) },
+  { key: "adminAccessLastAt", label: "Owner in admin", render: (site) => formatTime(site.adminAccessLastAt) },
+  { key: "adminAccessCount", label: "Admin visits", render: (site) => String(site.adminAccessCount ?? 0) },
   { key: "blockedCount", label: "Blocked", render: (site) => String(site.blockedCount ?? 0) },
 ];
 
@@ -515,11 +518,13 @@ function siteSortValue(site, key) {
     case "verifiedAt":
     case "lastSeenAt":
     case "lastMessageAt":
+    case "adminAccessLastAt":
       return Number(site[key] || 0);
     case "messageCount":
     case "activeVisitors":
     case "connectionClickTotal":
     case "mapClickTotal":
+    case "adminAccessCount":
     case "blockedCount":
       return Number(site[key] ?? 0);
     case "messagesDaily":
@@ -938,6 +943,7 @@ function buildPlatformStats(sites, platform = null) {
   let chattingThisWeek = 0;
   let messagesToday = 0;
   let messagesWeekly = 0;
+  let ownersInAdmin7d = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -952,6 +958,7 @@ function buildPlatformStats(sites, platform = null) {
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * DAY_MS) chattingThisWeek += 1;
     messagesToday += site.messageStats?.daily ?? 0;
     messagesWeekly += site.messageStats?.weekly ?? 0;
+    if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * DAY_MS) ownersInAdmin7d += 1;
   }
 
   return {
@@ -964,6 +971,7 @@ function buildPlatformStats(sites, platform = null) {
     chattingThisWeek,
     messagesToday,
     messagesWeekly,
+    ownersInAdmin7d,
     dailySeries: [],
     messageDailySeries: [],
   };
@@ -1058,6 +1066,7 @@ function renderPlatformStats(platform) {
     { value: platform.chattingThisWeek, label: "Chatting this week" },
     { value: platform.messagesToday ?? 0, label: "Messages today" },
     { value: platform.messagesWeekly ?? 0, label: "Messages (7d)" },
+    { value: platform.ownersInAdmin7d ?? 0, label: "Owners in admin (7d)" },
   ];
 
   for (const card of cards) {
@@ -1169,6 +1178,58 @@ function renderSiteHealthLists(sites) {
   renderSiteHealthTable(dormantSitesListEl, dormantSites, "All verified sites had visitors this week.");
 }
 
+// Owners who opened their site's /admin dashboard, most recent first. Counts are
+// distinct dashboard sessions (the server collapses its own polling into one).
+function renderOwnerActivityList(sites) {
+  if (!ownerActivityListEl) return;
+  ownerActivityListEl.replaceChildren();
+
+  const visited = sites
+    .filter((site) => (site.adminAccessLastAt ?? 0) > 0)
+    .sort((left, right) => (right.adminAccessLastAt ?? 0) - (left.adminAccessLastAt ?? 0))
+    .slice(0, 15);
+
+  if (visited.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = "No owner dashboard visits recorded yet.";
+    ownerActivityListEl.append(empty);
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "service-stats-mini-table";
+
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Site", "Visits", "Last in admin"]) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.append(th);
+  }
+  head.append(headRow);
+
+  const body = document.createElement("tbody");
+  for (const site of visited) {
+    const row = document.createElement("tr");
+
+    const name = document.createElement("td");
+    name.textContent = site.name || site.origin || site.siteKey;
+
+    const visits = document.createElement("td");
+    visits.textContent = String(site.adminAccessCount ?? 0);
+
+    const lastAt = document.createElement("td");
+    lastAt.textContent = formatTime(site.adminAccessLastAt);
+
+    row.append(name, visits, lastAt);
+    body.append(row);
+  }
+
+  table.append(head, body);
+  ownerActivityListEl.append(table);
+}
+
 function renderStatistics(sites, platform = null) {
   const stats = buildPlatformStats(sites, platform);
   renderPlatformStats(stats);
@@ -1176,6 +1237,7 @@ function renderStatistics(sites, platform = null) {
   renderMessageTrendChart(stats.messageDailySeries);
   renderVerifiedSitesChart(sites);
   renderSiteHealthLists(sites);
+  renderOwnerActivityList(sites);
 }
 
 function renderSites(sites, platform = null) {

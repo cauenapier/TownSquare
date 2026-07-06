@@ -1398,6 +1398,31 @@ function extendAdminPanel(panel, site) {
   return isPlainObject(extended) ? extended : corePanel;
 }
 
+// The admin dashboard polls /api/admin/site every few seconds while open, so a
+// raw request count would measure tab-open time, not owner engagement. Instead
+// `lastAt` tracks the newest authenticated request and `count` increments only
+// when the previous one is older than this gap — i.e. it counts distinct
+// dashboard sessions, the "owner opened /admin" signal service admin wants.
+const ADMIN_ACCESS_SESSION_GAP_MS = 30 * 60 * 1000;
+let lastAdminAccessSaveAt = 0;
+
+function recordAdminAccess(site) {
+  const now = Date.now();
+  const access = isPlainObject(site.adminAccess) ? site.adminAccess : (site.adminAccess = { count: 0, lastAt: 0 });
+  const lastAt = Number(access.lastAt) || 0;
+  if (now - lastAt > ADMIN_ACCESS_SESSION_GAP_MS) {
+    access.count = (Number(access.count) || 0) + 1;
+  }
+  access.lastAt = now;
+
+  // Polls refresh lastAt every few seconds; throttle the registry rewrite the
+  // same way lastSeen is throttled so an open dashboard doesn't write each tick.
+  if (now - lastAdminAccessSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+    lastAdminAccessSaveAt = now;
+    saveSites();
+  }
+}
+
 function handlePostAdminSite(req, res) {
   readJsonBody(req, res, (body) => {
     const ip = getRequestIp(req);
@@ -1417,6 +1442,7 @@ function handlePostAdminSite(req, res) {
     }
 
     if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
+    recordAdminAccess(resolved.site);
     sendAdminSite(req, res, resolved.site, presentedToken, resolved.setCookie);
   });
 }
@@ -1786,6 +1812,7 @@ function serviceAdminSite(site) {
   const scene = scenes.get(site.siteKey);
   const connectionClicks = isPlainObject(site.connectionClicks) ? site.connectionClicks : {};
   const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
+  const adminAccess = isPlainObject(site.adminAccess) ? site.adminAccess : {};
 
   return {
     ...publicSite(site),
@@ -1800,6 +1827,8 @@ function serviceAdminSite(site) {
     ),
     mapClickTotal: Number(mapClicks.count || 0),
     mapClickLastAt: Number(mapClicks.lastAt || 0),
+    adminAccessCount: Number(adminAccess.count || 0),
+    adminAccessLastAt: Number(adminAccess.lastAt || 0),
   };
 }
 
@@ -1815,6 +1844,7 @@ function buildServiceAdminPlatformStats(sites) {
   let chattingThisWeek = 0;
   let messagesToday = 0;
   let messagesWeekly = 0;
+  let ownersInAdmin7d = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -1829,6 +1859,7 @@ function buildServiceAdminPlatformStats(sites) {
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;
     messagesToday += site.messageStats?.daily ?? 0;
     messagesWeekly += site.messageStats?.weekly ?? 0;
+    if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * dayMs) ownersInAdmin7d += 1;
   }
 
   return {
@@ -1841,6 +1872,7 @@ function buildServiceAdminPlatformStats(sites) {
     chattingThisWeek,
     messagesToday,
     messagesWeekly,
+    ownersInAdmin7d,
     dailySeries: visitorStats.getAggregateDailySeries(7),
     messageDailySeries: messageStats.getAggregateDailySeries(7),
   };
@@ -2411,6 +2443,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       lastMessageAt: null,
       connectionClicks: {},
       mapClicks: { count: 0, lastAt: 0 },
+      adminAccess: { count: 0, lastAt: 0 },
       createdAt: now,
       updatedAt: now,
       blockedBrowserIds: [],
@@ -2510,6 +2543,9 @@ function loadSites() {
       }
       if (!isPlainObject(site.mapClicks)) {
         site.mapClicks = { count: 0, lastAt: 0 };
+      }
+      if (!isPlainObject(site.adminAccess)) {
+        site.adminAccess = { count: 0, lastAt: 0 };
       }
       if (typeof site.supporter !== "boolean") {
         site.supporter = false;
