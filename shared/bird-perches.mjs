@@ -6,7 +6,7 @@
  */
 
 import { PROPS } from "./scene-props.mjs";
-import { buildBirdPerches } from "./site-config.mjs";
+import { buildBirdPerches } from "./site-config-core.mjs";
 
 /**
  * @typedef {Object} BirdPerch

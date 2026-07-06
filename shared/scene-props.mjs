@@ -6,10 +6,10 @@
  * for callers that do not provide a per-site override.
  */
 
-import { buildSceneProps, DEFAULT_SCENE_CONFIG } from "./site-config.mjs";
+import { buildSceneProps, DEFAULT_SCENE_CONFIG } from "./site-config-core.mjs";
 
 /**
- * @typedef {import("./site-config.mjs").SceneProp} SceneProp
+ * @typedef {import("./site-config-core.mjs").SceneProp} SceneProp
  */
 
 /** @type {Array<SceneProp>} */

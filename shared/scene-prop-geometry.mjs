@@ -5,10 +5,10 @@
  * same normalized x space as character positions.
  */
 
-import { REFERENCE_STAGE_WIDTH } from "./site-config.mjs";
+import { REFERENCE_STAGE_WIDTH } from "./site-config-core.mjs";
 
 /**
- * @typedef {import("./site-config.mjs").SceneProp} SceneProp
+ * @typedef {import("./site-config-core.mjs").SceneProp} SceneProp
  */
 
 /**
