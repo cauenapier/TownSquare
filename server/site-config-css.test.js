@@ -31,7 +31,7 @@ function extractDecl(css, selectorFragment, prop) {
 
 test("buildSiteCss emits palette tokens only, never repaints the stage", async () => {
   const { buildSiteCss } = await import(
-    pathToFileURL(path.join(__dirname, "..", "public", "shared", "site-config-core.mjs")).href
+    pathToFileURL(path.join(__dirname, "..", "shared", "site-config-core.mjs")).href
   );
   const css = buildSiteCss();
 
