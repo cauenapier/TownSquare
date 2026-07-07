@@ -119,7 +119,7 @@ function socketOptions(origin, ip) {
   return Object.keys(headers).length > 0 ? { headers } : undefined;
 }
 
-function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", ip = "", displayName = "", color = "", readingLabel, readingUrl, readingActive }) {
+function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", ip = "", displayName = "", color = "", readingLabel, readingUrl, readingActive, widgetVisible }) {
   const label = `connect ${browserId || "(ephemeral)"}`;
   const promise = new Promise((resolve, reject) => {
     const ws = new WebSocket(siteSocketUrl(siteKey), socketOptions(origin, ip));
@@ -132,6 +132,7 @@ function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", 
       if (typeof readingLabel === "string") init.readingLabel = readingLabel;
       if (typeof readingUrl === "string") init.readingUrl = readingUrl;
       if (typeof readingActive === "boolean") init.readingActive = readingActive;
+      if (typeof widgetVisible === "boolean") init.widgetVisible = widgetVisible;
       ws.send(JSON.stringify(init));
     });
 
@@ -1469,12 +1470,14 @@ async function main() {
   assert(first.hello.readingLabel === "launch", "reading label was not derived from the URL on init");
   assert(first.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "reading URL was not accepted on init");
   assert(first.hello.readingActive === true, "reading should default to active on init");
+  assert(first.hello.widgetVisible === true, "widget visibility should default to true on init");
   assert(typeof first.hello.browserSecret === "string" && first.hello.browserSecret.length > 0, "hello did not include browser secret");
   assert(secondSameBrowser.hello.displayName === "Ada Lovelace", "same-browser tab did not inherit display name");
   assert(secondSameBrowser.hello.color === "#3f7f63", "same-browser tab did not inherit character color");
   assert(secondSameBrowser.hello.readingLabel === "launch", "same-browser tab did not inherit reading label");
   assert(secondSameBrowser.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "same-browser tab did not inherit reading URL");
   assert(secondSameBrowser.hello.readingActive === true, "same-browser tab did not inherit active reading state");
+  assert(secondSameBrowser.hello.widgetVisible === true, "same-browser tab did not inherit default widget visibility");
   assert(secondSameBrowser.hello.peers.length === 0, "same-browser tab should not see itself as a peer");
   assert(!first.seen.some((message) => message.type === "join"), "same-browser tab incorrectly triggered a join event");
 
@@ -1488,6 +1491,7 @@ async function main() {
   assert(third.hello.peers[0].readingLabel === "launch", "peer snapshot did not include reading label");
   assert(third.hello.peers[0].readingUrl === `${HTTP_ORIGIN}/notes/launch`, "peer snapshot did not include reading URL");
   assert(third.hello.peers[0].readingActive === true, "peer snapshot did not include active reading state");
+  assert(third.hello.peers[0].widgetVisible === true, "peer snapshot did not include default widget visibility");
   assert(!Object.hasOwn(third.hello.peers[0], "browserId"), "peer snapshot leaked browserId");
   assert(first.seen.some((message) => message.type === "join" && message.peer.id === third.id), "first client did not observe different-browser join");
   const joinBroadcast = first.seen.find((message) => message.type === "join" && message.peer?.id === third.id);
@@ -1597,6 +1601,60 @@ async function main() {
       && message.readingActive === false
     )),
     "reading inactive state did not propagate when every same-browser tab was inactive",
+  );
+
+  secondSameBrowser.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "API reference",
+    readingUrl: `${HTTP_ORIGIN}/docs/api`,
+    readingActive: false,
+    widgetVisible: false,
+  }));
+  await delay(100);
+
+  assert(
+    !third.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.widgetVisible === false
+    )),
+    "one same-browser tab with the widget offscreen should not mark the shared visitor's widget invisible",
+  );
+
+  first.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "API reference",
+    readingUrl: `${HTTP_ORIGIN}/docs/api`,
+    readingActive: false,
+    widgetVisible: false,
+  }));
+  await delay(100);
+
+  assert(
+    third.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.widgetVisible === false
+    )),
+    "widget-invisible state did not propagate when every same-browser tab had the widget offscreen",
+  );
+
+  first.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "API reference",
+    readingUrl: `${HTTP_ORIGIN}/docs/api`,
+    readingActive: false,
+    widgetVisible: true,
+  }));
+  await delay(100);
+
+  assert(
+    third.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.widgetVisible === true
+    )),
+    "widget-visible state did not propagate again once a tab reported the widget back onscreen",
   );
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "profile", displayName: "Ada", color: "#3f6fb5" }));

@@ -35,6 +35,27 @@
         font: 400 0.85rem/1.4 system-ui, sans-serif;
         opacity: 0.7;
       }
+      .staging-controls {
+        width: min(1100px, 100%);
+        margin: 10px auto 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        font: 400 0.9rem/1.4 system-ui, sans-serif;
+      }
+      .staging-controls label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+      .staging-scroll-spacer {
+        height: 1000px;
+      }
+      .dev-shell:not(.staging-has-scroll-padding) .staging-scroll-spacer {
+        display: none;
+      }
     </style>
   </head>
   <body class="dev-page">
@@ -50,9 +71,21 @@
         server, and protocol end to end.
       </p>
 
+      <!-- Scroll padding toggle: test widget-not-visible when the scene is off-screen. -->
+      <div class="staging-controls">
+        <label for="staging-scroll-padding">
+          <input type="checkbox" id="staging-scroll-padding" />
+          Extra scroll padding (1000px above &amp; below widget)
+        </label>
+      </div>
+
+      <div class="staging-scroll-spacer" aria-hidden="true"></div>
+
       <section class="townsquare-host" aria-label="TownSquare staging scene">
         <div id="townsquare-root"></div>
       </section>
+
+      <div class="staging-scroll-spacer" aria-hidden="true"></div>
     </main>
 
     <script type="module">
@@ -60,6 +93,30 @@
 
       const origin = window.location.origin;
       document.getElementById("staging-origin").textContent = origin;
+
+      // Scroll padding toggle: test widget-not-visible when the mount is off-screen.
+      const SCROLL_PADDING_KEY = "townsquare-staging-scroll-padding";
+      const shell = document.querySelector(".dev-shell");
+      const scrollPaddingToggle = document.getElementById("staging-scroll-padding");
+
+      function setScrollPadding(enabled) {
+        shell.classList.toggle("staging-has-scroll-padding", enabled);
+        scrollPaddingToggle.checked = enabled;
+        try {
+          localStorage.setItem(SCROLL_PADDING_KEY, enabled ? "1" : "0");
+        } catch {}
+      }
+
+      let scrollPaddingEnabled = true;
+      try {
+        const saved = localStorage.getItem(SCROLL_PADDING_KEY);
+        if (saved === "0") scrollPaddingEnabled = false;
+      } catch {}
+      setScrollPadding(scrollPaddingEnabled);
+
+      scrollPaddingToggle.addEventListener("change", () => {
+        setScrollPadding(scrollPaddingToggle.checked);
+      });
 
       mountTownSquare(document.getElementById("townsquare-root"), {
         // Defaults to window.location.origin; stated here so the page is an

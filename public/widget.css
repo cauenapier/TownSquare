@@ -1259,7 +1259,7 @@
 .townsquare-avatar--preview.townsquare-avatar--walking { filter: none; }
 .townsquare-avatar--preview svg * { stroke-width: 1.4; }
 
-.townsquare-avatar svg :is(g.figure-core, g.joint) {
+.townsquare-avatar svg :is(g.figure-core, g.joint, g.book) {
   transform-box: view-box;
 }
 
@@ -1272,6 +1272,7 @@
 .townsquare-avatar svg g.leg-r { transform-origin: 10.8px 26px; }
 .townsquare-avatar svg g.knee-l { transform-origin: 7.1px 34px; }
 .townsquare-avatar svg g.knee-r { transform-origin: 12.9px 34px; }
+.townsquare-avatar svg g.book { transform-origin: 12.15px 18.7px; }
 
 .townsquare-avatar.townsquare-avatar--walking svg :is(g.figure-core, g.joint) {
   animation-duration: var(--walk-cycle);
@@ -1535,7 +1536,8 @@
 }
 
 .townsquare-avatar--sitting svg :is(g.figure-core, g.joint),
-.townsquare-avatar--resting svg :is(g.figure-core, g.joint) {
+.townsquare-avatar--resting svg :is(g.figure-core, g.joint),
+.townsquare-avatar--book svg g.joint {
   animation: none !important;
   transition: transform var(--ts-transition-standard) ease;
 }
@@ -1559,6 +1561,48 @@
 .townsquare-avatar--resting svg g.arm-r { transform: rotate(45deg); }
 .townsquare-avatar--resting svg g.elbow-l { transform: rotate(10deg); }
 .townsquare-avatar--resting svg g.elbow-r { transform: rotate(-30deg); }
+
+/* book: held low, around belly/hip height, not raised to shoulder height —
+   a book held up near the chin reads as a raised-arm gesture, not reading.
+   The book (g.book, figure.mjs) is drawn as two open page-panels sharing a
+   spine edge (near panel 9,17.6–22.2; spine at 12.2; far panel 15.3,14.8–
+   21.8, taller and offset up) rather than a single flat box, so it reads as
+   an open book rather than a closed slab — and it's drawn oversized on
+   purpose so it stays legible at this figure's small on-scene scale instead
+   of disappearing into the arm strokes. The left arm does the visible work,
+   swinging down and folding back to bring the hand to the near panel's
+   bottom-outer corner (9,22.2); the right arm stays short, reaching only to
+   the near panel's top-outer corner (9,17.6) since it's already close to
+   that shoulder. Hand-tuned against a reference sketch rather than solved
+   by IK (unlike the sitting/resting poses above), picking whichever of the
+   two IK branches per arm needed the smaller shoulder swing, same
+   branch-selection rule as sitting/resting; elbow-l's angle was then
+   corrected against the actual rendered transform (getScreenCTM on the
+   live figure, not hand math) so the hand really lands on the near panel's
+   corner instead of stopping short of it. Legs are untouched, so this
+   composes with any leg pose. Placed after the sitting/resting rules
+   (identical selector specificity) so book-pose's arm angles win on source
+   order when a leg pose is also present. */
+.townsquare-avatar--book svg g.arm-l { transform: rotate(17deg); }
+.townsquare-avatar--book svg g.arm-r { transform: rotate(-12deg); }
+.townsquare-avatar--book svg g.elbow-l { transform: rotate(-83deg); }
+.townsquare-avatar--book svg g.elbow-r { transform: rotate(114deg); }
+
+/* The right forearm's reach (elbow-r, above) passes behind the book on its
+   way to the near panel's top corner, so it — and the lower part of the
+   upper arm past where the book would occlude it — is hidden rather than
+   drawn crossing on top of the pages. `line.book-stub` (figure.mjs) is a
+   shorter line sharing g.arm-r's rotation, showing only the bit of upper arm
+   that stays visible in front of the book; `line.limb` is the normal
+   full-length upper arm used by every other pose. */
+.townsquare-avatar svg g.arm-r line.book-stub { opacity: 0; }
+.townsquare-avatar--book svg g.arm-r line.limb { opacity: 0; }
+.townsquare-avatar--book svg g.arm-r line.book-stub { opacity: 1; }
+.townsquare-avatar--book svg g.elbow-r { opacity: 0; }
+
+.townsquare-avatar svg g.book { opacity: 0; transition: opacity 140ms ease, transform 140ms ease; }
+/* Tilted toward the head/to the side rather than held flat-on. */
+.townsquare-avatar--book svg g.book { opacity: 1; transform: rotate(-10deg); }
 
 /* ── Ghost stack: history lives in the scene as fading bubbles above the figure ── */
 .townsquare-avatar__above {

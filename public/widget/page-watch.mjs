@@ -75,23 +75,33 @@ function uninstallHistoryPatch() {
 export function watchCurrentPage(ctx) {
   let updateTimer = null;
   let recheckTimer = null;
+  // Tracks whether `ctx.app` currently intersects the viewport; updated
+  // asynchronously by the IntersectionObserver below. `ctx.expanded`
+  // (fullscreen overlay) always counts as visible regardless of this value,
+  // since the observer's callback can lag the position:fixed transition.
+  let widgetVisible = true;
+  let widgetObserver = null;
+  const isWidgetVisible = () => ctx.expanded || widgetVisible;
 
   const sendReadingUpdate = () => {
     updateTimer = null;
     const nextPage = readCurrentPage(ctx.root, ctx.options);
     const readingActive = isReadingActive();
+    const nextWidgetVisible = isWidgetVisible();
     if (
       nextPage.readingLabel === ctx.self.readingLabel
       && nextPage.readingUrl === ctx.self.readingUrl
       && readingActive === ctx.self.readingActive
+      && nextWidgetVisible === ctx.self.widgetVisible
     ) return;
 
     ctx.self.readingLabel = nextPage.readingLabel;
     ctx.self.readingUrl = nextPage.readingUrl;
     ctx.self.readingActive = readingActive;
+    ctx.self.widgetVisible = nextWidgetVisible;
     setAvatarProfile(ctx.self.avatar, ctx.self);
     if (ctx.self.id) {
-      sendToServer(ctx, MSG.READING, { ...nextPage, readingActive });
+      sendToServer(ctx, MSG.READING, { ...nextPage, readingActive, widgetVisible: nextWidgetVisible });
     }
   };
 
@@ -117,6 +127,25 @@ export function watchCurrentPage(ctx) {
   window.addEventListener("blur", scheduleReadingUpdate);
   window.addEventListener("townsquare:navigation", scheduleReadingUpdate);
 
+  // Separate from movement.mjs's own IntersectionObserver on the same
+  // element (wireGameLoop), which exists purely to pause rAF for CPU and has
+  // different fallback semantics ("always run"). This one drives a
+  // broadcast-visible presence signal, so its fallback is "always visible".
+  if (typeof IntersectionObserver === "function") {
+    // Majority-visible, not merely on-screen: a sliver of the widget peeking
+    // into view (e.g. mid-scroll) shouldn't count as "watching the square".
+    widgetObserver = new IntersectionObserver(
+      (entries) => {
+        const nextVisible = entries.some((entry) => entry.intersectionRatio >= 0.5);
+        if (nextVisible === widgetVisible) return;
+        widgetVisible = nextVisible;
+        scheduleReadingUpdate();
+      },
+      { threshold: 0.5 },
+    );
+    widgetObserver.observe(ctx.app);
+  }
+
   return () => {
     window.removeEventListener("popstate", scheduleReadingUpdate);
     window.removeEventListener("hashchange", scheduleReadingUpdate);
@@ -125,6 +154,7 @@ export function watchCurrentPage(ctx) {
     window.removeEventListener("focus", scheduleReadingUpdate);
     window.removeEventListener("blur", scheduleReadingUpdate);
     window.removeEventListener("townsquare:navigation", scheduleReadingUpdate);
+    widgetObserver?.disconnect();
     clearTimeout(updateTimer);
     clearTimeout(recheckTimer);
     uninstallHistoryPatch();

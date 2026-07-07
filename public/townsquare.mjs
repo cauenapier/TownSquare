@@ -222,6 +222,10 @@ export function mountTownSquare(root, options = {}) {
   const profile = getStoredProfile();
   const { readingLabel, readingUrl } = readCurrentPage(root, options);
   const readingActive = document.visibilityState === "visible" && document.hasFocus();
+  // Real value arrives asynchronously via the IntersectionObserver in
+  // watchCurrentPage once ctx.app is mounted; default true avoids a spurious
+  // book-pose flash for the common case where the widget loads in view.
+  const widgetVisible = true;
   const spawnX = preview || solo || simulate ? PREVIEW_SPAWN_X : randomSpawnX();
   const peers = new Map();
   // Per-mount chat state, shared by every avatar in this mount (and never across
@@ -305,6 +309,7 @@ export function mountTownSquare(root, options = {}) {
       readingLabel,
       readingUrl,
       readingActive,
+      widgetVisible,
       typing: false,
       isOwner: false,
       badgeColor: "",
@@ -314,7 +319,7 @@ export function mountTownSquare(root, options = {}) {
       settleRequested: false,
       avatar: createAvatar({
         isSelf: true,
-        profile: { ...profile, readingLabel, readingUrl, readingActive },
+        profile: { ...profile, readingLabel, readingUrl, readingActive, widgetVisible },
         colors: CHARACTER_COLORS,
         chatScope,
         onProfileChange: (nextProfile) => {

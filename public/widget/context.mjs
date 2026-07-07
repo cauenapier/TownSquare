@@ -28,6 +28,7 @@
  * @property {string} readingLabel
  * @property {string} readingUrl
  * @property {boolean} readingActive
+ * @property {boolean} widgetVisible Whether the widget element is currently in the browser viewport.
  * @property {boolean} typing
  * @property {boolean} isOwner
  * @property {string} badgeColor
@@ -50,6 +51,7 @@
  * @property {string} readingLabel
  * @property {string} readingUrl
  * @property {boolean} readingActive
+ * @property {boolean} widgetVisible Whether the widget element is currently in the browser viewport.
  * @property {boolean} isOwner
  * @property {string} badgeColor
  * @property {Record<string, any>} plugins Namespaced server plugin data.

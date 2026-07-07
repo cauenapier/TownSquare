@@ -4,6 +4,7 @@
 
 import { AWAY_HIDE_MS, DISPLAY_NAME_MAX, MESSAGE_MAX } from "./constants.mjs";
 import { figureMarkup } from "./figure.mjs";
+import { setWalking } from "./gestures.mjs";
 import { normalizeDisplayName, normalizeReadingLabel } from "./utils.mjs";
 
 /**
@@ -528,7 +529,7 @@ export function createAvatar({ isSelf, profile = {}, colors = [], chatScope, onP
 
 /**
  * @param {AvatarView} avatar
- * @param {{ displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} profile
+ * @param {{ displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, widgetVisible?: boolean }} profile
  */
 export function setAvatarProfile(avatar, profile = {}) {
   const displayName = normalizeDisplayName(profile.displayName);
@@ -536,6 +537,7 @@ export function setAvatarProfile(avatar, profile = {}) {
   const readingLabel = normalizeReadingLabel(profile.readingLabel);
   const readingUrl = typeof profile.readingUrl === "string" ? profile.readingUrl : "";
   const readingActive = profile.readingActive !== false;
+  const widgetVisible = profile.widgetVisible !== false;
   const isOwner = Boolean(profile.isOwner);
   const isPeer = avatar.el.classList.contains("townsquare-avatar--peer");
   avatar.el.dataset.color = color;
@@ -545,6 +547,12 @@ export function setAvatarProfile(avatar, profile = {}) {
   avatar.el.classList.toggle("townsquare-avatar--has-reading", Boolean(readingLabel));
   const isAway = Boolean(readingLabel) && !readingActive;
   avatar.el.classList.toggle("townsquare-avatar--reading-away", isAway);
+  // Tab focused, but the visitor has scrolled the widget itself out of view —
+  // a lighter-weight signal than "away" (which requires the tab to be
+  // unfocused/hidden and wins over this when both apply).
+  const isReadingBook = readingActive && !isAway && !widgetVisible;
+  avatar.el.classList.toggle("townsquare-avatar--book", isReadingBook);
+  if (isReadingBook) setWalking(avatar, false);
   // A figure that stays away (zZz) too long fades out completely; coming back
   // to the tab flips readingActive true again and reveals it. The timer is only
   // armed on entering the away state, so repeated profile renders don't reset it.

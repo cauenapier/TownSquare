@@ -39,6 +39,7 @@ const PRESENCE_STRING_FIELDS = [
 
 const PRESENCE_BOOLEAN_FIELDS = [
   "readingActive",
+  "widgetVisible",
   "isOwner",
 ];
 const PRESENCE_PROFILE_FIELDS = [...PRESENCE_STRING_FIELDS, ...PRESENCE_BOOLEAN_FIELDS, "plugins"];
@@ -72,7 +73,7 @@ export function updateStatus(ctx) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {{ id: string, x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, messages?: Array<{ text: string, at?: number }> }} peer
+ * @param {{ id: string, x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, widgetVisible?: boolean, messages?: Array<{ text: string, at?: number }> }} peer
  * @returns {PeerState}
  */
 export function getOrCreatePeer(ctx, peer) {
@@ -93,6 +94,7 @@ export function getOrCreatePeer(ctx, peer) {
     readingLabel: peer.readingLabel || "",
     readingUrl: peer.readingUrl || "",
     readingActive: peer.readingActive !== false,
+    widgetVisible: peer.widgetVisible !== false,
     isOwner: peer.isOwner === true,
     plugins: peer.plugins && typeof peer.plugins === "object" ? peer.plugins : {},
     avatar,
@@ -172,7 +174,7 @@ function renderPresence(ctx, presence, previousX, { profileChanged, faceOnMove =
 
 /**
  * @param {WidgetContext} ctx
- * @param {{ x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, isOwner?: boolean, plugins?: Record<string, any> }} state
+ * @param {{ x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, widgetVisible?: boolean, isOwner?: boolean, plugins?: Record<string, any> }} state
  */
 export function applySelfState(ctx, state) {
   const previousX = ctx.self.x;
@@ -192,7 +194,7 @@ export function applySelfState(ctx, state) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {{ id: string, x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, isOwner?: boolean, plugins?: Record<string, any> }} peerState
+ * @param {{ id: string, x: number, pose?: string | null, propId?: string | null, displayName?: string, color?: string, badgeColor?: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, widgetVisible?: boolean, isOwner?: boolean, plugins?: Record<string, any> }} peerState
  * @returns {PeerState}
  */
 export function applyPeerState(ctx, peerState) {
@@ -235,8 +237,8 @@ export function applyProfileState(ctx, profile) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {{ id: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean }} state
+ * @param {{ id: string, readingLabel?: string, readingUrl?: string, readingActive?: boolean, widgetVisible?: boolean }} state
  */
 export function applyReadingState(ctx, state) {
-  applyPresenceFields(ctx, state, ["readingLabel", "readingUrl", "readingActive", "plugins"]);
+  applyPresenceFields(ctx, state, ["readingLabel", "readingUrl", "readingActive", "widgetVisible", "plugins"]);
 }

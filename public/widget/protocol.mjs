@@ -304,6 +304,7 @@ export function wireSocket(ctx) {
             readingLabel: self.readingLabel,
             readingUrl: self.readingUrl,
             readingActive: self.readingActive,
+            widgetVisible: self.widgetVisible,
           };
       socket.send(JSON.stringify(init));
       if (!ctx.watch && !ctx.siteKey && ctx.options.scene) {

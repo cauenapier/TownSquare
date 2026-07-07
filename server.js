@@ -307,7 +307,7 @@ const MESSAGE_HANDLERS = {
   typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,initialized:boolean,spectator:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,initialized:boolean,spectator:boolean,readingActive:boolean,widgetVisible:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown", spectator = false) {
   return {
     connectionId,
@@ -324,6 +324,8 @@ function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown"
     // identity, so it isn't counted or shown to real visitors.
     spectator,
     readingActive: false,
+    // Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+    widgetVisible: false,
     lastMoveAt: 0,
     lastActionAt: 0,
     lastChatAt: 0,
@@ -386,7 +388,7 @@ function syncClientSceneProps(client, message) {
   client.propsById = new Map(props.map((prop) => [prop.id, prop]));
 }
 
-/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
+/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,widgetVisible:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
 function createIdentity(id, browserId, x) {
   return {
     id,
@@ -400,6 +402,8 @@ function createIdentity(id, browserId, x) {
     readingLabel: "",
     readingUrl: "",
     readingActive: false,
+    // Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+    widgetVisible: true,
     isOwner: false,
     clients: new Set(),
     joined: false,
@@ -2185,6 +2189,7 @@ function serializeIdentity(identity, options = {}) {
     serialized.readingLabel = identity.readingLabel;
     serialized.readingUrl = identity.readingUrl;
     serialized.readingActive = identity.readingActive;
+    serialized.widgetVisible = identity.widgetVisible;
   }
   if (owner) {
     serialized.isOwner = identity.isOwner;
@@ -2214,6 +2219,17 @@ function refreshIdentityReadingActive(identity) {
   const previous = identity.readingActive;
   identity.readingActive = getIdentityReadingActive(identity);
   return identity.readingActive !== previous;
+}
+
+// Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+function getIdentityWidgetVisible(identity) {
+  return Array.from(identity.clients).some((client) => client.joined && client.widgetVisible !== false);
+}
+
+function refreshIdentityWidgetVisible(identity) {
+  const previous = identity.widgetVisible;
+  identity.widgetVisible = getIdentityWidgetVisible(identity);
+  return identity.widgetVisible !== previous;
 }
 
 function touchIdentityActivity(identity, now = Date.now()) {
@@ -2325,6 +2341,7 @@ function broadcastReading(scene, identity, options = {}) {
     readingLabel = identity.readingLabel,
     readingUrl = identity.readingUrl,
     readingActive = identity.readingActive,
+    widgetVisible = identity.widgetVisible,
   } = options;
   broadcastIdentity(scene, {
     type: MSG.READING,
@@ -2332,6 +2349,7 @@ function broadcastReading(scene, identity, options = {}) {
     readingLabel,
     readingUrl,
     readingActive,
+    widgetVisible,
   }, identity, { exceptConnectionId });
 }
 
@@ -3393,6 +3411,7 @@ function handleInit(client, message) {
     identity.readingUrl = reading.readingUrl;
   }
   client.readingActive = message.readingActive !== false;
+  client.widgetVisible = message.widgetVisible !== false;
 
   if (!identity.joined) {
     identity.displayName = filterDisplayName(site, sanitizeDisplayName(message.displayName));
@@ -3413,6 +3432,7 @@ function handleInit(client, message) {
   client.initialized = true;
   identity.clients.add(client);
   refreshIdentityReadingActive(identity);
+  refreshIdentityWidgetVisible(identity);
 
   const peers = Array.from(scene.identities.values())
     .filter((peer) => peer.joined && peer.id !== identity.id && canSeeIdentity(site, identity, peer))
@@ -3581,17 +3601,22 @@ function handleReading(client, message) {
   const reading = sanitizeReadingState(client, message, client.identity);
   const { readingLabel, readingUrl } = reading;
   const readingActive = message.readingActive !== false;
+  const widgetVisible = message.widgetVisible !== false;
   const previousReadingLabel = client.identity.readingLabel;
   const previousReadingUrl = client.identity.readingUrl;
   const previousReadingActive = client.identity.readingActive;
+  const previousWidgetVisible = client.identity.widgetVisible;
   if (
     readingLabel === previousReadingLabel
     && readingUrl === previousReadingUrl
     && readingActive === client.readingActive
+    && widgetVisible === client.widgetVisible
   ) return;
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.readingActive = readingActive;
+  // Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+  client.widgetVisible = widgetVisible;
   client.identity.readingLabel = readingLabel;
   client.identity.readingUrl = readingUrl;
   if (client.site && rememberSiteLastSeenUrl(client.site, readingUrl)) {
@@ -3602,6 +3627,7 @@ function handleReading(client, message) {
     }
   }
   refreshIdentityReadingActive(client.identity);
+  refreshIdentityWidgetVisible(client.identity);
   const now = Date.now();
   if (client.identity.readingActive && !previousReadingActive) {
     touchIdentityActivity(client.identity, now);
@@ -3611,6 +3637,7 @@ function handleReading(client, message) {
     readingLabel === previousReadingLabel
     && readingUrl === previousReadingUrl
     && client.identity.readingActive === previousReadingActive
+    && client.identity.widgetVisible === previousWidgetVisible
   ) return;
 
   broadcastReading(client.scene, client.identity, { readingLabel, readingUrl });
@@ -3756,12 +3783,15 @@ function handleClientClose(client) {
   client.joined = false;
   client.identity = null;
   client.readingActive = false;
+  client.widgetVisible = false;
   if (wasTyping && !Array.from(identity.clients).some((candidate) => candidate.typing)) {
     broadcastIdentity(identity.scene, { type: MSG.TYPING, id: identity.id, typing: false }, identity);
   }
 
   if (identity.clients.size > 0) {
-    if (refreshIdentityReadingActive(identity)) {
+    const readingActiveChanged = refreshIdentityReadingActive(identity);
+    const widgetVisibleChanged = refreshIdentityWidgetVisible(identity);
+    if (readingActiveChanged || widgetVisibleChanged) {
       broadcastReading(identity.scene, identity);
     }
     syncIdentityAwayState(identity);

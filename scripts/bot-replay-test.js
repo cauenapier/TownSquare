@@ -146,6 +146,7 @@ function createBotClient({ baseWsUrl, origin, siteKey = "", browserId, displayNa
       color,
       readingUrl: origin,
       readingActive: true,
+      widgetVisible: true,
     };
 
     function finishError(error) {
