@@ -28,6 +28,7 @@ export const MSG = Object.freeze({
   MESSAGE_BOARD: "messageBoard",
   SCENE: "scene",
   CONNECTIONS: "connections",
+  PLUGIN: "plugin",
 });
 
 /** `action`-message gesture verbs. */
