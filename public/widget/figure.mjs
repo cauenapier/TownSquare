@@ -57,8 +57,8 @@ export function figureMarkup(svgAttributes = "") {
         <g class="umbrella">
           <line x1="8.5" y1="21.8" x2="8.5" y2="-0.2"></line>
           <g class="umbrella-canopy">
-            <path d="M1.8 0.2 C 2.8 -7.3 14.2 -7.3 15.2 0.2 Z"></path>
-            <line x1="8.5" y1="-7.6" x2="8.5" y2="-5.8"></line>
+            <path d="M-0.2 0.2 C 1.2 -9.2 15.8 -9.2 17.2 0.2 Z"></path>
+            <line x1="8.5" y1="-9.5" x2="8.5" y2="-7.6"></line>
           </g>
         </g>
       </g>
