@@ -994,7 +994,7 @@
    the drops travel along their own slant. */
 .townsquare--weather-storm .weather-drop {
   width: 1.5px;
-  height: calc(4 * var(--w-scale, 1));
+  height: calc(4px * var(--w-scale, 1));
   rotate: -14deg;
   background: color-mix(in oklab, var(--ink) 52%, transparent);
 }
