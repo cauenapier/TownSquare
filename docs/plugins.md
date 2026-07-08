@@ -7,29 +7,43 @@ Plugins are trusted in-process feature modules. They are registered before
 ## Register a private plugin
 
 ```js
-const { registerPlugin } = require("../TownSquare/server/plugins");
+const pluginEngine = require("../TownSquare/server/plugins");
 const ownerFigure = require("./plugins/owner-figure");
 
+const EXPECTED_PLUGIN_API_VERSION = 1;
+if (pluginEngine.PLUGIN_API_VERSION !== EXPECTED_PLUGIN_API_VERSION) {
+  throw new Error(
+    `Expected TownSquare plugin API v${EXPECTED_PLUGIN_API_VERSION}, ` +
+    `got ${pluginEngine.PLUGIN_API_VERSION ?? "unknown"}`,
+  );
+}
+
+const { registerPlugin } = pluginEngine;
 registerPlugin(ownerFigure);
 require("../TownSquare/server");
 ```
 
+`PLUGIN_API_VERSION` changes only on breaking plugin-contract changes: hook
+names/signatures, context shape, registration rules, or browser module path
+requirements. Private plugin bundles should assert the expected version before
+registering plugins so an incompatible core checkout fails before boot.
+
 Plugin names use lowercase kebab-case and are also their storage and wire-data
-namespace. Browser module paths are same-origin absolute `.mjs` paths. The Pro
+namespace. Browser module paths are same-origin absolute `.mjs` paths. The Plus
 deployment must make those paths reachable. Set `TOWNSQUARE_PLUGIN_ASSETS_DIR`
 to a directory and the core serves its files as a fallback overlay after its
-own `public/` (e.g. point it at the Pro repo's `public/`, so `/pro/...` resolves
-to `<dir>/pro/...`). A reverse-proxy alias also works.
+own `public/` (e.g. point it at the Plus repo's `public/`, so `/plus/...` resolves
+to `<dir>/plus/...`). A reverse-proxy alias also works.
 
 ## Full-stack plugin manifest
 
 ```js
 module.exports = {
   name: "owner-figure",
-  adminModule: "/pro/owner-figure/admin.mjs",
-  widgetModule: "/pro/owner-figure/widget.mjs",
+  adminModule: "/plus/owner-figure/admin.mjs",
+  widgetModule: "/plus/owner-figure/widget.mjs",
 
-  isEnabled: ({ site }) => site?.supporter === true,
+  isEnabled: ({ site }) => site?.plus === true,
 
   adminActions: {
     update({ owners, setData }, input) {
@@ -56,7 +70,7 @@ module.exports = {
 
 `isEnabled` controls the plugin's hooks, actions, visitor data, and browser
 module descriptors for a site. Current site context includes `siteKey`, `name`,
-`origin`, and `supporter`.
+`origin`, `supporter`, and `plus`.
 
 ## Site-owner activation toggle
 
@@ -80,19 +94,22 @@ globally as before.
 A plugin's own `isEnabled` layers on top of the owner's choice as an
 *entitlement* gate. The toggle is only offered to a site when its `isEnabled`
 passes, and the plugin runs only when both the entitlement holds **and** the
-owner has switched it on. For example, `owner-figure` keeps
-`isEnabled: ({ site }) => site?.pro === true`, so its switch appears only on Pro
-sites and activates only once that owner turns it on. The same toggle framework
-covers core and Pro plugins alike — a Pro plugin opts in purely by adding a
-`label`; no toggle code lives in the Pro repo.
+owner has switched it on. For example, `telegram-notifications` keeps its own
+entitlement `isEnabled`, so its switch appears only on entitled sites and
+activates only once that owner turns it on. The same toggle framework covers
+core and Plus plugins alike — a Plus plugin opts in purely by adding a `label`;
+no toggle code lives in the Plus repo. A Plus plugin that omits `label` (like
+`owner-figure` and `scene-cat`) instead runs automatically on every site its
+`isEnabled` entitles.
 
 ## Plugin storage and admin actions
 
 Each site persists plugin data under `site.plugins[pluginName]`. Admin action
 context exposes the current immutable `data`, `owners`, public `visitors`, and
-`setData(nextData)`. `setData` replaces only that plugin's namespace and saves
-it atomically with the site registry after the action succeeds. Failed actions
-do not retain staged data. Data must be JSON and is limited to 64 KiB per plugin.
+`enabled`, plus `setData(nextData)`. `enabled` is the per-site activation state
+for labelled plugins. `setData` replaces only that plugin's namespace and saves
+it atomically with the site registry after the action succeeds. Failed actions do
+not retain staged data. Data must be JSON and is limited to 64 KiB per plugin.
 
 Browser admin modules call actions through the authenticated core admin API;
 they never receive the admin token:
@@ -119,9 +136,17 @@ are synchronous; the returned promise represents the browser request.
 ## Visitor data and widget modules
 
 `extendVisitor` runs through the single identity serializer used by hello,
-join, movement, profile, and admin visitor snapshots. Its return value is
+join, profile, and admin visitor snapshots. MOVE broadcasts skip visitor plugin
+extension data and the widget keeps the peer's last-known plugin state. Its return value is
 placed under `visitor.plugins[pluginName]`; plugins cannot replace core visitor
 fields or another plugin's namespace.
+
+The server-side `visitor` context passed to `extendVisitor` exposes `id`,
+`browserId`, `displayName`, `color`, `isOwner`, `ownerHandle` (owners only), and
+`fp` — a stable per-visitor fingerprint (the same hash as `ownerHandle`) usable
+as a storage key without ever handling the raw `browserId`. The admin panel's
+`scene.visitors` carry the matching `fp`, so an admin action can target a
+specific present visitor (e.g. `visitor-figure` assigns a hat by `fp`).
 
 Widget modules are announced in the WebSocket hello payload, so enabling a
 plugin does not require owners to replace an existing embed snippet. A module
@@ -152,3 +177,7 @@ are logged and otherwise fail open so core self-hosted behavior continues.
 
 The real contract fixture is `server/fixtures/feature-plugin.js`; its API and
 WebSocket client is `scripts/plugin-smoke-test.js` (`npm run smoke:plugins`).
+That smoke test spawns its own server and injects the fixture via
+`TOWNSQUARE_EXTRA_PLUGINS` — a comma/space-separated list of module paths the
+server `require`s at boot, each self-registering with `registerPlugin`. Use the
+same variable to load private/extra plugin bundles in a deploy.

@@ -1,19 +1,114 @@
 const fs = require("fs");
+const os = require("os");
+const net = require("net");
 const path = require("path");
+const { spawn } = require("child_process");
 const WebSocket = require("ws");
+const { handleSmokeSocketMessage, waitForClose, withTimeout } = require("./smoke-ws-helpers");
 
-const SERVER_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
-const HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
-const SITES_FILE = path.join(DATA_DIR, "sites.json");
-const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
-const SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
-const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
+// These are `let` so the self-contained harness (startManagedServer) can point
+// them at a server it spawns on a free port. When TOWNSQUARE_HTTP_ORIGIN is set,
+// they keep their external-server defaults and the harness is skipped.
+let SERVER_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
+let HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
+let DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
+let SITES_FILE = path.join(DATA_DIR, "sites.json");
+let MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
+let SERVICE_ADMIN_PASSWORD = process.env.SERVICE_ADMIN_PASSWORD || "";
+const CONNECT_TIMEOUT_MS = Number(process.env.SMOKE_CONNECT_TIMEOUT_MS || 15000);
 
-function siteSocketUrl(siteKey) {
-  if (!siteKey) return SERVER_URL;
+function authFailuresPerHour() {
+  return Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
+}
+
+// Ask the OS for an unused TCP port so concurrent runs don't collide (and so we
+// never accidentally talk to an unrelated server bound to a fixed port).
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForHealth(origin, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${origin}/healthz`);
+      if (res.ok) return;
+    } catch {
+      // server not up yet
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("managed server did not become healthy in time");
+}
+
+// Spawn our own server on a free port with an isolated data dir, point the
+// module globals at it, and return a cleanup function. This makes
+// `node scripts/smoke-test.js` self-contained and CI-runnable.
+async function startManagedServer() {
+  const port = await findFreePort();
+  const host = "127.0.0.1";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "townsquare-smoke-"));
+  const password = SERVICE_ADMIN_PASSWORD || "smoke-service-admin";
+  const httpOrigin = `http://${host}:${port}`;
+
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+    env: {
+      ...process.env,
+      HOST: host,
+      PORT: String(port),
+      DATA_DIR: dataDir,
+      SERVICE_ADMIN_PASSWORD: password,
+      ALLOWED_ORIGINS: httpOrigin,
+      // The functional chat assertions send a message moments after joining;
+      // disable the anti-bot "typed too fast after joining" guard so it doesn't
+      // drop them (its behavior has dedicated TEST_IP_* coverage instead).
+      MIN_HUMAN_SAY_MS: "0",
+      // Hosted sites default to bot protection; keep PoW cheap in this harness.
+      POW_DIFFICULTY_BITS: process.env.POW_DIFFICULTY_BITS || "1",
+      AUTH_FAILURES_PER_HOUR: process.env.AUTH_FAILURES_PER_HOUR || "5",
+      CONNECTION_CLICKS_PER_HOUR: process.env.CONNECTION_CLICKS_PER_HOUR || "2",
+      MAP_CLICKS_PER_HOUR: process.env.MAP_CLICKS_PER_HOUR || "2",
+      SITE_PRESENCE_READS_PER_HOUR: process.env.SITE_PRESENCE_READS_PER_HOUR || "4",
+    },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+
+  SERVER_URL = `ws://${host}:${port}/live`;
+  HTTP_ORIGIN = httpOrigin;
+  DATA_DIR = dataDir;
+  SITES_FILE = path.join(dataDir, "sites.json");
+  MAP_WORLD_FILE = path.join(dataDir, "map-world.json");
+  SERVICE_ADMIN_PASSWORD = password;
+
+  try {
+    await waitForHealth(httpOrigin);
+  } catch (error) {
+    child.kill("SIGKILL");
+    throw error;
+  }
+
+  return () => {
+    child.kill("SIGTERM");
+    try {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+  };
+}
+
+function siteSocketUrl(siteKey, { watch = false } = {}) {
   const url = new URL(SERVER_URL);
-  url.searchParams.set("siteKey", siteKey);
+  if (siteKey) url.searchParams.set("siteKey", siteKey);
+  if (watch) url.searchParams.set("watch", "1");
   return url.toString();
 }
 
@@ -24,8 +119,9 @@ function socketOptions(origin, ip) {
   return Object.keys(headers).length > 0 ? { headers } : undefined;
 }
 
-function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", ip = "", displayName = "", color = "", readingLabel, readingUrl, readingActive }) {
-  return new Promise((resolve, reject) => {
+function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", ip = "", displayName = "", color = "", readingLabel, readingUrl, readingActive, widgetVisible }) {
+  const label = `connect ${browserId || "(ephemeral)"}`;
+  const promise = new Promise((resolve, reject) => {
     const ws = new WebSocket(siteSocketUrl(siteKey), socketOptions(origin, ip));
     const seen = [];
     let joined = false;
@@ -36,44 +132,137 @@ function connect({ x, browserId, browserSecret = "", siteKey = "", origin = "", 
       if (typeof readingLabel === "string") init.readingLabel = readingLabel;
       if (typeof readingUrl === "string") init.readingUrl = readingUrl;
       if (typeof readingActive === "boolean") init.readingActive = readingActive;
+      if (typeof widgetVisible === "boolean") init.widgetVisible = widgetVisible;
       ws.send(JSON.stringify(init));
     });
 
     ws.on("message", (buffer) => {
-      const message = JSON.parse(String(buffer));
-      seen.push(message);
-      if (message.type === "hello") {
-        joined = true;
-        resolve({ ws, seen, id: message.id, hello: message });
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen,
+          onHello: (hello) => {
+            joined = true;
+            resolve({ ws, seen, id: hello.id, hello });
+          },
+        });
+      } catch (error) {
+        reject(error);
       }
     });
 
     ws.on("error", reject);
     ws.on("close", (code, reason) => {
       if (!joined) {
-        reject(new Error(`connection ${browserId || "(ephemeral)"} closed before hello (${code}: ${String(reason)})`));
+        reject(new Error(`${label} closed before hello (${code}: ${String(reason)})`));
       }
     });
   });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
 function connectUntilClose({ x, browserId, siteKey = "", origin = "", ip = "" }) {
-  return new Promise((resolve, reject) => {
+  const label = `connectUntilClose ${browserId || "(ephemeral)"}`;
+  const promise = new Promise((resolve, reject) => {
     const ws = new WebSocket(siteSocketUrl(siteKey), socketOptions(origin, ip));
     ws.on("open", () => ws.send(JSON.stringify({ type: "init", x, browserId })));
     ws.on("message", (buffer) => {
-      const message = JSON.parse(String(buffer));
-      if (message.type === "hello") reject(new Error("rate-limited connection unexpectedly joined"));
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen: [],
+          onUnexpectedHello: () => reject(new Error("rate-limited connection unexpectedly joined")),
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
     ws.on("close", (code, reason) => resolve({ code, reason: String(reason) }));
     ws.on("error", reject);
   });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
-function waitForClose(ws) {
-  return new Promise((resolve) => {
-    ws.on("close", (code, reason) => resolve({ code, reason: String(reason) }));
+function connectSpectator({ siteKey = "", origin = "", ip = "", initPayload = { type: "init" } } = {}) {
+  const label = `connectSpectator ${siteKey || "default"}`;
+  const promise = new Promise((resolve, reject) => {
+    const ws = new WebSocket(siteSocketUrl(siteKey, { watch: true }), socketOptions(origin, ip));
+    const seen = [];
+    let initialized = false;
+
+    ws.on("open", () => {
+      ws.send(JSON.stringify(initPayload));
+    });
+
+    ws.on("message", (buffer) => {
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen,
+          onHello: (hello) => {
+            initialized = true;
+            resolve({ ws, seen, hello });
+          },
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    ws.on("error", reject);
+    ws.on("close", (code, reason) => {
+      if (!initialized) {
+        reject(new Error(`${label} closed before hello (${code}: ${String(reason)})`));
+      }
+    });
   });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
+}
+
+function connectSpectatorUntilClose({ siteKey = "", origin = "", ip = "" } = {}) {
+  const label = `connectSpectatorUntilClose ${siteKey || "default"}`;
+  const promise = new Promise((resolve, reject) => {
+    const ws = new WebSocket(siteSocketUrl(siteKey, { watch: true }), socketOptions(origin, ip));
+    ws.on("open", () => ws.send(JSON.stringify({ type: "init" })));
+    ws.on("message", (buffer) => {
+      let message;
+      try {
+        message = JSON.parse(String(buffer));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen: [],
+          onUnexpectedHello: () => reject(new Error("non-Plus spectator unexpectedly joined")),
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+    ws.on("close", (code, reason) => resolve({ code, reason: String(reason) }));
+    ws.on("error", reject);
+  });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
 async function createSite(name, options = {}) {
@@ -110,14 +299,21 @@ async function assertCustomizationPersists() {
   assert(body.site.sceneConfig?.benchXs?.[0] === 0.14, "registered site did not persist bench placement");
   assert(body.site.styleConfig?.light?.accent === "#9d5c2f", "registered site did not persist light accent");
   assert(body.site.styleConfig?.dark?.accent === "#ffcc00", "registered site did not persist dark accent");
-  assert(body.embedSnippet.includes("scene:"), "embed snippet did not include the scene config");
+  // The snippet is install-once identity; scene/connections/messageBoard are
+  // delivered live over the socket (see the hello payload), not baked here.
+  assert(body.embedSnippet.includes(body.site.siteKey), "embed snippet did not include the site key");
+  assert(!body.embedSnippet.includes("scene:"), "embed snippet should no longer bake the scene config");
+  // Palette tokens only (current names plus their legacy aliases), never a
+  // stage repaint — the paint lives in widget.css (see server/site-config-css.test.js).
   assert(
     typeof body.styleSnippet === "string"
       && body.styleSnippet.includes("#townsquare-root#townsquare-root")
       && body.styleSnippet.includes('[data-townsquare-theme="dark"]')
       && body.styleSnippet.includes("#ffcc00")
-      && body.styleSnippet.includes(".townsquare__stage"),
-    "style snippet missing the doubled-specificity selector, dark palette, or stage surface rules",
+      && body.styleSnippet.includes("--ground-fill:")
+      && body.styleSnippet.includes("--page:")
+      && !body.styleSnippet.includes(".townsquare__stage"),
+    "style snippet missing the doubled-specificity selector, dark palette, or palette tokens (or it repaints the stage)",
   );
 
   // Legacy flat styleConfig normalizes: flat becomes light, dark falls back to defaults.
@@ -129,6 +325,28 @@ async function assertCustomizationPersists() {
   assert(legacy.response.ok, legacy.body.error || "legacy-style site registration failed");
   assert(legacy.body.site.styleConfig?.light?.accent === "#112233", "legacy flat style did not become the light palette");
   assert(legacy.body.site.styleConfig?.dark?.accent === "#df8a43", "legacy flat style did not default the dark palette");
+
+  // A palette stored under the pre-rename `scene` key loads as the current `sky`
+  // token (see STYLE_FIELDS `legacyKey` in public/lib/site-config-core.mjs).
+  const legacySky = await postJson("/api/sites", {
+    name: "Legacy Sky",
+    origin: HTTP_ORIGIN,
+    styleConfig: { light: { scene: "#abcdef" }, dark: { scene: "#123456" } },
+  });
+  assert(legacySky.response.ok, legacySky.body.error || "legacy-sky site registration failed");
+  assert(legacySky.body.site.styleConfig?.light?.sky === "#abcdef", "legacy `scene` key did not load as light `sky`");
+  assert(legacySky.body.site.styleConfig?.dark?.sky === "#123456", "legacy `scene` key did not load as dark `sky`");
+
+  // Likewise for the pre-rename ground keys: `page` loads as `groundFill` and
+  // `ground` as `groundLine`.
+  const legacyGround = await postJson("/api/sites", {
+    name: "Legacy Ground",
+    origin: HTTP_ORIGIN,
+    styleConfig: { light: { page: "#c98a3d", ground: "rgba(0, 0, 0, 0.2)" } },
+  });
+  assert(legacyGround.response.ok, legacyGround.body.error || "legacy-ground site registration failed");
+  assert(legacyGround.body.site.styleConfig?.light?.groundFill === "#c98a3d", "legacy `page` key did not load as `groundFill`");
+  assert(legacyGround.body.site.styleConfig?.light?.groundLine === "rgba(0, 0, 0, 0.2)", "legacy `ground` key did not load as `groundLine`");
 
   const updated = await postJson("/api/admin/action", {
     siteKey: body.site.siteKey,
@@ -394,6 +612,196 @@ async function assertModerationTools() {
   observer.ws.close();
 }
 
+async function assertHideVisitor() {
+  const hosted = await createSite("Hide");
+  const { siteKey } = hosted.site;
+  const { adminToken } = hosted;
+
+  const target = await connect({ x: 0.3, browserId: "hide-target", siteKey, origin: HTTP_ORIGIN, displayName: "Ghost" });
+  const observer = await connect({ x: 0.7, browserId: "hide-observer", siteKey, origin: HTTP_ORIGIN });
+  await delay(80);
+
+  assert(
+    (observer.hello.peers || []).some((peer) => peer.id === target.id),
+    "observer did not receive the target visitor in hello peers before hide",
+  );
+
+  const hid = await postJson("/api/admin/action", { siteKey, adminToken, action: "hideVisitor", visitorId: target.id });
+  assert(hid.response.ok, hid.body.error || "hideVisitor failed");
+  assert(
+    hid.body.scene.visitors.find((v) => v.id === target.id)?.hidden === true,
+    "hidden visitor was not flagged in scene stats",
+  );
+  await delay(80);
+  assert(
+    observer.seen.some((m) => m.type === "leave" && m.id === target.id),
+    "hiding a visitor did not send leave to visible peers",
+  );
+
+  await delay(1600);
+  target.ws.send(JSON.stringify({ type: "say", text: "you should not see or hear this" }));
+  await delay(200);
+  assert(
+    !observer.seen.some((m) => m.type === "say" && m.id === target.id),
+    "a hidden visitor's chat reached the observer",
+  );
+
+  const newcomer = await connect({ x: 0.5, browserId: "hide-newcomer", siteKey, origin: HTTP_ORIGIN, ip: "192.0.2.60" });
+  await delay(80);
+  assert(
+    !(newcomer.hello.peers || []).some((peer) => peer.id === target.id),
+    "a newcomer received a hidden visitor in hello peers",
+  );
+  await waitFor(
+    () => target.seen.some((m) => m.type === "join" && m.peer?.id === newcomer.id),
+    "a hidden visitor did not receive join events for visible newcomers",
+  );
+
+  const unhid = await postJson("/api/admin/action", { siteKey, adminToken, action: "unhideVisitor", visitorId: target.id });
+  assert(unhid.response.ok, unhid.body.error || "unhideVisitor failed");
+  assert(
+    unhid.body.scene.visitors.find((v) => v.id === target.id)?.hidden === false,
+    "unhidden visitor was still flagged as hidden",
+  );
+  await delay(80);
+  assert(
+    observer.seen.some((m) => m.type === "join" && m.peer?.id === target.id)
+      || newcomer.seen.some((m) => m.type === "join" && m.peer?.id === target.id),
+    "unhiding a visitor did not send join to visible peers",
+  );
+
+  await delay(1600);
+  target.ws.send(JSON.stringify({ type: "say", text: "visible again" }));
+  await waitFor(
+    () => observer.seen.some((m) => m.type === "say" && m.id === target.id && m.text === "visible again"),
+    "unhidden visitor's message did not reach the observer",
+  );
+
+  const logView = await postJson("/api/admin/site", { siteKey, adminToken });
+  const actions = (logView.body.site.moderationLog || []).map((entry) => entry.action);
+  assert(actions.includes("hide") && actions.includes("unhide"), "moderation log did not record hide/unhide");
+
+  target.ws.close();
+  observer.ws.close();
+  newcomer.ws.close();
+}
+
+async function assertSpectatorOverlay() {
+  const hosted = await createSite("Spectator Overlay");
+  const { siteKey } = hosted.site;
+  const { adminToken } = hosted;
+
+  const visitor = await connect({
+    x: 0.3,
+    browserId: "spectator-visible",
+    siteKey,
+    origin: HTTP_ORIGIN,
+    displayName: "Visible",
+  });
+  await delay(80);
+
+  const beforePresence = await getSitePresence(siteKey);
+  assert(beforePresence.activeVisitors === 1, "expected one active visitor before spectator joins");
+
+  const nonPlusSpectator = await connectSpectatorUntilClose({ siteKey, origin: HTTP_ORIGIN });
+  assert(nonPlusSpectator.code === 4003, `expected non-Plus overlay close code 4003, got ${nonPlusSpectator.code}`);
+  assert(nonPlusSpectator.reason === "plus required", `expected plus-required close reason, got ${nonPlusSpectator.reason}`);
+  const afterRejectedPresence = await getSitePresence(siteKey);
+  assert(afterRejectedPresence.activeVisitors === 1, "rejected non-Plus spectator changed the active visitor count");
+
+  const upgraded = await serviceAdminApi("/api/service-admin/action", {
+    action: "setSitePlus",
+    siteKey,
+    plus: true,
+  });
+  assert(upgraded.site.plus === true, "service admin did not mark spectator test site as Plus");
+
+  const spectator = await connectSpectator({
+    siteKey,
+    origin: HTTP_ORIGIN,
+    initPayload: {
+      type: "init",
+      browserId: "spectator-ignored",
+      browserSecret: "deadbeef",
+      x: 0.9,
+      displayName: "Should Not Join",
+      readingUrl: "https://attacker.example/private",
+    },
+  });
+
+  assert(spectator.hello.spectator === true, "spectator hello did not mark itself as passive");
+  assert(spectator.hello.id === null, "spectator received a self visitor id");
+  assert(!Object.hasOwn(spectator.hello, "browserSecret"), "spectator hello leaked a browser secret");
+  assert(
+    (spectator.hello.peers || []).some((peer) => peer.id === visitor.id && peer.displayName === "Visible"),
+    "spectator did not receive the visible visitor snapshot",
+  );
+
+  const afterPresence = await getSitePresence(siteKey);
+  assert(afterPresence.activeVisitors === 1, "spectator changed the active visitor count");
+
+  spectator.ws.send(JSON.stringify({ type: "init" }));
+  spectator.ws.send(JSON.stringify({ type: "profile", displayName: "Joined Anyway", color: "#3f7f63" }));
+  spectator.ws.send(JSON.stringify({ type: "move", x: 0.1 }));
+  spectator.ws.send(JSON.stringify({ type: "say", text: "spectator should be silent" }));
+  await delay(150);
+
+  assert(
+    spectator.seen.filter((message) => message.type === "hello").length === 1,
+    "repeated spectator init produced another hello snapshot",
+  );
+  assert(
+    !visitor.seen.some((message) => (
+      (message.type === "profile" && message.displayName === "Joined Anyway")
+      || (message.type === "move" && message.x === 0.1)
+      || (message.type === "say" && message.text === "spectator should be silent")
+    )),
+    "spectator produced a visitor event",
+  );
+  const afterMessagesPresence = await getSitePresence(siteKey);
+  assert(afterMessagesPresence.activeVisitors === 1, "spectator messages changed the active visitor count");
+
+  const hidden = await connect({
+    x: 0.6,
+    browserId: "spectator-hidden",
+    siteKey,
+    origin: HTTP_ORIGIN,
+    displayName: "Hidden",
+    ip: "192.0.2.70",
+  });
+  await delay(80);
+  assert(
+    spectator.seen.some((message) => message.type === "join" && message.peer?.id === hidden.id),
+    "spectator did not receive live join broadcasts",
+  );
+
+  const hid = await postJson("/api/admin/action", { siteKey, adminToken, action: "hideVisitor", visitorId: hidden.id });
+  assert(hid.response.ok, hid.body.error || "hideVisitor failed for spectator test");
+  await waitFor(
+    () => spectator.seen.some((message) => message.type === "leave" && message.id === hidden.id),
+    "hiding a visitor did not remove them from the spectator overlay",
+  );
+
+  const lateSpectator = await connectSpectator({ siteKey, origin: HTTP_ORIGIN, ip: "192.0.2.71" });
+  assert(
+    !(lateSpectator.hello.peers || []).some((peer) => peer.id === hidden.id),
+    "new spectator received a hidden visitor in hello peers",
+  );
+
+  await delay(1600);
+  hidden.ws.send(JSON.stringify({ type: "say", text: "hidden from overlay" }));
+  await delay(200);
+  assert(
+    !spectator.seen.some((message) => message.type === "say" && message.id === hidden.id),
+    "hidden visitor's chat reached the spectator overlay",
+  );
+
+  visitor.ws.close();
+  hidden.ws.close();
+  spectator.ws.close();
+  lateSpectator.ws.close();
+}
+
 async function assertPerSiteConnectionLimit() {
   const hosted = await createSite("Connection Limit");
   const { siteKey, origin } = hosted.site;
@@ -462,6 +870,61 @@ async function postJson(pathname, payload = {}) {
   return { response, body: await response.json() };
 }
 
+async function getSitePresence(siteKey = "") {
+  const url = new URL("/api/site-presence", HTTP_ORIGIN);
+  if (siteKey) url.searchParams.set("siteKey", siteKey);
+  const response = await fetch(url);
+  const body = await response.json();
+  assert(response.ok, body.error || "site presence request failed");
+  return body;
+}
+
+async function assertPublicEndpointRateLimits() {
+  const connectionLimit = Number(process.env.CONNECTION_CLICKS_PER_HOUR || 600);
+  const mapLimit = Number(process.env.MAP_CLICKS_PER_HOUR || 600);
+  const presenceLimit = Number(process.env.SITE_PRESENCE_READS_PER_HOUR || 600);
+  if (connectionLimit > 10 || mapLimit > 10 || presenceLimit > 10) return;
+
+  const postBeacon = (pathname, ip) => fetch(`${HTTP_ORIGIN}${pathname}`, {
+    method: "POST",
+    headers: {
+      "content-type": "text/plain",
+      "x-real-ip": ip,
+    },
+    body: JSON.stringify({ siteKey: "missing-site", url: "https://example.com/" }),
+  });
+
+  const assertLimited = async ({ pathname, ip, limit, expectedStatus }) => {
+    for (let index = 0; index < limit; index += 1) {
+      const response = await postBeacon(pathname, ip);
+      assert(response.status === expectedStatus, `${pathname} throttled before its public budget`);
+    }
+    const throttled = await postBeacon(pathname, ip);
+    assert(throttled.status === 429, `${pathname} did not throttle over its public budget`);
+  };
+
+  await assertLimited({
+    pathname: "/api/connection-click",
+    ip: "198.51.100.10",
+    limit: connectionLimit,
+    expectedStatus: 204,
+  });
+  await assertLimited({
+    pathname: "/api/map-click",
+    ip: "198.51.100.11",
+    limit: mapLimit,
+    expectedStatus: 204,
+  });
+
+  const presenceUrl = new URL("/api/site-presence", HTTP_ORIGIN);
+  for (let index = 0; index < presenceLimit; index += 1) {
+    const response = await fetch(presenceUrl, { headers: { "x-real-ip": "198.51.100.12" } });
+    assert(response.ok, "site presence throttled before its public budget");
+  }
+  const throttledPresence = await fetch(presenceUrl, { headers: { "x-real-ip": "198.51.100.12" } });
+  assert(throttledPresence.status === 429, "site presence did not throttle over its public budget");
+}
+
 async function serviceAdminApi(pathname, payload = {}) {
   const { response, body } = await postJson(pathname, { password: SERVICE_ADMIN_PASSWORD, ...payload });
   assert(response.ok, body.error || "service admin request failed");
@@ -469,9 +932,10 @@ async function serviceAdminApi(pathname, payload = {}) {
 }
 
 async function assertAuthFailuresAreThrottled(hostedSite) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return;
+  const limit = authFailuresPerHour();
+  if (limit <= 0) return;
 
-  for (let attempt = 0; attempt < AUTH_FAILURES_PER_HOUR; attempt += 1) {
+  for (let attempt = 0; attempt < limit; attempt += 1) {
     const { response } = await postJson("/api/admin/login", { adminToken: `bad-token-${attempt}` });
     assert(response.status === 403, "admin auth failure throttled too early");
   }
@@ -484,14 +948,15 @@ async function assertAuthFailuresAreThrottled(hostedSite) {
 }
 
 async function assertServiceAdminFailuresAreThrottled() {
-  if (!SERVICE_ADMIN_PASSWORD || AUTH_FAILURES_PER_HOUR <= 0) return;
+  const limit = authFailuresPerHour();
+  if (!SERVICE_ADMIN_PASSWORD || limit <= 0) return;
 
-  for (let attempt = 0; attempt < AUTH_FAILURES_PER_HOUR; attempt += 1) {
+  for (let attempt = 0; attempt < limit; attempt += 1) {
     const { response } = await postJson("/api/service-admin/sites", { password: SERVICE_ADMIN_PASSWORD });
     assert(response.ok, "valid service admin auth did not clear prior auth failures");
   }
 
-  for (let attempt = 0; attempt < AUTH_FAILURES_PER_HOUR; attempt += 1) {
+  for (let attempt = 0; attempt < limit; attempt += 1) {
     const { response } = await postJson("/api/service-admin/sites", { password: `bad-password-${attempt}` });
     assert(response.status === 403, "service admin auth failure throttled too early");
   }
@@ -556,7 +1021,7 @@ async function assertMapWorldSizingPolicy() {
     computeMapWorldDimensions,
     resolveMapWorld,
     validateMapWorld,
-  } = await import("../public/shared/map-world.mjs");
+  } = await import("../shared/map-world.mjs");
 
   const min = computeMapWorldDimensions(0);
   assert(
@@ -598,12 +1063,25 @@ async function assertMapWorldSizingPolicy() {
 
   const tooLarge = validateMapWorld({ ...stored, width: 99999, height: MAP_WORLD_MIN_HEIGHT });
   assert(!tooLarge.ok, "a world above the maximum width should be rejected");
+
+  const legacyWater = validateMapWorld({
+    ...stored,
+    water: [
+      { type: "lake", width: 90, points: [{ x: 100, y: 100 }] },
+      { type: "river", width: 24, points: [{ x: 200, y: 200 }, { x: 300, y: 250 }] },
+    ],
+  });
+  assert(legacyWater.ok, "legacy lake and river strokes should still validate");
+  assert(
+    legacyWater.world.water.every((stroke) => stroke.type === "water"),
+    "legacy lake and river strokes should normalize to water",
+  );
 }
 
 async function assertServiceAdminCanEditMap() {
   if (!SERVICE_ADMIN_PASSWORD) return;
 
-  const { computeMapWorldDimensions, MAP_WORLD_MIN_WIDTH } = await import("../public/shared/map-world.mjs");
+  const { computeMapWorldDimensions, MAP_WORLD_MIN_WIDTH } = await import("../shared/map-world.mjs");
   const publicBefore = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
   const expected = computeMapWorldDimensions(publicBefore.sites.length);
   assert(publicBefore.world?.width >= MAP_WORLD_MIN_WIDTH, "public map did not include the world");
@@ -636,20 +1114,27 @@ async function assertServiceAdminCanEditMap() {
     ...original,
     water: [
       ...original.water.slice(0, 198),
-      { type: "lake", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
-      { type: "river", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
+      { type: "water", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
+      { type: "water", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
     ],
   };
 
   try {
     const saved = await serviceAdminApi("/api/service-admin/map/save", { world: edited });
-    assert(saved.world.water.some((stroke) => stroke.type === "lake"), "service admin did not save a lake");
-    assert(saved.world.water.some((stroke) => stroke.type === "river"), "service admin did not save a river");
+    assert(saved.world.water.some((stroke) => stroke.type === "water"), "service admin did not save water");
+    assert(
+      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 90),
+      "service admin did not save a wide water stroke",
+    );
+    assert(
+      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 24),
+      "service admin did not save a narrow water stroke",
+    );
     const persisted = JSON.parse(fs.readFileSync(MAP_WORLD_FILE, "utf8"));
-    assert(persisted.water.some((stroke) => stroke.type === "lake"), "map world was not persisted to DATA_DIR");
+    assert(persisted.water.some((stroke) => stroke.type === "water"), "map world was not persisted to DATA_DIR");
 
     const publicAfter = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
-    assert(publicAfter.world.water.some((stroke) => stroke.type === "lake"), "saved world was not public");
+    assert(publicAfter.world.water.some((stroke) => stroke.type === "water"), "saved world was not public");
 
     for (const world of [
       { ...edited, props: [{ type: "castle", x: 10, y: 10 }] },
@@ -985,12 +1470,14 @@ async function main() {
   assert(first.hello.readingLabel === "launch", "reading label was not derived from the URL on init");
   assert(first.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "reading URL was not accepted on init");
   assert(first.hello.readingActive === true, "reading should default to active on init");
+  assert(first.hello.widgetVisible === true, "widget visibility should default to true on init");
   assert(typeof first.hello.browserSecret === "string" && first.hello.browserSecret.length > 0, "hello did not include browser secret");
   assert(secondSameBrowser.hello.displayName === "Ada Lovelace", "same-browser tab did not inherit display name");
   assert(secondSameBrowser.hello.color === "#3f7f63", "same-browser tab did not inherit character color");
   assert(secondSameBrowser.hello.readingLabel === "launch", "same-browser tab did not inherit reading label");
   assert(secondSameBrowser.hello.readingUrl === `${HTTP_ORIGIN}/notes/launch`, "same-browser tab did not inherit reading URL");
   assert(secondSameBrowser.hello.readingActive === true, "same-browser tab did not inherit active reading state");
+  assert(secondSameBrowser.hello.widgetVisible === true, "same-browser tab did not inherit default widget visibility");
   assert(secondSameBrowser.hello.peers.length === 0, "same-browser tab should not see itself as a peer");
   assert(!first.seen.some((message) => message.type === "join"), "same-browser tab incorrectly triggered a join event");
 
@@ -1004,6 +1491,7 @@ async function main() {
   assert(third.hello.peers[0].readingLabel === "launch", "peer snapshot did not include reading label");
   assert(third.hello.peers[0].readingUrl === `${HTTP_ORIGIN}/notes/launch`, "peer snapshot did not include reading URL");
   assert(third.hello.peers[0].readingActive === true, "peer snapshot did not include active reading state");
+  assert(third.hello.peers[0].widgetVisible === true, "peer snapshot did not include default widget visibility");
   assert(!Object.hasOwn(third.hello.peers[0], "browserId"), "peer snapshot leaked browserId");
   assert(first.seen.some((message) => message.type === "join" && message.peer.id === third.id), "first client did not observe different-browser join");
   const joinBroadcast = first.seen.find((message) => message.type === "join" && message.peer?.id === third.id);
@@ -1113,6 +1601,60 @@ async function main() {
       && message.readingActive === false
     )),
     "reading inactive state did not propagate when every same-browser tab was inactive",
+  );
+
+  secondSameBrowser.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "API reference",
+    readingUrl: `${HTTP_ORIGIN}/docs/api`,
+    readingActive: false,
+    widgetVisible: false,
+  }));
+  await delay(100);
+
+  assert(
+    !third.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.widgetVisible === false
+    )),
+    "one same-browser tab with the widget offscreen should not mark the shared visitor's widget invisible",
+  );
+
+  first.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "API reference",
+    readingUrl: `${HTTP_ORIGIN}/docs/api`,
+    readingActive: false,
+    widgetVisible: false,
+  }));
+  await delay(100);
+
+  assert(
+    third.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.widgetVisible === false
+    )),
+    "widget-invisible state did not propagate when every same-browser tab had the widget offscreen",
+  );
+
+  first.ws.send(JSON.stringify({
+    type: "reading",
+    readingLabel: "API reference",
+    readingUrl: `${HTTP_ORIGIN}/docs/api`,
+    readingActive: false,
+    widgetVisible: true,
+  }));
+  await delay(100);
+
+  assert(
+    third.seen.some((message) => (
+      message.type === "reading"
+      && message.id === first.id
+      && message.widgetVisible === true
+    )),
+    "widget-visible state did not propagate again once a tab reported the widget back onscreen",
   );
 
   secondSameBrowser.ws.send(JSON.stringify({ type: "profile", displayName: "Ada", color: "#3f6fb5" }));
@@ -1258,6 +1800,8 @@ async function main() {
   await assertMatchingWwwOriginsWork();
   await assertOwnerProfilePersists();
   await assertModerationTools();
+  await assertHideVisitor();
+  await assertSpectatorOverlay();
   await assertPerSiteConnectionLimit();
 
   const hostedA = await createSite("Smoke A");
@@ -1299,6 +1843,7 @@ async function main() {
     minMessages: statsBeforeChat.messages + 1,
   });
   assert(statsAfterChat.messages === statsBeforeChat.messages + 1, "stats.messages did not increment after chat");
+  await assertPublicEndpointRateLimits();
 
   siteAVisitor.ws.send(JSON.stringify({
     type: "reading",
@@ -1326,7 +1871,26 @@ async function main() {
   first.ws.close();
 }
 
-main().catch((error) => {
+async function run() {
+  // If an external server origin is provided, test against it (legacy behavior).
+  // Otherwise spawn and manage our own so the script is self-contained.
+  const external = Boolean(process.env.TOWNSQUARE_HTTP_ORIGIN);
+  if (!external) {
+    if (!process.env.POW_DIFFICULTY_BITS) process.env.POW_DIFFICULTY_BITS = "1";
+    if (!process.env.AUTH_FAILURES_PER_HOUR) process.env.AUTH_FAILURES_PER_HOUR = "5";
+    if (!process.env.CONNECTION_CLICKS_PER_HOUR) process.env.CONNECTION_CLICKS_PER_HOUR = "2";
+    if (!process.env.MAP_CLICKS_PER_HOUR) process.env.MAP_CLICKS_PER_HOUR = "2";
+    if (!process.env.SITE_PRESENCE_READS_PER_HOUR) process.env.SITE_PRESENCE_READS_PER_HOUR = "4";
+  }
+  const cleanup = external ? null : await startManagedServer();
+  try {
+    await main();
+  } finally {
+    cleanup?.();
+  }
+}
+
+run().catch((error) => {
   console.error(error.stack || `Smoke test failed: ${error.message}`);
   process.exit(1);
 });

@@ -1,6 +1,8 @@
 # Ignore local install artifacts
 node_modules/
 
+/memory
+
 # Local deploy config
 .env
 .env.deploy.local
@@ -12,6 +14,9 @@ node_modules/
 # Logs
 npm-debug.log*
 
+# Screenshot harness output
+/tmp/
+
 # OS/editor noise
 .DS_Store
 
@@ -20,3 +25,7 @@ npm-debug.log*
 
 # Admin scripts
 /scripts/admin/*
+
+# Local Claude Code worktrees
+.claude/
+.cursor/

@@ -3,18 +3,31 @@
   "version": "0.1.0",
   "private": true,
   "description": "Embeddable TownSquare slice: self-hostable realtime presence, walking, chat, and a default scene.",
+  "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
+    "start": "node scripts/kill-port.js && node server.js",
+    "kill-port": "node scripts/kill-port.js",
     "check": "node --check server.js && find server plugins public scripts -type f \\( -name '*.js' -o -name '*.mjs' \\) -exec node --check {} \\;",
+    "lint": "eslint .",
     "test": "node --test server/*.test.js",
     "smoke": "node scripts/smoke-test.js",
-    "smoke:plugins": "node scripts/plugin-smoke-test.js"
+    "smoke:plugins": "node scripts/plugin-smoke-test.js",
+    "test:ground-line": "node scripts/ground-line-test.mjs",
+    "test:widget-color": "node scripts/widget-color-test.mjs",
+    "test:scene-alignment": "node scripts/scene-alignment-test.mjs",
+    "bot-replay": "node scripts/bot-replay-test.js"
   },
   "dependencies": {
     "ws": "^8.18.3"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "globals": "^17.7.0",
+    "playwright": "^1.61.1"
   }
 }

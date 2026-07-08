@@ -1,0 +1,33 @@
+export const MIN_X = 0.02;
+export const MAX_X = 0.98;
+export const MESSAGE_MAX = 140;
+export const DISPLAY_NAME_MAX = 18;
+export const READING_LABEL_MAX = 42;
+export const MAX_RECENT_MESSAGES = 5;
+export const HIGH_FIVE_DISTANCE = 0.07;
+
+export const CHARACTER_COLORS = [
+  "#5f6b73",
+  "#c8641f",
+  "#3f7f63",
+  "#3f6fb5",
+  "#8a5fb1",
+  "#b44f6f",
+];
+
+export const DEFAULT_CHARACTER_COLOR = CHARACTER_COLORS[0];
+
+export const OWNER_BADGE_COLORS = [
+  "#f2e8c8",
+  "#fdf8f4",
+  "#e8eef5",
+  "#e5f0e8",
+  "#f5e8ec",
+  "#ebe5f2",
+];
+
+export const DEFAULT_OWNER_BADGE_COLOR = OWNER_BADGE_COLORS[0];
+
+export function randomSpawnX(random = Math.random) {
+  return MIN_X + random() * (MAX_X - MIN_X);
+}

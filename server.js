@@ -5,10 +5,47 @@ const path = require("path");
 const { WebSocketServer } = require("ws");
 const { ensurePluginData, getPluginData, setPluginData } = require("./server/plugin-data");
 const { plugins } = require("./server/plugins");
+const { atomicWriteJson } = require("./server/atomic-write");
+const { createVisitorStats } = require("./server/visitor-stats");
+const { createMessageStats } = require("./server/message-stats");
 const { registerPublicPlugins } = require("./plugins");
+const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
+const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
+const { createPlausibleProxy } = require("./server/plausible");
+const { createStaticFiles } = require("./server/static-files");
+const { makeBucketStore } = require("./server/rate-limit");
+const { createSitesWriter } = require("./server/sites-store");
+const {
+  clampPosition,
+  sanitizeBrowserId,
+  sanitizeBrowserSecret,
+  sanitizeBlockedWords,
+  parseOptionalEmail,
+} = require("./server/sanitize");
+
+// Browser admin sessions: a valid token login mints one of these and the id is
+// returned in an HttpOnly cookie, so the raw token is not persisted in JS.
+const adminSessions = createAdminSessionStore();
 
 loadEnvFile();
-registerPublicPlugins();
+// Defense-in-depth: registration is already isolated per-plugin, but never let
+// a registration failure prevent the server process from starting.
+try {
+  registerPublicPlugins();
+} catch (error) {
+  console.error("Plugin registration failed; continuing without plugins", error);
+}
+
+// Optional plugin injection: TOWNSQUARE_EXTRA_PLUGINS is a comma/space-separated
+// list of module paths that self-register via registerPlugin on require. Used by
+// the plugin smoke test and by private plugin bundles loaded at deploy time.
+for (const entry of String(process.env.TOWNSQUARE_EXTRA_PLUGINS || "").split(/[,\s]+/).filter(Boolean)) {
+  try {
+    require(path.resolve(entry));
+  } catch (error) {
+    console.error(`Failed to load extra plugin '${entry}'`, error);
+  }
+}
 
 /**
  * Tiny demo server for the first playable TownSquare slice.
@@ -47,7 +84,10 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 const DEV_TOOLS_ENABLED = envFlag("ENABLE_DEV_TOOLS");
 const STAGING_PAGE_ENABLED = envFlag("ENABLE_STAGING_PAGE");
 const SITES_FILE = path.join(DATA_DIR, "sites.json");
+const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
 const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
+const VISITOR_STATS_FILE = path.join(DATA_DIR, "visitor-stats.json");
+const MESSAGE_STATS_FILE = path.join(DATA_DIR, "message-stats.json");
 const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
 let ALLOWED_ORIGINS = new Set();
 const DEFAULT_DEV_ORIGINS = new Set([
@@ -60,24 +100,33 @@ const DEFAULT_DEV_ORIGINS = new Set([
 ]);
 const MAX_SITE_CONNECTION_LIMIT = 1000;
 const DEFAULT_CONNECTION_LIMIT = Math.min(MAX_SITE_CONNECTION_LIMIT, Math.max(1, readLimit("MAX_CONNECTIONS", 100)));
-const MAX_BROWSER_ID_LEN = 80;
-const MAX_BROWSER_SECRET_LEN = 64;
 const MAX_WS_PAYLOAD_BYTES = Number(process.env.MAX_WS_PAYLOAD_BYTES || 512);
 const MAX_READING_URL_LEN = 240;
 const MAX_SITE_NAME_LEN = 80;
-const MAX_EMAIL_LEN = 254;
 const MAX_ORIGIN_LEN = 240;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_PAGE_URL_LEN = 512;
 const REGISTRATIONS_PER_HOUR = Number(process.env.REGISTRATIONS_PER_HOUR || 20);
 const AUTH_FAILURES_PER_HOUR = Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 const IP_MAX_IDENTITIES = readLimit("IP_MAX_IDENTITIES", 2);
 const IP_JOIN_LIMIT = readLimit("IP_JOIN_LIMIT", 30);
 const IP_STATE_EVENT_LIMIT = readLimit("IP_STATE_EVENT_LIMIT", 600);
 const IP_CHAT_EVENT_LIMIT = readLimit("IP_CHAT_EVENT_LIMIT", 20);
+// Behavioral flood ban: count rename + chat actions per IP over a rolling
+// window. Crossing FLOOD_BAN_LIMIT is non-human (the abuse bot renames several
+// times a second), so the IP is persistently blocked — but only when
+// FLOOD_BAN_ENFORCE is set. Unset (default) is dry-run: it logs `flood_detect`
+// with the rate it *would* ban and changes nothing, so the threshold can be
+// validated against real traffic before it can act. Owners are exempt.
+const FLOOD_BAN_LIMIT = readLimit("FLOOD_BAN_LIMIT", 30);
+const FLOOD_BAN_WINDOW_MS = readLimit("FLOOD_BAN_WINDOW_MS", 10000);
+const FLOOD_BAN_ENFORCE = process.env.FLOOD_BAN_ENFORCE === "1";
 const IP_SYNC_ACTION_ROUNDS = readLimit("IP_SYNC_ACTION_ROUNDS", 3);
 const IP_SYNC_ACTION_WINDOW_MS = readLimit("IP_SYNC_ACTION_WINDOW_MS", 10000);
 const IP_SYNC_ACTION_TOLERANCE_MS = readLimit("IP_SYNC_ACTION_TOLERANCE_MS", 250);
 const IP_QUARANTINE_MS = readLimit("IP_QUARANTINE_MS", 10 * 60 * 1000);
+// Hard cap on the per-(scene, IP) activity map so a flood of distinct keys
+// (including spoofed x-real-ip behind a proxy) can't grow it without bound.
+const MAX_IP_ACTIVITY_ENTRIES = readLimit("MAX_IP_ACTIVITY_ENTRIES", 50000);
 const IP_JOIN_WINDOW_MS = 60 * 1000;
 const IP_EVENT_WINDOW_MS = 10 * 1000;
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
@@ -85,8 +134,6 @@ const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
 const DEFAULT_CHAT_THROTTLE_MS = 500;
 const MAX_CHAT_THROTTLE_MS = 30000;
-const MAX_BLOCKED_WORDS = 60;
-const MAX_BLOCKED_WORD_LEN = 40;
 const MAX_MODERATION_LOG = 50;
 const RECONNECT_GRACE_MS = 1500;
 const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 * 60 * 1000);
@@ -104,6 +151,10 @@ const MIN_HUMAN_SAY_MS = readLimit("MIN_HUMAN_SAY_MS", 1500);
 // gate. Sent to the widget in the challenge, so it is tunable without shipping a
 // new widget. Higher costs the client more CPU per join.
 const POW_DIFFICULTY_BITS = readLimit("POW_DIFFICULTY_BITS", 15);
+// Emit one structured JSON line per new visitor join (name, IP, a stable
+// per-site browser fingerprint, origin, PoW status) so abuse can be diagnosed
+// from server logs. On by default; set LOG_JOINS=0 to silence.
+const LOG_JOINS = process.env.LOG_JOINS !== "0";
 const BIRD_FLEE_RADIUS = 0.07;
 const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
@@ -178,22 +229,29 @@ function parseHttpOrigin(value) {
   }
 }
 
-/** @type {Map<string, import("./public/shared/scene-props.mjs").SceneProp>} */
+/** @type {Map<string, import("./shared/scene-props.mjs").SceneProp>} */
 let PROPS_BY_ID = new Map();
-/** @type {Array<import("./public/shared/bird-perches.mjs").BirdPerch>} */
+/** @type {Array<import("./shared/bird-perches.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
-let DEFAULT_SITE_SCENE_CONFIG = { benches: 2, trees: 1, lamps: 1, birds: 3 };
-let DEFAULT_SITE_STYLE = {
-  light: { scene: "#e4e2dd", page: "#efede9", surface: "#fdf8f4", ink: "#2a2926", accent: "#c8641f", other: "#26241f", ground: "rgba(42, 41, 38, 0.16)" },
-  dark: { scene: "#242521", page: "#181917", surface: "#24231f", ink: "#f2eee6", accent: "#df8a43", other: "#ddd7cc", ground: "rgba(242, 238, 230, 0.18)" },
-};
-let sanitizeSceneConfig = (config) => ({ ...DEFAULT_SITE_SCENE_CONFIG, ...(config || {}) });
-let sanitizeConnections = (connections) => (Array.isArray(connections) ? connections : []);
-let sanitizeSiteStyle = (style) => (style && (style.light || style.dark) ? style : { ...DEFAULT_SITE_STYLE, light: { ...DEFAULT_SITE_STYLE.light, ...(style || {}) } });
-let buildSceneProps = () => [];
-let buildBirdPerches = () => [];
-let buildSiteCss = () => "";
-/** @type {(prop: import("./public/shared/site-config.mjs").SceneProp, x: number) => boolean} */
+// Shared realtime protocol vocabulary, assigned from protocol.mjs in
+// loadSharedModules() before the server starts listening.
+let MSG;
+let GESTURE;
+let BIRD_ACTION;
+let CLOSE_REASON;
+// Assigned synchronously from site-config-core.mjs once loadSharedModules()
+// resolves — before server.listen(), so requests never see them unset. (No
+// stub re-implementations: those were a second, divergent source of truth.)
+let DEFAULT_SITE_SCENE_CONFIG;
+let DEFAULT_SITE_STYLE;
+let sanitizeSceneConfig;
+let sanitizeConnections;
+let sanitizeMessageBoard;
+let sanitizeSiteStyle;
+let buildSceneProps;
+let buildBirdPerches;
+let buildSiteCss;
+/** @type {(prop: import("./shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 /** @type {(storedWorld: object, siteCount: number) => object} */
@@ -202,17 +260,6 @@ let mapWorld;
 let normalizeOrigin;
 let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
 let getMatchingWwwOrigin = () => null;
-let originUsesMatchingWwwPair = () => false;
-
-const MIME_TYPES = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-};
 
 function parseAllowedOrigins(value) {
   return new Set(
@@ -265,8 +312,8 @@ const MESSAGE_HANDLERS = {
   typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,readingActive:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
-function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown") {
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,initialized:boolean,spectator:boolean,readingActive:boolean,widgetVisible:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown", spectator = false) {
   return {
     connectionId,
     ws,
@@ -277,7 +324,13 @@ function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown"
     propsById: scene.propsById,
     identity: null,
     joined: false,
+    initialized: false,
+    // Read-only livestream overlay: receives broadcasts but never joins as an
+    // identity, so it isn't counted or shown to real visitors.
+    spectator,
     readingActive: false,
+    // Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+    widgetVisible: false,
     lastMoveAt: 0,
     lastActionAt: 0,
     lastChatAt: 0,
@@ -307,7 +360,7 @@ function leadingZeroBits(buffer) {
 function issuePowChallenge(client) {
   const salt = crypto.randomBytes(16).toString("hex");
   client.challenge = { salt, difficulty: POW_DIFFICULTY_BITS };
-  send(client.ws, { type: "challenge", salt, difficulty: POW_DIFFICULTY_BITS });
+  send(client.ws, { type: MSG.CHALLENGE, salt, difficulty: POW_DIFFICULTY_BITS });
 }
 
 function verifyPow(challenge, nonce) {
@@ -340,7 +393,7 @@ function syncClientSceneProps(client, message) {
   client.propsById = new Map(props.map((prop) => [prop.id, prop]));
 }
 
-/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
+/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,widgetVisible:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
 function createIdentity(id, browserId, x) {
   return {
     id,
@@ -354,6 +407,8 @@ function createIdentity(id, browserId, x) {
     readingLabel: "",
     readingUrl: "",
     readingActive: false,
+    // Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+    widgetVisible: true,
     isOwner: false,
     clients: new Set(),
     joined: false,
@@ -366,41 +421,9 @@ function createIdentity(id, browserId, x) {
   };
 }
 
-function clampPosition(x) {
-  if (typeof x !== "number" || Number.isNaN(x)) return null;
-  if (x < 0 || x > 1) return null;
-  return x;
-}
-
-function sanitizeBrowserId(browserId) {
-  if (typeof browserId !== "string") return "";
-  return browserId.slice(0, MAX_BROWSER_ID_LEN).replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-function sanitizeBrowserSecret(browserSecret) {
-  if (typeof browserSecret !== "string") return "";
-  return browserSecret.slice(0, MAX_BROWSER_SECRET_LEN).replace(/[^a-f0-9]/gi, "");
-}
-
 function sanitizeMessage(text) {
   if (typeof text !== "string") return "";
   return text.trim().slice(0, MAX_MESSAGE_LEN);
-}
-
-/** A site's forbidden-word list: trimmed, lowercased, de-duped, capped. */
-function sanitizeBlockedWords(input) {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set();
-  const words = [];
-  for (const raw of input) {
-    if (typeof raw !== "string") continue;
-    const word = raw.trim().toLowerCase().slice(0, MAX_BLOCKED_WORD_LEN);
-    if (!word || seen.has(word)) continue;
-    seen.add(word);
-    words.push(word);
-    if (words.length >= MAX_BLOCKED_WORDS) break;
-  }
-  return words;
 }
 
 /** Per-site slow-mode cooldown, clamped to a sane range; falls back to default. */
@@ -571,6 +594,38 @@ function ownerHandle(siteKey, browserId) {
   return crypto.createHash("sha256").update(`${siteKey}:${browserId}`).digest("hex").slice(0, 16);
 }
 
+function identityFp(site, identity) {
+  if (!site || !identity) return null;
+  const key = `${site.siteKey}:${identity.browserId}`;
+  if (identity._fpKey !== key) {
+    identity._fpKey = key;
+    identity._fp = ownerHandle(site.siteKey, identity.browserId);
+  }
+  return identity._fp;
+}
+
+// One structured line per genuine new join, for diagnosing bot/abuse patterns
+// from server logs. The browser fingerprint is the same per-site hash the admin
+// editor uses (ownerHandle), so a bot reusing its browserId shows a stable `fp`
+// across joins; a rotating one shows a fresh `fp` each time. Raw browserId never
+// leaves the server.
+function logJoin(client, identity) {
+  if (!LOG_JOINS) return;
+  const site = client.site;
+  console.log(JSON.stringify({
+    event: "join",
+    at: new Date().toISOString(),
+    site: site ? site.siteKey : null,
+    scene: client.scene.key,
+    name: identity.displayName,
+    ip: client.ip,
+    fp: identityFp(site, identity),
+    origin: client.origin || null,
+    powVerified: Boolean(client.powVerified),
+    botProtection: Boolean(site && site.botProtection),
+  }));
+}
+
 /** The site's owners with their persisted look, for the dedicated admin section. */
 function getOwners(site, scene) {
   if (!site || !Array.isArray(site.ownerBrowserIds)) return [];
@@ -596,202 +651,6 @@ function sanitizeSiteName(name, origin) {
   } catch {
     return "Untitled site";
   }
-}
-
-function parseOptionalEmail(email) {
-  const clean = typeof email === "string" ? email.trim().slice(0, MAX_EMAIL_LEN) : "";
-  if (!clean) return { ok: true, email: null };
-  if (!EMAIL_RE.test(clean)) return { ok: false, email: null };
-  return { ok: true, email: clean };
-}
-
-function createToken(prefix, bytes = 18) {
-  return `${prefix}_${crypto.randomBytes(bytes).toString("base64url")}`;
-}
-
-function hashAdminToken(adminToken, salt = crypto.randomBytes(16).toString("base64url")) {
-  const digest = crypto.createHash("sha256").update(`${salt}:${adminToken}`).digest("base64url");
-  return `sha256:${salt}:${digest}`;
-}
-
-function tokensMatch(expected, provided) {
-  const a = Buffer.from(String(expected || ""));
-  const b = Buffer.from(String(provided || ""));
-  if (a.length === 0 || a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-function adminTokenMatches(site, adminToken) {
-  const token = typeof adminToken === "string" ? adminToken.trim() : "";
-  if (!site || !token) return false;
-
-  if (site.adminTokenHash) {
-    const [algorithm, salt] = String(site.adminTokenHash).split(":");
-    if (algorithm !== "sha256" || !salt) return false;
-    return tokensMatch(site.adminTokenHash, hashAdminToken(token, salt));
-  }
-
-  return tokensMatch(site.adminToken, token);
-}
-
-function getContentType(filePath) {
-  return MIME_TYPES[path.extname(filePath)] || "application/octet-stream";
-}
-
-function getStaticHeaders(filePath) {
-  const headers = {
-    "cache-control": "no-store",
-    "content-type": getContentType(filePath),
-  };
-
-  if ([".css", ".mjs"].includes(path.extname(filePath))) {
-    headers["access-control-allow-origin"] = "*";
-  }
-
-  return headers;
-}
-
-function escapeHtmlAttr(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function plausibleScriptPath() {
-  if (!PLAUSIBLE_SCRIPT_SRC.startsWith("/")) return null;
-  return PLAUSIBLE_SCRIPT_SRC.split("?")[0];
-}
-
-function shouldInjectPlausible(filePath) {
-  return Boolean(PLAUSIBLE_DOMAIN && path.extname(filePath) === ".html");
-}
-
-function buildPlausibleSnippet() {
-  const attrs = [
-    "defer",
-    `data-domain="${escapeHtmlAttr(PLAUSIBLE_DOMAIN)}"`,
-    `src="${escapeHtmlAttr(PLAUSIBLE_SCRIPT_SRC)}"`,
-  ];
-  if (PLAUSIBLE_API_PATH) {
-    attrs.splice(2, 0, `data-api="${escapeHtmlAttr(PLAUSIBLE_API_PATH)}"`);
-  }
-  return `<script ${attrs.join(" ")}></script>`;
-}
-
-function injectPlausibleIntoHtml(html) {
-  const snippet = buildPlausibleSnippet();
-  const headClose = html.indexOf("</head>");
-  if (headClose === -1) return html;
-  return `${html.slice(0, headClose)}    ${snippet}\n  ${html.slice(headClose)}`;
-}
-
-async function proxyPlausibleScript(req, res) {
-  try {
-    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/js/script.js`, {
-      headers: { "user-agent": req.headers["user-agent"] || "TownSquare" },
-    });
-    if (!response.ok) {
-      res.writeHead(response.status, { "content-type": "text/plain; charset=utf-8" });
-      res.end("upstream error");
-      return;
-    }
-
-    res.writeHead(200, {
-      "content-type": response.headers.get("content-type") || "application/javascript; charset=utf-8",
-      "cache-control": "public, max-age=86400, immutable",
-    });
-    res.end(Buffer.from(await response.arrayBuffer()));
-  } catch (error) {
-    console.warn(`Plausible script proxy failed: ${error.message}`);
-    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
-    res.end("bad gateway");
-  }
-}
-
-function proxyPlausibleEvent(req, res) {
-  const chunks = [];
-
-  req.on("data", (chunk) => {
-    chunks.push(chunk);
-    if (chunks.reduce((size, part) => size + part.length, 0) > 4096) {
-      res.writeHead(413, { "content-type": "text/plain; charset=utf-8" });
-      res.end("payload too large");
-      req.destroy();
-    }
-  });
-
-  req.on("end", () => {
-    void forwardPlausibleEvent(req, res, Buffer.concat(chunks));
-  });
-}
-
-async function forwardPlausibleEvent(req, res, body) {
-  try {
-    const response = await fetch(`${PLAUSIBLE_UPSTREAM}/api/event`, {
-      method: "POST",
-      headers: {
-        "content-type": req.headers["content-type"] || "application/json",
-        "user-agent": req.headers["user-agent"] || "",
-        "x-forwarded-for": getRequestIp(req),
-      },
-      body,
-    });
-
-    res.writeHead(response.status, {
-      "content-type": response.headers.get("content-type") || "text/plain; charset=utf-8",
-    });
-    res.end(Buffer.from(await response.arrayBuffer()));
-  } catch (error) {
-    console.warn(`Plausible event proxy failed: ${error.message}`);
-    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
-    res.end("bad gateway");
-  }
-}
-
-function resolvePublicFile(requestUrl, hostHeader) {
-  const url = new URL(requestUrl, `http://${hostHeader}`);
-  if (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname)) {
-    return null;
-  }
-  if (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname)) {
-    return null;
-  }
-  const aliases = new Map([
-    ["/register", "/hosted/register.html"],
-    ["/admin", "/hosted/admin.html"],
-    ["/admin/chat", "/hosted/chat.html"],
-    ["/service-admin", "/hosted/service-admin.html"],
-    ["/map", "/map.html"],
-    ["/dev", "/dev/dev.html"],
-    ["/walk-sandbox", "/dev/walk-sandbox.html"],
-    ["/staging", "/staging.html"],
-  ]);
-  const pathname = aliases.get(url.pathname) || url.pathname;
-  const normalized = path.normalize(pathname).replace(/^\.+/, "");
-
-  // Candidate files are tried in order: the core public dir first, then the
-  // optional plugin assets overlay. Each must stay inside its own root.
-  const candidates = [];
-  const corePath = path.join(PUBLIC_DIR, normalized);
-  if (corePath.startsWith(PUBLIC_DIR)) candidates.push(corePath);
-  if (PLUGIN_ASSETS_DIR) {
-    const pluginPath = path.join(PLUGIN_ASSETS_DIR, normalized);
-    if (pluginPath.startsWith(PLUGIN_ASSETS_DIR)) candidates.push(pluginPath);
-  }
-
-  return candidates.length > 0 ? candidates : null;
-}
-
-function isDevToolsRequest(pathname) {
-  return pathname === "/dev"
-    || pathname === "/walk-sandbox"
-    || pathname.startsWith("/dev/");
-}
-
-function isStagingPageRequest(pathname) {
-  return pathname === "/staging" || pathname === "/staging.html";
 }
 
 function readJsonBody(req, res, callback, maxBytes = 4096) {
@@ -822,8 +681,11 @@ function readJsonBody(req, res, callback, maxBytes = 4096) {
   });
 }
 
-function sendJson(res, status, body) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+function sendJson(res, status, body, extraHeaders = null) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    ...(extraHeaders || {}),
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -873,6 +735,10 @@ function getStyleConfig(site) {
 
 function getConnections(site) {
   return sanitizeConnections(site?.connections || []);
+}
+
+function getMessageBoard(site) {
+  return sanitizeMessageBoard(site?.messageBoard || {});
 }
 
 function getSceneProps(site) {
@@ -929,13 +795,15 @@ function parseSiteOriginSettings(body, { defaultIncludeMatchingWww = true } = {}
 
 function buildEmbedSnippet(req, site) {
   const serverOrigin = getPublicOrigin(req);
-  const connections = getConnections(site);
   const pluginModules = plugins.browserModules("widget", pluginContext(site));
+  // Scene, connections, and the message board are delivered live over the socket
+  // (see the `hello` payload), not baked here, so this snippet is install-once:
+  // owners paste it a single time and manage everything else from the dashboard.
+  // Power users can still pin any of those fields inline to take them off live
+  // management (see README → Customization).
   const coreConfig = {
     serverOrigin,
     siteKey: site.siteKey,
-    scene: getSceneConfig(site),
-    ...(connections.length > 0 ? { connections } : {}),
     ...(pluginModules.length > 0 ? { pluginModules } : {}),
     theme: "host",
   };
@@ -946,9 +814,18 @@ function buildEmbedSnippet(req, site) {
     .map(([key, value]) => `    ${key}: ${JSON.stringify(value)}`)
     .join(",\n");
 
-  return `<link rel="stylesheet" href="${serverOrigin}/widget.css" />
+  // `preconnect` warms the DNS/TLS handshake to the widget origin before the
+  // module import fires, shaving a round trip off a cross-origin embed. `async`
+  // on the module lets it run the moment it arrives instead of waiting in the
+  // defer queue, so the widget never delays the host page's own work.
+  // The style.css link serves site-specific palette tokens dynamically, so
+  // appearance changes are live without requiring manual updates. See the admin
+  // panel for options to override with custom CSS.
+  return `<link rel="preconnect" href="${serverOrigin}" crossorigin />
+<link rel="stylesheet" href="${serverOrigin}/widget.css" />
+<link rel="stylesheet" href="${serverOrigin}/api/sites/${site.siteKey}/style.css" />
 <div id="townsquare-root"></div>
-<script type="module">
+<script type="module" async>
   import { mountTownSquare } from "${serverOrigin}/townsquare.mjs";
 
   mountTownSquare(document.getElementById("townsquare-root"), {
@@ -964,9 +841,82 @@ function buildAdminUrl(req, adminToken) {
   return url.toString();
 }
 
-const registrationsByIp = new Map();
-const adminAuthFailuresByIp = new Map();
-const serviceAdminAuthFailuresByIp = new Map();
+// Cookies are only marked Secure over https, otherwise the browser would drop
+// them on plain-http local dev.
+function requestIsSecure(req) {
+  return getPublicOrigin(req).startsWith("https://");
+}
+
+function buildSessionCookie(id, maxAgeMs, secure) {
+  const attrs = [
+    `${adminSessions.cookieName}=${id}`,
+    "HttpOnly",
+    "SameSite=Strict",
+    "Path=/api/admin",
+    `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+}
+
+function clearSessionCookie(secure) {
+  const attrs = [
+    `${adminSessions.cookieName}=`,
+    "HttpOnly",
+    "SameSite=Strict",
+    "Path=/api/admin",
+    "Max-Age=0",
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+}
+
+function readSessionFromCookie(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  return adminSessions.get(cookies[adminSessions.cookieName]);
+}
+
+/**
+ * Authenticate an admin request, preferring an HttpOnly session cookie over the
+ * bootstrap token in the body. On a successful token bootstrap a fresh session
+ * is minted and a Set-Cookie header is returned so the raw token is not needed
+ * (nor resent) again.
+ *
+ * @returns {{ site: any, tokenPresented: boolean, setCookie: string|null }|null}
+ */
+function resolveAdminRequest(req, body) {
+  const requestedKey = String(body.siteKey || "");
+  const token = String(body.adminToken || "").trim();
+
+  // 1) Existing session cookie. The cookie's site must match an explicitly
+  //    requested siteKey so a session can't be aimed at another site.
+  const session = readSessionFromCookie(req);
+  if (session) {
+    const site = sitesByKey.get(session.siteKey);
+    if (site && (!requestedKey || requestedKey === session.siteKey)) {
+      return { site, tokenPresented: token.length > 0, setCookie: null };
+    }
+  }
+
+  // 2) Bootstrap token in the body. Mint a session cookie on success.
+  if (token) {
+    const site = getAdminSiteByCredentials(requestedKey, token);
+    if (site) {
+      const created = adminSessions.create(site.siteKey, { remember: Boolean(body.rememberMe) });
+      return {
+        site,
+        tokenPresented: true,
+        setCookie: buildSessionCookie(created.id, created.maxAgeMs, requestIsSecure(req)),
+      };
+    }
+  }
+
+  return null;
+}
+
+const registrationsByIp = makeBucketStore();
+const adminAuthFailuresByIp = makeBucketStore();
+const serviceAdminAuthFailuresByIp = makeBucketStore();
 const activityByIpAndScene = new Map();
 
 function getRequestIp(req) {
@@ -980,11 +930,37 @@ function getIpActivity(scene, ip, now = Date.now()) {
   const key = `${scene.key}\0${ip}`;
   let activity = activityByIpAndScene.get(key);
   if (!activity) {
+    if (activityByIpAndScene.size >= MAX_IP_ACTIVITY_ENTRIES) {
+      enforceIpActivityCap(now);
+    }
     activity = { lastSeenAt: now, budgets: new Map() };
     activityByIpAndScene.set(key, activity);
   }
   activity.lastSeenAt = now;
   return activity;
+}
+
+// Bound activityByIpAndScene so a flood of distinct (scene, spoofed-IP) keys —
+// including quarantined ones, which pruneIpActivity deliberately keeps — can't
+// grow it without limit. Drop stale entries first, then, if still at the cap,
+// evict the least-recently-seen entries (preferring un-quarantined ones) down
+// to 90% in a single batch so this stays amortized cheap per insert.
+function enforceIpActivityCap(now = Date.now()) {
+  pruneIpActivity(now);
+  const target = Math.floor(MAX_IP_ACTIVITY_ENTRIES * 0.9);
+  if (activityByIpAndScene.size <= target) return;
+
+  const byAge = Array.from(activityByIpAndScene.entries())
+    .sort((a, b) => a[1].lastSeenAt - b[1].lastSeenAt);
+  for (const [key, activity] of byAge) {
+    if (activityByIpAndScene.size <= target) break;
+    if ((activity.quarantinedUntil || 0) > now) continue;
+    activityByIpAndScene.delete(key);
+  }
+  for (const [key] of byAge) {
+    if (activityByIpAndScene.size <= target) break;
+    activityByIpAndScene.delete(key);
+  }
 }
 
 function consumeIpBudget(client, type, limit, windowMs, now = Date.now()) {
@@ -1012,13 +988,62 @@ function pruneIpActivity(now = Date.now()) {
 }
 
 function closeRateLimited(client) {
-  client.ws.close(1008, "rate limited");
+  client.ws.close(1008, CLOSE_REASON.RATE_LIMITED);
 }
 
 function allowIpEvent(client, type, limit) {
   if (consumeIpBudget(client, type, limit, IP_EVENT_WINDOW_MS)) return true;
   closeRateLimited(client);
   return false;
+}
+
+// Behavioral flood detector: tally rename/chat actions per IP in a rolling
+// window. A human cannot rename or message dozens of times in 10s; the abuse bot
+// does. On crossing the threshold we persistently block the IP (reusing
+// blockedIps enforcement) and kick every connection on it. In dry-run
+// (FLOOD_BAN_ENFORCE unset) it only logs what it *would* ban. Returns true when
+// the caller's action should be dropped (i.e. the IP was just banned).
+function registerFloodAction(client, now = Date.now()) {
+  if (FLOOD_BAN_LIMIT <= 0 || !client.site) return false;
+  if (client.identity?.isOwner) return false; // never auto-ban a verified owner
+
+  const activity = getIpActivity(client.scene, client.ip, now);
+  let flood = activity.flood;
+  if (!flood || now - flood.startedAt >= FLOOD_BAN_WINDOW_MS) {
+    flood = { startedAt: now, count: 0, flagged: false };
+    activity.flood = flood;
+  }
+  flood.count += 1;
+  if (flood.count < FLOOD_BAN_LIMIT || flood.flagged) return false;
+
+  // Threshold crossed: log once per window either way (audit + dry-run signal).
+  flood.flagged = true;
+  console.log(JSON.stringify({
+    event: "flood_detect",
+    at: new Date(now).toISOString(),
+    enforce: FLOOD_BAN_ENFORCE,
+    site: client.site.siteKey,
+    ip: client.ip,
+    count: flood.count,
+    windowMs: FLOOD_BAN_WINDOW_MS,
+    name: client.identity?.displayName || "",
+  }));
+
+  if (!FLOOD_BAN_ENFORCE) return false; // dry-run: detect only
+
+  if (!Array.isArray(client.site.blockedIps)) client.site.blockedIps = [];
+  if (client.ip && client.ip !== "unknown" && !client.site.blockedIps.includes(client.ip)) {
+    client.site.blockedIps.push(client.ip);
+    logModeration(client.site, "auto-block-ip", client.ip);
+    touchSite(client.site);
+  }
+  // Kick every live connection from this IP in the scene, not just this one.
+  for (const peer of client.scene.clients.values()) {
+    if (peer.ip === client.ip && peer.ws.readyState === peer.ws.OPEN) {
+      peer.ws.close(4003, CLOSE_REASON.BLOCKED);
+    }
+  }
+  return true;
 }
 
 function isIpQuarantined(scene, ip, now = Date.now()) {
@@ -1116,51 +1141,83 @@ function allowIdentityInit(client, message) {
   return true;
 }
 
-function recentBucket(map, key, limit) {
-  if (limit <= 0) return [];
-
-  const now = Date.now();
-  const cutoff = now - 60 * 60 * 1000;
-
-  if (map.size > 1000) {
-    for (const [bucketKey, timestamps] of map) {
-      if (timestamps.every((at) => at <= cutoff)) map.delete(bucketKey);
-    }
+function allowSpectatorInit(client) {
+  if (isIpQuarantined(client.scene, client.ip)) {
+    closeRateLimited(client);
+    return false;
   }
 
-  const recent = (map.get(key) || []).filter((at) => at > cutoff);
-  map.set(key, recent);
-  return recent;
-}
-
-function isRegistrationAllowed(ip) {
-  if (REGISTRATIONS_PER_HOUR <= 0) return true;
-
-  const recent = recentBucket(registrationsByIp, ip, REGISTRATIONS_PER_HOUR);
-
-  if (recent.length >= REGISTRATIONS_PER_HOUR) return false;
-
-  recent.push(Date.now());
+  if (!consumeIpBudget(client, "join", IP_JOIN_LIMIT, IP_JOIN_WINDOW_MS)) {
+    closeRateLimited(client);
+    return false;
+  }
   return true;
 }
 
-function isAuthAttemptAllowed(map, ip) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return true;
-  return recentBucket(map, ip, AUTH_FAILURES_PER_HOUR).length < AUTH_FAILURES_PER_HOUR;
+function isRegistrationAllowed(ip) {
+  return registrationsByIp.take(ip, REGISTRATIONS_PER_HOUR);
 }
 
-function recordAuthFailure(map, ip) {
-  if (AUTH_FAILURES_PER_HOUR <= 0) return;
-  recentBucket(map, ip, AUTH_FAILURES_PER_HOUR).push(Date.now());
+function isAuthAttemptAllowed(store, ip) {
+  return store.under(ip, AUTH_FAILURES_PER_HOUR);
 }
 
-function clearAuthFailures(map, ip) {
-  map.delete(ip);
+function recordAuthFailure(store, ip) {
+  store.record(ip, AUTH_FAILURES_PER_HOUR);
+}
+
+function clearAuthFailures(store, ip) {
+  store.clear(ip);
 }
 
 function sendAuthThrottled(res) {
   sendJson(res, 429, { error: "Too many failed sign-in attempts. Try again later." });
 }
+
+// Per-IP hourly budget for the first-party Plausible event relay, so it can't
+// be abused to amplify traffic at the upstream using this server's address.
+const plausibleEventsByIp = makeBucketStore();
+const PLAUSIBLE_EVENTS_PER_HOUR = readLimit("PLAUSIBLE_EVENTS_PER_HOUR", 600);
+function isPlausibleEventAllowed(ip) {
+  return plausibleEventsByIp.take(ip, PLAUSIBLE_EVENTS_PER_HOUR);
+}
+
+const connectionClicksByIp = makeBucketStore();
+const mapClicksByIp = makeBucketStore();
+const sitePresenceReadsByIp = makeBucketStore();
+const CONNECTION_CLICKS_PER_HOUR = readLimit("CONNECTION_CLICKS_PER_HOUR", 600);
+const MAP_CLICKS_PER_HOUR = readLimit("MAP_CLICKS_PER_HOUR", 600);
+const SITE_PRESENCE_READS_PER_HOUR = readLimit("SITE_PRESENCE_READS_PER_HOUR", 600);
+
+function isConnectionClickAllowed(ip) {
+  return connectionClicksByIp.take(ip, CONNECTION_CLICKS_PER_HOUR);
+}
+
+function isMapClickAllowed(ip) {
+  return mapClicksByIp.take(ip, MAP_CLICKS_PER_HOUR);
+}
+
+function isSitePresenceReadAllowed(ip) {
+  return sitePresenceReadsByIp.take(ip, SITE_PRESENCE_READS_PER_HOUR);
+}
+
+const plausible = createPlausibleProxy({
+  domain: PLAUSIBLE_DOMAIN,
+  upstream: PLAUSIBLE_UPSTREAM,
+  scriptSrc: PLAUSIBLE_SCRIPT_SRC,
+  apiPath: PLAUSIBLE_API_PATH,
+  getRequestIp,
+  isEventAllowed: isPlausibleEventAllowed,
+});
+
+const staticFiles = createStaticFiles({
+  publicDir: PUBLIC_DIR,
+  pluginAssetsDir: PLUGIN_ASSETS_DIR,
+  devToolsEnabled: DEV_TOOLS_ENABLED,
+  stagingPageEnabled: STAGING_PAGE_ENABLED,
+  shouldInjectHtml: (filePath) => plausible.shouldInject(filePath),
+  injectHtml: (html) => plausible.injectIntoHtml(html),
+});
 
 function handleRegisterSite(req, res) {
   readJsonBody(req, res, (body) => {
@@ -1189,6 +1246,7 @@ function handleRegisterSite(req, res) {
       sceneConfig: body.sceneConfig,
       styleConfig: body.styleConfig,
       connections: body.connections,
+      messageBoard: body.messageBoard,
     });
     sitesByKey.set(site.siteKey, site);
     saveSites();
@@ -1268,6 +1326,66 @@ function handleStats(_req, res) {
   sendPublicJson(res, 200, getPublicStats());
 }
 
+/**
+ * Public, read-only presence count for one site's town square, used by the
+ * lightweight "N people here" counter widget. Reads the live scene count
+ * ({@link countActiveVisitors}) without opening a socket or creating an
+ * identity, so a page that only shows the counter never inflates the number
+ * or spawns a ghost avatar for visitors in the square. A missing `siteKey`
+ * reads the shared default (self-hosted) scene; an unknown or disabled site
+ * returns 404 so the counter can hide itself.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handleSitePresence(req, res) {
+  if (!isSitePresenceReadAllowed(getRequestIp(req))) {
+    sendPublicJson(res, 429, { error: "rate limited" });
+    return;
+  }
+
+  const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+  const siteKey = url.searchParams.get("siteKey") || "";
+
+  if (!siteKey) {
+    const scene = scenes.get("default");
+    sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+    return;
+  }
+
+  const site = sitesByKey.get(siteKey);
+  if (!site || site.disabled) {
+    sendPublicJson(res, 404, { error: "unknown site" });
+    return;
+  }
+
+  const scene = scenes.get(site.siteKey);
+  sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+}
+
+/**
+ * Serve site-specific CSS with palette tokens. Allows appearance changes to be
+ * live without requiring manual CSS pasting. The embed snippet includes a <link>
+ * tag pointing here by default; users can optionally override with custom CSS
+ * in their own stylesheet for advanced customization.
+ */
+function handleSiteStyleCss(req, res, url) {
+  const siteKey = url.pathname.split("/")[3];
+  const site = sitesByKey.get(siteKey);
+
+  if (!site || site.disabled) {
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("Not found");
+    return;
+  }
+  const css = buildSiteCss(getStyleConfig(site));
+  res.writeHead(200, {
+    "content-type": "text/css; charset=utf-8",
+    "cache-control": "public, max-age=300", // 5 min cache; changes update within 5 mins
+  });
+  res.end(css);
+}
+
 function loadMapWorld() {
   const readWorld = (filePath) => validateMapWorld(JSON.parse(fs.readFileSync(filePath, "utf8")));
   try {
@@ -1284,14 +1402,11 @@ function loadMapWorld() {
 }
 
 function saveMapWorld(nextWorld) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmpFile = `${MAP_WORLD_FILE}.tmp`;
-  fs.writeFileSync(tmpFile, `${JSON.stringify(nextWorld, null, 2)}\n`);
-  fs.renameSync(tmpFile, MAP_WORLD_FILE);
+  atomicWriteJson(MAP_WORLD_FILE, nextWorld);
   mapWorld = nextWorld;
 }
 
-function sendAdminSite(req, res, site, adminToken) {
+function sendAdminSite(req, res, site, adminToken, setCookie = null) {
   if (!site) {
     sendJson(res, 403, { error: "Invalid site key or admin token." });
     return;
@@ -1300,13 +1415,15 @@ function sendAdminSite(req, res, site, adminToken) {
   const scene = getScene(site.siteKey, site);
   const panel = {
     site: publicSite(site),
-    adminUrl: buildAdminUrl(req, adminToken),
+    // The recovery link embeds the raw token, so only surface it on a request
+    // that actually presented it (login/bootstrap), never on cookie-auth polls.
+    ...(adminToken ? { adminUrl: buildAdminUrl(req, adminToken) } : {}),
     embedSnippet: buildEmbedSnippet(req, site),
     styleSnippet: buildStyleSnippet(site),
     scene: getSceneStats(scene, site),
     owners: getOwners(site, scene),
   };
-  sendJson(res, 200, extendAdminPanel(panel, site));
+  sendJson(res, 200, extendAdminPanel(panel, site), setCookie ? { "set-cookie": setCookie } : null);
 }
 
 function extendAdminPanel(panel, site) {
@@ -1318,6 +1435,31 @@ function extendAdminPanel(panel, site) {
   return isPlainObject(extended) ? extended : corePanel;
 }
 
+// The admin dashboard polls /api/admin/site every few seconds while open, so a
+// raw request count would measure tab-open time, not owner engagement. Instead
+// `lastAt` tracks the newest authenticated request and `count` increments only
+// when the previous one is older than this gap — i.e. it counts distinct
+// dashboard sessions, the "owner opened /admin" signal service admin wants.
+const ADMIN_ACCESS_SESSION_GAP_MS = 30 * 60 * 1000;
+let lastAdminAccessSaveAt = 0;
+
+function recordAdminAccess(site) {
+  const now = Date.now();
+  const access = isPlainObject(site.adminAccess) ? site.adminAccess : (site.adminAccess = { count: 0, lastAt: 0 });
+  const lastAt = Number(access.lastAt) || 0;
+  if (now - lastAt > ADMIN_ACCESS_SESSION_GAP_MS) {
+    access.count = (Number(access.count) || 0) + 1;
+  }
+  access.lastAt = now;
+
+  // Polls refresh lastAt every few seconds; throttle the registry rewrite the
+  // same way lastSeen is throttled so an open dashboard doesn't write each tick.
+  if (now - lastAdminAccessSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+    lastAdminAccessSaveAt = now;
+    saveSites();
+  }
+}
+
 function handlePostAdminSite(req, res) {
   readJsonBody(req, res, (body) => {
     const ip = getRequestIp(req);
@@ -1326,14 +1468,19 @@ function handlePostAdminSite(req, res) {
       return;
     }
 
-    const adminToken = String(body.adminToken || "").trim();
-    const site = getAdminSiteByCredentials(String(body.siteKey || ""), adminToken);
-    if (!site) {
-      recordAuthFailure(adminAuthFailuresByIp, ip);
-    } else {
-      clearAuthFailures(adminAuthFailuresByIp, ip);
+    const presentedToken = String(body.adminToken || "").trim();
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      // Only count a token brute-force attempt; an expired/absent cookie alone
+      // is a benign re-auth, not a failed credential guess.
+      if (presentedToken) recordAuthFailure(adminAuthFailuresByIp, ip);
+      sendAdminSite(req, res, null, presentedToken);
+      return;
     }
-    sendAdminSite(req, res, site, adminToken);
+
+    if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
+    recordAdminAccess(resolved.site);
+    sendAdminSite(req, res, resolved.site, presentedToken, resolved.setCookie);
   });
 }
 
@@ -1354,10 +1501,92 @@ function handleAdminLogin(req, res) {
     }
 
     clearAuthFailures(adminAuthFailuresByIp, ip);
+    // Mint a session so subsequent admin requests authenticate via the HttpOnly
+    // cookie and never need to resend the raw token.
+    const created = adminSessions.create(site.siteKey, { remember: Boolean(body.rememberMe) });
     sendJson(res, 200, {
       site: publicSite(site),
       adminUrl: buildAdminUrl(req, adminToken),
-    });
+    }, { "set-cookie": buildSessionCookie(created.id, created.maxAgeMs, requestIsSecure(req)) });
+  });
+}
+
+function handleAdminLogout(req, res) {
+  const cookies = parseCookies(req.headers.cookie);
+  const sessionId = cookies[adminSessions.cookieName];
+  if (sessionId) adminSessions.destroy(sessionId);
+  sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookie(requestIsSecure(req)) });
+}
+
+function handleGetAdminNotifications(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
+    sendJson(res, 200, { notifications });
+  });
+}
+
+function handlePostAdminNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    if (!notificationsBySiteKey.has(resolved.site.siteKey)) {
+      notificationsBySiteKey.set(resolved.site.siteKey, []);
+    }
+
+    notificationsBySiteKey.get(resolved.site.siteKey).push(notification);
+    saveNotifications();
+
+    sendJson(res, 201, { notification });
+  });
+}
+
+function handleMarkAdminNotificationRead(req, res) {
+  readJsonBody(req, res, (body) => {
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      sendJson(res, 403, { error: "Unauthorized" });
+      return;
+    }
+
+    const notificationId = String(body.notificationId || "").trim();
+    if (!notificationId) {
+      sendJson(res, 400, { error: "notificationId is required" });
+      return;
+    }
+
+    const notifications = notificationsBySiteKey.get(resolved.site.siteKey) || [];
+    const notification = notifications.find((n) => n.id === notificationId);
+    if (!notification) {
+      sendJson(res, 404, { error: "Notification not found" });
+      return;
+    }
+
+    notification.readAt = Date.now();
+    saveNotifications();
+
+    sendJson(res, 200, { notification });
   });
 }
 
@@ -1387,6 +1616,7 @@ const ADMIN_ACTIONS = {
   updateCustomization(site, scene, body) {
     site.sceneConfig = sanitizeSceneConfig(body.sceneConfig);
     site.styleConfig = sanitizeSiteStyle(body.styleConfig);
+    site.messageBoard = sanitizeMessageBoard(body.messageBoard);
     touchSite(site);
 
     if (scene.clients.size === 0) {
@@ -1395,10 +1625,19 @@ const ADMIN_ACTIONS = {
     }
 
     rebuildSceneProps(scene, site);
+    // Push the edited scene and board to everyone currently in the square so they
+    // update live, no snippet re-paste needed. Colours stay in the pasted CSS.
+    broadcast(scene, { type: MSG.SCENE, scene: getSceneConfig(site) });
+    broadcast(scene, { type: MSG.MESSAGE_BOARD, messageBoard: getMessageBoard(site) });
   },
   updateConnections(site, scene, body) {
     site.connections = sanitizeConnections(body.connections);
     touchSite(site);
+    // Push edited neighbour links to everyone currently in the square so they
+    // update live, no snippet re-paste needed.
+    if (scene.clients.size > 0) {
+      broadcast(scene, { type: MSG.CONNECTIONS, connections: getConnections(site) });
+    }
   },
   setChatDisabled(site, scene, body) {
     site.chatDisabled = Boolean(body.disabled);
@@ -1416,24 +1655,37 @@ const ADMIN_ACTIONS = {
     touchSite(site);
     // Push the new cooldown to connected widgets so their "wait" hint stays in
     // sync — otherwise a visitor keeps the old limit until they reconnect.
-    broadcast(scene, { type: "chatThrottle", ms: getChatThrottle(site) });
+    broadcast(scene, { type: MSG.CHAT_THROTTLE, ms: getChatThrottle(site) });
   },
   kickVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
     if (identity) {
       logModeration(site, "kick", visitorLogLabel(identity));
       touchSite(site);
-      closeIdentityClients(identity, 4001, "kicked");
+      closeIdentityClients(identity, 4001, CLOSE_REASON.KICKED);
     }
   },
   blockVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
-    if (identity && !site.blockedBrowserIds.includes(identity.browserId)) {
+    if (!identity) return;
+    if (!site.blockedBrowserIds.includes(identity.browserId)) {
       site.blockedBrowserIds.push(identity.browserId);
-      logModeration(site, "block", visitorLogLabel(identity));
-      touchSite(site);
-      closeIdentityClients(identity, 4003, "blocked");
     }
+    // Also block the visitor's live source IP(s). The browserId is chosen by the
+    // client, so a reconnecting bot rotates it and a browserId-only block never
+    // sticks. The IP is far harder to rotate, so capturing it here is what makes
+    // Block actually hold across reconnects. Runs even when the browserId was
+    // already blocked, so re-blocking a rotated identity still catches its IP.
+    if (!Array.isArray(site.blockedIps)) site.blockedIps = [];
+    for (const peerClient of identity.clients) {
+      const peerIp = peerClient.ip;
+      if (peerIp && peerIp !== "unknown" && !site.blockedIps.includes(peerIp)) {
+        site.blockedIps.push(peerIp);
+      }
+    }
+    logModeration(site, "block", visitorLogLabel(identity));
+    touchSite(site);
+    closeIdentityClients(identity, 4003, CLOSE_REASON.BLOCKED);
   },
   muteVisitor(site, scene, body) {
     const identity = scene.identities.get(Number(body.visitorId));
@@ -1453,6 +1705,30 @@ const ADMIN_ACTIONS = {
       site.mutedBrowserIds.splice(index, 1);
       logModeration(site, "unmute", visitorLogLabel(identity));
       touchSite(site);
+    }
+  },
+  hideVisitor(site, scene, body) {
+    const identity = scene.identities.get(Number(body.visitorId));
+    if (!identity) return;
+    if (!Array.isArray(site.shadowBlockedBrowserIds)) site.shadowBlockedBrowserIds = [];
+    if (!site.shadowBlockedBrowserIds.includes(identity.browserId)) {
+      broadcastIdentity(scene, { type: MSG.LEAVE, id: identity.id }, identity);
+      site.shadowBlockedBrowserIds.push(identity.browserId);
+      logModeration(site, "hide", visitorLogLabel(identity));
+      touchSite(site);
+    }
+  },
+  unhideVisitor(site, scene, body) {
+    const identity = scene.identities.get(Number(body.visitorId));
+    if (!identity || !Array.isArray(site.shadowBlockedBrowserIds)) return;
+    const index = site.shadowBlockedBrowserIds.indexOf(identity.browserId);
+    if (index !== -1) {
+      site.shadowBlockedBrowserIds.splice(index, 1);
+      logModeration(site, "unhide", visitorLogLabel(identity));
+      touchSite(site);
+      if (identity.joined) {
+        broadcastIdentity(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, identity);
+      }
     }
   },
   setOwnerVisitor(site, scene, body) {
@@ -1475,7 +1751,7 @@ const ADMIN_ACTIONS = {
       delete site.ownerProfiles[identity.browserId];
     }
     touchSite(site);
-    broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+    broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
   },
   updateOwnerProfile(site, scene, body) {
     // Keyed by the opaque owner handle so the dedicated admin section can edit
@@ -1495,7 +1771,7 @@ const ADMIN_ACTIONS = {
     const identity = scene.identityByBrowser.get(browserId);
     if (identity) {
       applyOwnerProfile(site, identity);
-      broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+      broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
     }
   },
   clearMessages(site, scene) {
@@ -1531,7 +1807,7 @@ const ADMIN_ACTIONS = {
     touchSite(site);
     if (site.disabled) {
       for (const client of Array.from(scene.clients.values())) {
-        client.ws.close(4003, "site disabled");
+        client.ws.close(4003, CLOSE_REASON.SITE_DISABLED);
       }
     }
   },
@@ -1545,14 +1821,19 @@ function handleAdminAction(req, res) {
       return;
     }
 
-    const site = getAdminSiteByCredentials(String(body.siteKey || ""), String(body.adminToken || ""));
-    if (!site) {
-      recordAuthFailure(adminAuthFailuresByIp, ip);
+    const presentedToken = String(body.adminToken || "").trim();
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      if (presentedToken) recordAuthFailure(adminAuthFailuresByIp, ip);
       sendJson(res, 403, { error: "Invalid site key or admin token." });
       return;
     }
+    if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
 
-    clearAuthFailures(adminAuthFailuresByIp, ip);
+    const site = resolved.site;
+    // Carry the upgrade cookie (if any) on whichever response this handler sends.
+    const cookieHeader = resolved.setCookie ? { "set-cookie": resolved.setCookie } : null;
+    const respond = (status, payload) => sendJson(res, status, payload, cookieHeader);
     const action = String(body.action || "");
     const pluginName = String(body.plugin || "");
     const scene = getScene(site.siteKey, site);
@@ -1564,6 +1845,7 @@ function handleAdminAction(req, res) {
       const context = (name) => Object.freeze({
         site: pluginSite(site),
         data: getPluginData(site, name),
+        enabled: isPluginEnabledForSite(site, name),
         owners: getOwners(site, scene),
         visitors: getSceneStats(scene, site).visitors,
         setData(value) {
@@ -1578,7 +1860,7 @@ function handleAdminAction(req, res) {
         isPlainObject(body.input) ? body.input : {},
       );
       if (!invoked.found) {
-        sendJson(res, 400, { error: "Unknown plugin action." });
+        respond(400, { error: "Unknown plugin action." });
         return;
       }
       if (invoked.error || invoked.result?.error) {
@@ -1586,33 +1868,33 @@ function handleAdminAction(req, res) {
           if (hadPluginData) site.plugins[pluginName] = previousPluginData;
           else delete site.plugins[pluginName];
         }
-        sendJson(res, 400, { error: invoked.error || invoked.result.error });
+        respond(400, { error: invoked.error || invoked.result.error });
         return;
       }
       if (changed) {
         touchSite(site);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
-          broadcast(scene, { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) });
+          broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
         }
       }
       const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
-      sendJson(res, 200, extendAdminPanel(panel, site));
+      respond(200, extendAdminPanel(panel, site));
       return;
     }
 
     if (!Object.hasOwn(ADMIN_ACTIONS, action)) {
-      sendJson(res, 400, { error: "Unknown action." });
+      respond(400, { error: "Unknown action." });
       return;
     }
 
     const actionResult = ADMIN_ACTIONS[action](site, scene, body);
     if (actionResult?.error) {
-      sendJson(res, 400, actionResult);
+      respond(400, actionResult);
       return;
     }
     const panel = { site: publicSite(site), scene: getSceneStats(scene, site), owners: getOwners(site, scene) };
-    sendJson(res, 200, extendAdminPanel(panel, site));
+    respond(200, extendAdminPanel(panel, site));
   });
 }
 
@@ -1648,22 +1930,78 @@ function isServiceAdminAuthorized(req, body, res) {
 function serviceAdminSite(site) {
   const scene = scenes.get(site.siteKey);
   const connectionClicks = isPlainObject(site.connectionClicks) ? site.connectionClicks : {};
+  const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
+  const adminAccess = isPlainObject(site.adminAccess) ? site.adminAccess : {};
 
   return {
     ...publicSite(site),
     updatedAt: site.updatedAt,
     activeVisitors: scene ? countActiveVisitors(scene) : 0,
+    visitorStats: visitorStats.getStats(site.siteKey),
+    messageStats: messageStats.getStats(site.siteKey),
     connectionClicks,
     connectionClickTotal: Object.values(connectionClicks).reduce(
       (sum, entry) => sum + (entry?.count || 0),
       0,
     ),
+    mapClickTotal: Number(mapClicks.count || 0),
+    mapClickLastAt: Number(mapClicks.lastAt || 0),
+    adminAccessCount: Number(adminAccess.count || 0),
+    adminAccessLastAt: Number(adminAccess.lastAt || 0),
+  };
+}
+
+function buildServiceAdminPlatformStats(sites) {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  let onlineNow = 0;
+  let activeSitesNow = 0;
+  let seenToday = 0;
+  let activeSites7d = 0;
+  let activeSites30d = 0;
+  let visitorsWeekly = 0;
+  let chattingThisWeek = 0;
+  let messagesToday = 0;
+  let messagesWeekly = 0;
+  let ownersInAdmin7d = 0;
+
+  for (const site of sites) {
+    const active = site.activeVisitors ?? 0;
+    const weekly = site.visitorStats?.weekly ?? 0;
+    const monthly = site.visitorStats?.monthly ?? 0;
+    onlineNow += active;
+    if (active > 0) activeSitesNow += 1;
+    if (site.lastSeenAt && now - site.lastSeenAt < dayMs) seenToday += 1;
+    visitorsWeekly += weekly;
+    if (weekly > 0) activeSites7d += 1;
+    if (monthly > 0) activeSites30d += 1;
+    if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;
+    messagesToday += site.messageStats?.daily ?? 0;
+    messagesWeekly += site.messageStats?.weekly ?? 0;
+    if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * dayMs) ownersInAdmin7d += 1;
+  }
+
+  return {
+    onlineNow,
+    activeSitesNow,
+    seenToday,
+    activeSites7d,
+    activeSites30d,
+    visitorsWeekly,
+    chattingThisWeek,
+    messagesToday,
+    messagesWeekly,
+    ownersInAdmin7d,
+    dailySeries: visitorStats.getAggregateDailySeries(7),
+    messageDailySeries: messageStats.getAggregateDailySeries(7),
   };
 }
 
 function sendServiceAdminSites(res) {
+  const sites = Array.from(sitesByKey.values()).map((site) => serviceAdminSite(site));
   sendJson(res, 200, {
-    sites: Array.from(sitesByKey.values()).map((site) => serviceAdminSite(site)),
+    sites,
+    platform: buildServiceAdminPlatformStats(sites),
   });
 }
 
@@ -1671,6 +2009,11 @@ function closeSiteScene(siteKey, code, reason) {
   const scene = scenes.get(siteKey);
   if (!scene) return;
 
+  // Cancel pending reconnect-grace disconnects so their timers don't fire
+  // against this scene after it's been removed.
+  for (const identity of scene.identities.values()) {
+    clearLeaveTimer(identity);
+  }
   for (const client of Array.from(scene.clients.values())) {
     client.ws.close(code, reason);
   }
@@ -1715,6 +2058,8 @@ const SERVICE_ADMIN_ACTIONS = {
   resetAdminToken(req, site) {
     const adminToken = createToken("admin", 24);
     site.adminTokenHash = hashAdminToken(adminToken);
+    // Existing admin sessions were authorized by the old token; revoke them.
+    adminSessions.destroyForSite(site.siteKey);
     touchSite(site);
     return {
       site: serviceAdminSite(site),
@@ -1726,7 +2071,7 @@ const SERVICE_ADMIN_ACTIONS = {
     site.disabled = Boolean(body.disabled);
     touchSite(site);
     if (site.disabled) {
-      closeSiteScene(site.siteKey, 4003, "site disabled");
+      closeSiteScene(site.siteKey, 4003, CLOSE_REASON.SITE_DISABLED);
     }
     return { site: serviceAdminSite(site) };
   },
@@ -1740,13 +2085,14 @@ const SERVICE_ADMIN_ACTIONS = {
     touchSite(site);
     return { site: serviceAdminSite(site) };
   },
-  setSitePro(req, site, body) {
-    site.pro = Boolean(body.pro);
+  setSitePlus(req, site, body) {
+    site.plus = Boolean(body.plus);
     touchSite(site);
     return { site: serviceAdminSite(site) };
   },
   deleteSite(req, site) {
     closeSiteScene(site.siteKey, 4003, "site deleted");
+    adminSessions.destroyForSite(site.siteKey);
     sitesByKey.delete(site.siteKey);
     saveSites();
     return { deletedSiteKey: site.siteKey };
@@ -1774,6 +2120,61 @@ function handleServiceAdminAction(req, res) {
   });
 }
 
+function handleServiceAdminSendNotification(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    if (!body.message || typeof body.message !== "string") {
+      sendJson(res, 400, { error: "Message is required" });
+      return;
+    }
+
+    const notification = {
+      id: createToken("notif", 8),
+      message: body.message.trim().slice(0, 1000),
+      createdAt: Date.now(),
+      readAt: null,
+    };
+
+    let notificationCount = 0;
+    for (const site of sitesByKey.values()) {
+      if (!notificationsBySiteKey.has(site.siteKey)) {
+        notificationsBySiteKey.set(site.siteKey, []);
+      }
+      notificationsBySiteKey.get(site.siteKey).push({ ...notification });
+      notificationCount++;
+    }
+
+    saveNotifications();
+    sendJson(res, 201, { notification, sitesNotified: notificationCount });
+  });
+}
+
+function handleServiceAdminNotificationsStats(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    const messagesById = new Map();
+    for (const notifs of notificationsBySiteKey.values()) {
+      for (const notif of notifs) {
+        let entry = messagesById.get(notif.id);
+        if (!entry) {
+          entry = { id: notif.id, message: notif.message, createdAt: notif.createdAt, total: 0, read: 0 };
+          messagesById.set(notif.id, entry);
+        }
+        entry.total++;
+        if (notif.readAt) entry.read++;
+      }
+    }
+
+    const recentNotifications = Array.from(messagesById.values())
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 10);
+
+    sendJson(res, 200, { recent: recentNotifications });
+  });
+}
+
 function send(ws, message) {
   if (ws.readyState !== ws.OPEN) return;
   ws.send(JSON.stringify(message));
@@ -1786,6 +2187,7 @@ function serializeIdentity(identity, options = {}) {
     messages = false,
     clientCount = false,
     badge = false,
+    plugins: includePlugins = true,
   } = options;
   const serialized = {
     id: identity.id,
@@ -1802,6 +2204,7 @@ function serializeIdentity(identity, options = {}) {
     serialized.readingLabel = identity.readingLabel;
     serialized.readingUrl = identity.readingUrl;
     serialized.readingActive = identity.readingActive;
+    serialized.widgetVisible = identity.widgetVisible;
   }
   if (owner) {
     serialized.isOwner = identity.isOwner;
@@ -1812,6 +2215,7 @@ function serializeIdentity(identity, options = {}) {
   if (messages) {
     serialized.messages = identity.messages;
   }
+  if (!includePlugins) return serialized;
   return plugins.extendVisitor(
     serialized,
     pluginContext(identity.scene?.site || null, { visitor: pluginVisitor(identity) }),
@@ -1830,6 +2234,17 @@ function refreshIdentityReadingActive(identity) {
   const previous = identity.readingActive;
   identity.readingActive = getIdentityReadingActive(identity);
   return identity.readingActive !== previous;
+}
+
+// Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+function getIdentityWidgetVisible(identity) {
+  return Array.from(identity.clients).some((client) => client.joined && client.widgetVisible !== false);
+}
+
+function refreshIdentityWidgetVisible(identity) {
+  const previous = identity.widgetVisible;
+  identity.widgetVisible = getIdentityWidgetVisible(identity);
+  return identity.widgetVisible !== previous;
 }
 
 function touchIdentityActivity(identity, now = Date.now()) {
@@ -1864,7 +2279,7 @@ function disconnectInactiveIdentity(identity) {
   if (!identity.joined) return;
   clearLeaveTimer(identity);
   identity.inactiveKick = true;
-  closeIdentityClients(identity, 4001, "inactive");
+  closeIdentityClients(identity, 4001, CLOSE_REASON.INACTIVE);
 }
 
 function sweepInactiveIdentities(now = Date.now()) {
@@ -1895,9 +2310,42 @@ function broadcast(scene, message, options = {}) {
   const payload = JSON.stringify(message);
 
   for (const client of scene.clients.values()) {
-    if (!client.joined) continue;
+    if (!canReceiveBroadcast(client)) continue;
     if (client.connectionId === exceptConnectionId) continue;
     if (client.ws.readyState !== client.ws.OPEN) continue;
+    client.ws.send(payload);
+  }
+}
+
+function canReceiveBroadcast(client) {
+  return client.joined || (client.spectator && client.initialized);
+}
+
+/** Whether `viewer` should receive presence/chat events from `target`. */
+function canSeeIdentity(site, viewerIdentity, targetIdentity) {
+  if (!targetIdentity) return true;
+  if (viewerIdentity.id === targetIdentity.id) return true;
+  return !isShadowBlocked(site, targetIdentity.browserId);
+}
+
+/** Broadcast an identity-scoped event only to clients who can see that identity. */
+function broadcastIdentity(scene, message, sourceIdentity, options = {}) {
+  const { exceptConnectionId = null } = options;
+  const site = scene.site;
+  const payload = JSON.stringify(message);
+
+  for (const client of scene.clients.values()) {
+    if (client.connectionId === exceptConnectionId) continue;
+    if (client.ws.readyState !== client.ws.OPEN) continue;
+    // Read-only overlays have no identity of their own: they see every visitor
+    // except shadow-blocked ones.
+    if (client.spectator && client.initialized) {
+      if (isShadowBlocked(site, sourceIdentity?.browserId)) continue;
+      client.ws.send(payload);
+      continue;
+    }
+    if (!client.joined || !client.identity) continue;
+    if (!canSeeIdentity(site, client.identity, sourceIdentity)) continue;
     client.ws.send(payload);
   }
 }
@@ -1908,21 +2356,23 @@ function broadcastReading(scene, identity, options = {}) {
     readingLabel = identity.readingLabel,
     readingUrl = identity.readingUrl,
     readingActive = identity.readingActive,
+    widgetVisible = identity.widgetVisible,
   } = options;
-  broadcast(scene, {
-    type: "reading",
+  broadcastIdentity(scene, {
+    type: MSG.READING,
     id: identity.id,
     readingLabel,
     readingUrl,
     readingActive,
-  }, { exceptConnectionId });
+    widgetVisible,
+  }, identity, { exceptConnectionId });
 }
 
 function emitIdentityState(identity, options = {}) {
-  broadcast(identity.scene, {
-    type: "move",
-    ...serializeIdentity(identity, { reading: true }),
-  }, { exceptConnectionId: options.exceptConnectionId ?? null });
+  broadcastIdentity(identity.scene, {
+    type: MSG.MOVE,
+    ...serializeIdentity(identity, { reading: true, plugins: false }),
+  }, identity, { exceptConnectionId: options.exceptConnectionId ?? null });
 }
 
 function createEphemeralIdentity(scene, fallbackX, connectionId) {
@@ -2020,8 +2470,21 @@ function pickFreeBirdPerch(scene) {
   return free[Math.floor(Math.random() * free.length)];
 }
 
+function syncSceneBirdPerches(scene) {
+  const perchById = new Map(scene.birdPerches.map((perch) => [perch.id, perch]));
+  for (const [id, bird] of scene.birds) {
+    if (bird.state !== "perched") continue;
+    const perch = perchById.get(bird.perchId);
+    if (!perch) {
+      scene.birds.delete(id);
+      continue;
+    }
+    bird.x = perch.x;
+  }
+}
+
 function broadcastBird(scene, message, options = {}) {
-  broadcast(scene, { type: "bird", ...message }, options);
+  broadcast(scene, { type: MSG.BIRD, ...message }, options);
 }
 
 function fleeBird(scene, bird, playerX) {
@@ -2029,7 +2492,7 @@ function fleeBird(scene, bird, playerX) {
 
   const dir = playerX < bird.x ? 1 : -1;
   broadcastBird(scene, {
-    action: "flee",
+    action: BIRD_ACTION.FLEE,
     id: bird.id,
     x: bird.x,
     dir,
@@ -2063,7 +2526,7 @@ function spawnBird(scene) {
 
   const from = perch.x < 0.5 ? "left" : "right";
   broadcastBird(scene, {
-    action: "spawn",
+    action: BIRD_ACTION.SPAWN,
     id: bird.id,
     perchId: bird.perchId,
     x: bird.x,
@@ -2124,6 +2587,7 @@ function rebuildSceneProps(scene, site) {
   // Reconcile scene-entity state with the site's current plugin set, preserving
   // live entity state for plugins that stay enabled across the change.
   scene.plugins = plugins.createSceneEntityState(pluginContext(site), scene.plugins);
+  syncSceneBirdPerches(scene);
 
   // Hosted clients arbitrate settle requests against the scene's prop map.
   for (const client of scene.clients.values()) {
@@ -2141,7 +2605,7 @@ function rebuildSceneProps(scene, site) {
   }
 }
 
-function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, styleConfig, connections }) {
+function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, styleConfig, connections, messageBoard }) {
   const now = Date.now();
   const adminToken = createToken("admin", 24);
   return {
@@ -2156,19 +2620,29 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       sceneConfig: sanitizeSceneConfig(sceneConfig),
       styleConfig: sanitizeSiteStyle(styleConfig),
       connections: sanitizeConnections(connections),
+      messageBoard: sanitizeMessageBoard(messageBoard),
       disabled: false,
       chatDisabled: false,
-      botProtection: false,
-      pro: false,
+      botProtection: true,
+      // Marks that the on-by-default flip has already been applied, so the
+      // one-time migration in loadSites never re-forces it (owners stay free to
+      // turn protection off afterwards).
+      botProtectionDefaulted: true,
+      plus: false,
       verifiedAt: null,
       lastSeenAt: null,
+      lastSeenUrl: null,
       messageCount: 0,
       lastMessageAt: null,
       connectionClicks: {},
+      mapClicks: { count: 0, lastAt: 0 },
+      adminAccess: { count: 0, lastAt: 0 },
       createdAt: now,
       updatedAt: now,
       blockedBrowserIds: [],
+      blockedIps: [],
       mutedBrowserIds: [],
+      shadowBlockedBrowserIds: [],
       ownerBrowserIds: [],
       ownerProfiles: {},
       blockedWords: [],
@@ -2199,8 +2673,14 @@ function loadSites() {
       if (!Array.isArray(site.blockedBrowserIds)) {
         site.blockedBrowserIds = [];
       }
+      if (!Array.isArray(site.blockedIps)) {
+        site.blockedIps = [];
+      }
       if (!Array.isArray(site.mutedBrowserIds)) {
         site.mutedBrowserIds = [];
+      }
+      if (!Array.isArray(site.shadowBlockedBrowserIds)) {
+        site.shadowBlockedBrowserIds = [];
       }
       if (!Array.isArray(site.ownerBrowserIds)) {
         site.ownerBrowserIds = [];
@@ -2230,6 +2710,10 @@ function loadSites() {
       if (!Array.isArray(site.connections)) {
         site.connections = [];
       }
+      if (!isPlainObject(site.messageBoard)) {
+        site.messageBoard = sanitizeMessageBoard({});
+        sitesMigratedOnLoad = true;
+      }
       if (ensurePluginData(site)) {
         sitesMigratedOnLoad = true;
       }
@@ -2250,12 +2734,28 @@ function loadSites() {
       if (!isPlainObject(site.connectionClicks)) {
         site.connectionClicks = {};
       }
+      if (!isPlainObject(site.mapClicks)) {
+        site.mapClicks = { count: 0, lastAt: 0 };
+      }
+      if (!isPlainObject(site.adminAccess)) {
+        site.adminAccess = { count: 0, lastAt: 0 };
+      }
       if (typeof site.supporter !== "boolean") {
         site.supporter = false;
       }
-      if (typeof site.pro !== "boolean") {
-        site.pro = false;
+      // Bot protection is on by default. Flip every pre-existing site on exactly
+      // once (including those persisted as `false`), then record the marker so a
+      // later owner toggle-off survives restarts instead of being re-forced.
+      if (site.botProtectionDefaulted !== true) {
+        site.botProtection = true;
+        site.botProtectionDefaulted = true;
+        sitesMigratedOnLoad = true;
       }
+      if (typeof site.plus !== "boolean") {
+        // Migrate the former `pro` flag onto `plus`; default new/unset sites to false.
+        site.plus = typeof site.pro === "boolean" ? site.pro : false;
+      }
+      delete site.pro;
       return [site.siteKey, site];
     }));
   } catch (error) {
@@ -2266,21 +2766,63 @@ function loadSites() {
   }
 }
 
+// Persistence lives in server/sites-store.js; it reads the current registry at
+// write time and coalesces the high-frequency metadata writes (profile edits,
+// owner toggles, lastSeen) so a busy site doesn't block the event loop.
+const sitesWriter = createSitesWriter({
+  dataDir: DATA_DIR,
+  sitesFile: SITES_FILE,
+  getSites: () => Array.from(sitesByKey.values()),
+});
+
 function saveSites() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const sites = Array.from(sitesByKey.values());
-  // Atomic write: serialize to a temp file in the same directory, then rename
-  // over SITES_FILE. rename(2) is atomic on the same filesystem, so a crash or
-  // disk-full mid-write leaves the previous valid sites.json intact (it holds
-  // every site's adminTokenHash, and there is no admin-link recovery).
-  const tmpFile = `${SITES_FILE}.tmp`;
-  fs.writeFileSync(tmpFile, `${JSON.stringify({ sites }, null, 2)}\n`);
-  fs.renameSync(tmpFile, SITES_FILE);
+  sitesWriter.saveNow();
+}
+
+function scheduleSitesSave() {
+  sitesWriter.scheduleSave();
+}
+
+function flushSites() {
+  sitesWriter.flush();
 }
 
 function touchSite(site) {
   site.updatedAt = Date.now();
-  saveSites();
+  scheduleSitesSave();
+}
+
+// Notifications are stored separately from sites to avoid losing on restart
+let notificationsBySiteKey = new Map();
+
+function loadNotifications() {
+  try {
+    const raw = fs.readFileSync(NOTIFICATIONS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.notifications)) return;
+    parsed.notifications.forEach((notif) => {
+      if (!notif.siteKey) return;
+      if (!notificationsBySiteKey.has(notif.siteKey)) {
+        notificationsBySiteKey.set(notif.siteKey, []);
+      }
+      notificationsBySiteKey.get(notif.siteKey).push(notif);
+    });
+  } catch (error) {
+    // File doesn't exist or is invalid; start fresh
+  }
+}
+
+function saveNotifications() {
+  const allNotifications = [];
+  for (const [siteKey, notifs] of notificationsBySiteKey.entries()) {
+    for (const notif of notifs) {
+      allNotifications.push({ ...notif, siteKey });
+    }
+  }
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const tmpFile = `${NOTIFICATIONS_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify({ notifications: allNotifications }, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmpFile, NOTIFICATIONS_FILE);
 }
 
 // Visitor connection clicks are high-frequency, so we mirror the lastSeen save
@@ -2288,6 +2830,14 @@ function touchSite(site) {
 // at most once per interval. Losing up to a minute of clicks on a crash is fine
 // for traffic analytics.
 let lastConnectionClicksSaveAt = 0;
+let lastMapClicksSaveAt = 0;
+
+// lastSeenUrl is refreshed on every navigation across every connected visitor.
+// Throttle the full sites.json rewrite the same way lastSeenAt is throttled so a
+// busy (or hostile) client can't amplify reading updates into one disk write each.
+// The in-memory value is updated immediately, so admin views stay current; we only
+// risk losing up to a minute of freshness on a crash.
+let lastSeenUrlSaveAt = 0;
 
 /**
  * Record one visitor click on a configured neighbouring-town link. The reported
@@ -2298,13 +2848,18 @@ let lastConnectionClicksSaveAt = 0;
  * @param {import("http").ServerResponse} res
  */
 function handleConnectionClick(req, res) {
+  const respond = (status) => {
+    res.writeHead(status, { "access-control-allow-origin": "*" });
+    res.end();
+  };
+
+  if (!isConnectionClickAllowed(getRequestIp(req))) {
+    respond(429);
+    return;
+  }
+
   readJsonBody(req, res, (body) => {
     // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
-    const respond = (status) => {
-      res.writeHead(status, { "access-control-allow-origin": "*" });
-      res.end();
-    };
-
     const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
     const url = typeof body.url === "string" ? body.url : "";
     const site = sitesByKey.get(siteKey);
@@ -2334,6 +2889,48 @@ function handleConnectionClick(req, res) {
   });
 }
 
+/**
+ * Record one visitor click on a site's outbound website link from the public
+ * /map page. We only need a per-site tally (the map exposes a single website
+ * link per town), so a verified siteKey is enough to attribute the click.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handleMapClick(req, res) {
+  const respond = (status) => {
+    res.writeHead(status, { "access-control-allow-origin": "*" });
+    res.end();
+  };
+
+  if (!isMapClickAllowed(getRequestIp(req))) {
+    respond(429);
+    return;
+  }
+
+  readJsonBody(req, res, (body) => {
+    // sendBeacon ignores the response, so a 204 with permissive CORS is enough.
+    const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
+    const site = sitesByKey.get(siteKey);
+    if (!site || site.disabled) {
+      respond(204);
+      return;
+    }
+
+    const now = Date.now();
+    const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : (site.mapClicks = { count: 0, lastAt: 0 });
+    mapClicks.count = (Number(mapClicks.count) || 0) + 1;
+    mapClicks.lastAt = now;
+
+    if (now - lastMapClicksSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+      lastMapClicksSaveAt = now;
+      saveSites();
+    }
+
+    respond(204);
+  });
+}
+
 function closeIdentityClients(identity, code, reason) {
   for (const client of Array.from(identity.clients)) {
     client.ws.close(code, reason);
@@ -2352,6 +2949,11 @@ function getConnectionLimit(site) {
 /** A muted visitor stays present but their messages are dropped server-side. */
 function isMuted(site, browserId) {
   return Boolean(site) && Array.isArray(site.mutedBrowserIds) && site.mutedBrowserIds.includes(browserId);
+}
+
+/** A hidden visitor stays connected but is invisible to everyone else. */
+function isShadowBlocked(site, browserId) {
+  return Boolean(site) && Array.isArray(site.shadowBlockedBrowserIds) && site.shadowBlockedBrowserIds.includes(browserId);
 }
 
 /** A short, human label for an identity used in the moderation log. */
@@ -2381,22 +2983,26 @@ function publicSite(site) {
     sceneConfig: getSceneConfig(site),
     styleConfig: getStyleConfig(site),
     connections: getConnections(site),
+    messageBoard: getMessageBoard(site),
     disabled: site.disabled,
     chatDisabled: site.chatDisabled,
     botProtection: Boolean(site.botProtection),
     verifiedAt: site.verifiedAt,
     lastSeenAt: site.lastSeenAt,
+    lastSeenUrl: site.lastSeenUrl || null,
     messageCount: site.messageCount || 0,
     lastMessageAt: site.lastMessageAt || null,
     createdAt: site.createdAt,
     blockedCount: site.blockedBrowserIds.length,
+    blockedIpCount: Array.isArray(site.blockedIps) ? site.blockedIps.length : 0,
     mutedCount: Array.isArray(site.mutedBrowserIds) ? site.mutedBrowserIds.length : 0,
+    hiddenCount: Array.isArray(site.shadowBlockedBrowserIds) ? site.shadowBlockedBrowserIds.length : 0,
     blockedWords: Array.isArray(site.blockedWords) ? site.blockedWords : [],
     chatThrottleMs: typeof site.chatThrottleMs === "number" ? site.chatThrottleMs : DEFAULT_CHAT_THROTTLE_MS,
     connectionLimit: getConnectionLimit(site),
     moderationLog: Array.isArray(site.moderationLog) ? site.moderationLog : [],
     supporter: Boolean(site.supporter),
-    pro: Boolean(site.pro),
+    plus: Boolean(site.plus),
   };
   const extendedConfig = plugins.extend("extendSiteConfig", config, pluginContext(site));
   return isPlainObject(extendedConfig) ? extendedConfig : config;
@@ -2409,19 +3015,24 @@ function pluginSite(site) {
     name: site.name,
     origin: site.origin,
     supporter: Boolean(site.supporter),
-    pro: Boolean(site.pro),
+    plus: Boolean(site.plus),
   });
 }
 
 function pluginVisitor(identity) {
   const site = identity.scene?.site || null;
+  // Stable per-visitor fingerprint (same hash as ownerHandle), so plugins can
+  // key data on a visitor without ever seeing the raw browserId. Matches the
+  // `fp` exposed to the admin panel by getSceneStats.
+  const fp = identityFp(site, identity);
   return Object.freeze({
     id: identity.id,
     browserId: identity.browserId,
     displayName: identity.displayName,
     color: identity.color,
     isOwner: identity.isOwner,
-    ownerHandle: identity.isOwner && site ? ownerHandle(site.siteKey, identity.browserId) : null,
+    ownerHandle: identity.isOwner ? fp : null,
+    fp,
   });
 }
 
@@ -2465,6 +3076,10 @@ function getSceneStats(scene, site = null) {
     .map((identity) => {
       const serialized = serializeIdentity(identity, { owner: true, messages: true, clientCount: true });
       serialized.muted = isMuted(site, identity.browserId);
+      serialized.hidden = isShadowBlocked(site, identity.browserId);
+      // Stable fingerprint so the admin UI / plugin actions can target a
+      // specific visitor (e.g. assign a hat) without exposing the browserId.
+      serialized.fp = identityFp(site, identity);
       return serialized;
     });
 
@@ -2482,16 +3097,22 @@ function countActiveVisitors(scene) {
 function validateSiteAccess(reqUrl) {
   const url = new URL(reqUrl, `http://${HOST}:${PORT}`);
   const siteKey = url.searchParams.get("siteKey") || "";
+  // Livestream overlays connect read-only: they receive the live scene but are
+  // never registered as a visitor (no identity, no JOIN, uncounted).
+  const watch = url.searchParams.get("watch") === "1";
   if (!siteKey) {
-    return { ok: true, scene: getScene("default", null), site: null };
+    return { ok: true, scene: getScene("default", null), site: null, watch };
   }
 
   const site = sitesByKey.get(siteKey);
   if (!site || site.disabled) {
-    return { ok: false, status: 403, reason: "site disabled or unknown" };
+    return { ok: false, status: 403, reason: CLOSE_REASON.SITE_DISABLED_OR_UNKNOWN };
+  }
+  if (watch && !site.plus) {
+    return { ok: false, status: 403, reason: CLOSE_REASON.PLUS_REQUIRED };
   }
 
-  return { ok: true, scene: getScene(site.siteKey, site), site };
+  return { ok: true, scene: getScene(site.siteKey, site), site, watch };
 }
 
 function isOriginAllowedForSite(origin, site) {
@@ -2500,21 +3121,52 @@ function isOriginAllowedForSite(origin, site) {
   return Boolean(normalized && getAllowedOrigins(site).includes(normalized));
 }
 
+/**
+ * Remember the page a site's widget was last seen on. The source is the
+ * visitor's reading URL, which the widget defaults to `window.location.href`
+ * and which the server has already validated against the site's allowed
+ * origins (browsers do not send a Referer on the WebSocket upgrade, so the
+ * reading URL is how the host page reaches us). Stored as origin + pathname
+ * only, so query strings and hashes are never persisted. Returns true when the
+ * stored value changed.
+ */
+function rememberSiteLastSeenUrl(site, readingUrl) {
+  if (!site || !readingUrl) return false;
+  let url;
+  try {
+    url = new URL(readingUrl);
+  } catch {
+    return false;
+  }
+  const origin = normalizeOrigin(url.origin);
+  if (!origin) return false;
+  const pageUrl = `${origin}${url.pathname}`.slice(0, MAX_PAGE_URL_LEN);
+  if (pageUrl === site.lastSeenUrl) return false;
+  site.lastSeenUrl = pageUrl;
+  return true;
+}
+
 let sitesByKey = new Map();
 const scenes = new Map();
+const visitorStats = createVisitorStats({ filePath: VISITOR_STATS_FILE });
+const messageStats = createMessageStats({ filePath: MESSAGE_STATS_FILE });
 let nextConnectionId = 1;
 
 function finalizeDisconnect(identity) {
   if (identity.clients.size > 0) return;
+  const scene = identity.scene;
+  // The scene may have been torn down (site disabled/deleted) during the
+  // reconnect-grace window; if so there's nothing left to remove or notify.
+  if (!scene || scenes.get(scene.key) !== scene) return;
   const hadJoined = identity.joined;
-  removeIdentity(identity.scene, identity);
+  removeIdentity(scene, identity);
 
   if (hadJoined) {
-    broadcast(identity.scene, { type: "leave", id: identity.id });
+    broadcastIdentity(scene, { type: MSG.LEAVE, id: identity.id }, identity);
   }
 }
 
-const server = http.createServer((req, res) => {
+function handleHttpRequest(req, res) {
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
     res.end("ok");
@@ -2524,8 +3176,8 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
 
   if (
-    (!DEV_TOOLS_ENABLED && isDevToolsRequest(url.pathname))
-    || (!STAGING_PAGE_ENABLED && isStagingPageRequest(url.pathname))
+    (!DEV_TOOLS_ENABLED && staticFiles.isDevToolsRequest(url.pathname))
+    || (!STAGING_PAGE_ENABLED && staticFiles.isStagingPageRequest(url.pathname))
   ) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end(req.method === "HEAD" ? undefined : "not found");
@@ -2553,6 +3205,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/site-presence") {
+    handleSitePresence(req, res);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname.match(/^\/api\/sites\/[^/]+\/style\.css$/)) {
+    handleSiteStyleCss(req, res, url);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/sites") {
     handleRegisterSite(req, res);
     return;
@@ -2563,6 +3225,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/map-click") {
+    handleMapClick(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/site") {
     handlePostAdminSite(req, res);
     return;
@@ -2570,6 +3237,26 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/admin/login") {
     handleAdminLogin(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/logout") {
+    handleAdminLogout(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notifications") {
+    handleGetAdminNotifications(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/create") {
+    handlePostAdminNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/notification/read") {
+    handleMarkAdminNotificationRead(req, res);
     return;
   }
 
@@ -2598,20 +3285,30 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (PLAUSIBLE_DOMAIN) {
-    const scriptPath = plausibleScriptPath();
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/send") {
+    handleServiceAdminSendNotification(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/stats") {
+    handleServiceAdminNotificationsStats(req, res);
+    return;
+  }
+
+  if (plausible.enabled) {
+    const scriptPath = plausible.scriptPath();
     if (scriptPath && req.method === "GET" && url.pathname === scriptPath) {
-      void proxyPlausibleScript(req, res);
+      void plausible.proxyScript(req, res);
       return;
     }
 
-    if (PLAUSIBLE_API_PATH && req.method === "POST" && url.pathname === PLAUSIBLE_API_PATH) {
-      proxyPlausibleEvent(req, res);
+    if (plausible.apiPath && req.method === "POST" && url.pathname === plausible.apiPath) {
+      plausible.proxyEvent(req, res);
       return;
     }
   }
 
-  const candidates = resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
+  const candidates = staticFiles.resolvePublicFile(req.url || "/", req.headers.host || `${HOST}:${PORT}`);
 
   if (!candidates) {
     res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
@@ -2619,41 +3316,73 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  serveStaticCandidate(candidates, 0, res);
+  staticFiles.serveCandidate(candidates, 0, res, req);
+}
+
+// Wraps the request dispatcher so a single unhandled throw cannot crash the
+// process (and with it every live WebSocket connection across every site).
+const server = http.createServer((req, res) => {
+  try {
+    handleHttpRequest(req, res);
+  } catch (error) {
+    console.error("Unhandled error handling request", req.method, req.url, error);
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end(req.method === "HEAD" ? undefined : "server error");
+    } else {
+      res.end();
+    }
+  }
 });
 
 // Tries each candidate file path in order, falling back to the next on a
 // missing file so the plugin assets overlay can back the core public dir.
-function serveStaticCandidate(candidates, index, res) {
-  const filePath = candidates[index];
-  fs.readFile(filePath, (error, data) => {
-    if (error) {
-      if (error.code === "ENOENT" && index + 1 < candidates.length) {
-        serveStaticCandidate(candidates, index + 1, res);
-        return;
-      }
-      const status = error.code === "ENOENT" ? 404 : 500;
-      const body = status === 404 ? "not found" : "server error";
-      res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
-      res.end(body);
-      return;
-    }
-
-    let body = data;
-    if (path.extname(filePath) === ".html" && shouldInjectPlausible(filePath)) {
-      body = Buffer.from(injectPlausibleIntoHtml(data.toString("utf8")), "utf8");
-    }
-
-    res.writeHead(200, getStaticHeaders(filePath));
-    res.end(body);
-  });
-}
-
 const wss = new WebSocketServer({
   server,
   path: "/live",
   maxPayload: MAX_WS_PAYLOAD_BYTES,
 });
+
+// One-off snapshot for a read-only livestream overlay. Mirrors the peers/birds/
+// scene payload of the join HELLO but carries no self identity, so the widget
+// renders the live crowd without placing the viewer in it.
+function sendSpectatorHello(client) {
+  const { scene, site } = client;
+  const peers = Array.from(scene.identities.values())
+    .filter((peer) => peer.joined && !isShadowBlocked(site, peer.browserId))
+    .map(snapshotIdentity);
+
+  const hello = {
+    type: MSG.HELLO,
+    id: null,
+    spectator: true,
+    peers,
+    birds: snapshotBirds(scene),
+    chatThrottleMs: getChatThrottle(site),
+    pluginModules: plugins.browserModules("widget", pluginContext(site)),
+    pluginEntities: plugins.snapshotSceneEntities(scene.plugins, pluginContext(site)),
+    // Hosted sites carry scene/connections/board/appearance over the socket so
+    // overlays track admin edits live, just like a normal embed. The overlay
+    // page has no pasted style snippet, so the palette ships here too.
+    ...(site
+      ? {
+          scene: getSceneConfig(site),
+          styleConfig: getStyleConfig(site),
+          connections: getConnections(site),
+          messageBoard: getMessageBoard(site),
+        }
+      : {}),
+  };
+
+  // Let plugins adjust the overlay payload — the Plus overlay add-on uses this to
+  // merge its per-token appearance overrides onto the inherited site palette.
+  // The `watch` flag tells plugins this is the read-only overlay surface.
+  const extended = site
+    ? plugins.extend("extendWidgetConfig", hello, pluginContext(site, { watch: true }))
+    : hello;
+
+  send(client.ws, isPlainObject(extended) ? extended : hello);
+}
 
 function handleInit(client, message) {
   if (client.joined) return;
@@ -2667,6 +3396,18 @@ function handleInit(client, message) {
     return;
   }
 
+  // Livestream overlay: send a one-off snapshot of the live scene, then let the
+  // normal broadcast fan-out keep it updated. The spectator never becomes an
+  // identity, so it is uncounted and invisible to real visitors. It still spends
+  // the IP join budget because it consumes a live connection slot.
+  if (client.spectator) {
+    if (client.initialized) return;
+    if (!allowSpectatorInit(client)) return;
+    client.initialized = true;
+    sendSpectatorHello(client);
+    return;
+  }
+
   if (!allowIdentityInit(client, message)) return;
 
   syncClientSceneProps(client, message);
@@ -2676,7 +3417,7 @@ function handleInit(client, message) {
   const { scene, site } = client;
 
   if (site && site.blockedBrowserIds.includes(sanitizeBrowserId(message.browserId))) {
-    client.ws.close(4003, "blocked");
+    client.ws.close(4003, CLOSE_REASON.BLOCKED);
     return;
   }
 
@@ -2691,6 +3432,7 @@ function handleInit(client, message) {
     identity.readingUrl = reading.readingUrl;
   }
   client.readingActive = message.readingActive !== false;
+  client.widgetVisible = message.widgetVisible !== false;
 
   if (!identity.joined) {
     identity.displayName = filterDisplayName(site, sanitizeDisplayName(message.displayName));
@@ -2708,18 +3450,20 @@ function handleInit(client, message) {
 
   client.identity = identity;
   client.joined = true;
+  client.initialized = true;
   identity.clients.add(client);
   refreshIdentityReadingActive(identity);
+  refreshIdentityWidgetVisible(identity);
 
   const peers = Array.from(scene.identities.values())
-    .filter((peer) => peer.joined && peer.id !== identity.id)
+    .filter((peer) => peer.joined && peer.id !== identity.id && canSeeIdentity(site, identity, peer))
     .map(snapshotIdentity);
 
   const self = serializeIdentity(identity, { reading: true, owner: true, messages: true, badge: true });
   const { id, ...selfFields } = self;
 
   send(client.ws, {
-    type: "hello",
+    type: MSG.HELLO,
     id,
     browserSecret: identity.browserSecret,
     ...selfFields,
@@ -2728,6 +3472,9 @@ function handleInit(client, message) {
     chatThrottleMs: getChatThrottle(site),
     pluginModules: plugins.browserModules("widget", pluginContext(site)),
     pluginEntities: plugins.snapshotSceneEntities(scene.plugins, pluginContext(site)),
+    // Hosted sites carry scene, connections, and the message board over the socket
+    // so admin edits apply live without re-pasting the embed snippet.
+    ...(site ? { scene: getSceneConfig(site), connections: getConnections(site), messageBoard: getMessageBoard(site) } : {}),
   });
 
   if (identity.joined) {
@@ -2741,9 +3488,10 @@ function handleInit(client, message) {
     // Reconnect during the grace window: the owner gets applyOwnerProfile above
     // but we skip the join broadcast, so refresh peers with the claimed look.
     if (identity.isOwner && site) {
-      broadcast(
+      broadcastIdentity(
         scene,
-        { type: "profile", ...serializeIdentity(identity, { owner: true, badge: true }) },
+        { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) },
+        identity,
         { exceptConnectionId: client.connectionId },
       );
     }
@@ -2756,6 +3504,8 @@ function handleInit(client, message) {
   identity.lastActivityAt = joinedAt;
   identity.joinedAt = joinedAt;
 
+  logJoin(client, identity);
+
   if (site) {
     const now = Date.now();
     const firstVerify = !site.verifiedAt;
@@ -2763,18 +3513,27 @@ function handleInit(client, message) {
     site.lastSeenAt = now;
     site.verifiedAt = site.verifiedAt || now;
 
-    if (firstVerify || now - lastSavedSeenAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+    const urlChanged = rememberSiteLastSeenUrl(site, identity.readingUrl);
+
+    if (firstVerify || urlChanged || now - lastSavedSeenAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       saveSites();
       if (firstVerify) ensureMapWorldGrown();
     }
+
+    // Tally this visitor toward the site's daily/weekly/monthly unique counts.
+    visitorStats.recordVisit(site.siteKey, identity.browserId, now);
   }
 
-  broadcast(scene, { type: "join", peer: snapshotIdentity(identity) }, { exceptConnectionId: client.connectionId });
+  if (!isShadowBlocked(site, identity.browserId)) {
+    broadcastIdentity(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, identity, { exceptConnectionId: client.connectionId });
+  }
   syncIdentityAwayState(identity, joinedAt);
-  plugins.run("onVisitorJoin", pluginContext(site, {
-    visitor: pluginVisitor(identity),
-    joinedAt,
-  }));
+  if (!isShadowBlocked(site, identity.browserId)) {
+    plugins.run("onVisitorJoin", pluginContext(site, {
+      visitor: pluginVisitor(identity),
+      joinedAt,
+    }));
+  }
 }
 
 function handleMove(client, message) {
@@ -2823,7 +3582,7 @@ function handleAction(client, message) {
 
   let targetId = null;
   let target = null;
-  if (message.action === "high-five") {
+  if (message.action === GESTURE.HIGH_FIVE) {
     targetId = Number(message.targetId);
     target = Number.isInteger(targetId) ? client.scene.identities.get(targetId) : null;
     if (!target || !target.joined || target.id === client.identity.id) return;
@@ -2837,12 +3596,12 @@ function handleAction(client, message) {
   if (target) clearPose(target);
   touchIdentityActivity(client.identity, now);
   const action = {
-    type: "action",
+    type: MSG.ACTION,
     id: client.identity.id,
     action: message.action,
   };
   if (targetId !== null) action.targetId = targetId;
-  broadcast(client.scene, action, { exceptConnectionId: client.connectionId });
+  broadcastIdentity(client.scene, action, client.identity, { exceptConnectionId: client.connectionId });
 }
 
 function handleProfile(client, message) {
@@ -2851,15 +3610,29 @@ function handleProfile(client, message) {
   const displayName = filterDisplayName(client.site, sanitizeDisplayName(message.displayName));
   const color = sanitizeCharacterColor(message.color);
   if (displayName === client.identity.displayName && color === client.identity.color) return;
+  if (registerFloodAction(client)) return;
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.identity.displayName = displayName;
   client.identity.color = color;
+  // Log renames: the abusive bot joins blank then renames to slurs, so this is
+  // where its IP + fingerprint become visible for a targeted IP block.
+  if (LOG_JOINS && displayName) {
+    console.log(JSON.stringify({
+      event: "rename",
+      at: new Date().toISOString(),
+      site: client.site ? client.site.siteKey : null,
+      name: displayName,
+      ip: client.ip,
+      fp: identityFp(client.site, client.identity),
+      origin: client.origin || null,
+    }));
+  }
   touchIdentityActivity(client.identity);
   // Owners keep their look across resets: persist their own edits too.
   rememberOwnerProfile(client.site, client.identity);
 
-  broadcast(client.scene, { type: "profile", ...serializeIdentity(client.identity, { owner: true, badge: true }) });
+  broadcastIdentity(client.scene, { type: MSG.PROFILE, ...serializeIdentity(client.identity, { owner: true, badge: true }) }, client.identity);
 }
 
 function handleReading(client, message) {
@@ -2868,20 +3641,33 @@ function handleReading(client, message) {
   const reading = sanitizeReadingState(client, message, client.identity);
   const { readingLabel, readingUrl } = reading;
   const readingActive = message.readingActive !== false;
+  const widgetVisible = message.widgetVisible !== false;
   const previousReadingLabel = client.identity.readingLabel;
   const previousReadingUrl = client.identity.readingUrl;
   const previousReadingActive = client.identity.readingActive;
+  const previousWidgetVisible = client.identity.widgetVisible;
   if (
     readingLabel === previousReadingLabel
     && readingUrl === previousReadingUrl
     && readingActive === client.readingActive
+    && widgetVisible === client.widgetVisible
   ) return;
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.readingActive = readingActive;
+  // Cosmetic only — do not feed into syncIdentityAwayState/isIdentityInactive/touchIdentityActivity.
+  client.widgetVisible = widgetVisible;
   client.identity.readingLabel = readingLabel;
   client.identity.readingUrl = readingUrl;
+  if (client.site && rememberSiteLastSeenUrl(client.site, readingUrl)) {
+    const nowSave = Date.now();
+    if (nowSave - lastSeenUrlSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+      lastSeenUrlSaveAt = nowSave;
+      saveSites();
+    }
+  }
   refreshIdentityReadingActive(client.identity);
+  refreshIdentityWidgetVisible(client.identity);
   const now = Date.now();
   if (client.identity.readingActive && !previousReadingActive) {
     touchIdentityActivity(client.identity, now);
@@ -2891,6 +3677,7 @@ function handleReading(client, message) {
     readingLabel === previousReadingLabel
     && readingUrl === previousReadingUrl
     && client.identity.readingActive === previousReadingActive
+    && client.identity.widgetVisible === previousWidgetVisible
   ) return;
 
   broadcastReading(client.scene, client.identity, { readingLabel, readingUrl });
@@ -2926,6 +3713,7 @@ function handleSay(client, message) {
   const site = client.site;
   if (site?.chatDisabled) return;
   if (isMuted(site, client.identity.browserId)) return;
+  if (isShadowBlocked(site, client.identity.browserId)) return;
 
   const now = Date.now();
   if (now - client.lastChatAt < getChatThrottle(site)) return;
@@ -2937,6 +3725,7 @@ function handleSay(client, message) {
   let text = sanitizeMessage(message.text);
   if (site) text = applyWordFilter(text, site.blockedWords);
   if (!text) return;
+  if (registerFloodAction(client)) return;
   if (!allowIpEvent(client, "chat", IP_CHAT_EVENT_LIMIT)) return;
 
   client.lastChatAt = now;
@@ -2955,19 +3744,21 @@ function handleSay(client, message) {
     const lastSavedMessageAt = client.site.lastMessageAt || 0;
     client.site.messageCount = (client.site.messageCount || 0) + 1;
     client.site.lastMessageAt = now;
+    messageStats.recordMessage(client.site.siteKey, now);
     if (now - lastSavedMessageAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       saveSites();
     }
   }
 
-  broadcast(
+  broadcastIdentity(
     client.scene,
     {
-      type: "say",
+      type: MSG.SAY,
       id: client.identity.id,
       text,
       at: now,
     },
+    client.identity,
     { exceptConnectionId: client.connectionId },
   );
 }
@@ -2982,7 +3773,7 @@ function handleTyping(client, message) {
   if (!allowIpEvent(client, "state", IP_STATE_EVENT_LIMIT)) return;
 
   client.typing = message.typing;
-  broadcast(client.scene, { type: "typing", id: client.identity.id, typing });
+  broadcastIdentity(client.scene, { type: MSG.TYPING, id: client.identity.id, typing }, client.identity);
 }
 
 function handleClientMessage(client, raw) {
@@ -2995,6 +3786,7 @@ function handleClientMessage(client, raw) {
 
   if (!isPlainObject(message)) return;
   if (typeof message.type !== "string") return;
+  if (client.spectator && client.initialized) return;
 
   const pluginMessage = { ...message };
   delete pluginMessage.browserSecret;
@@ -3006,9 +3798,20 @@ function handleClientMessage(client, raw) {
 
   if (!Object.hasOwn(MESSAGE_HANDLERS, message.type)) return;
 
-  if (message.type !== "init" && message.type !== "solve" && !client.joined) return;
+  if (message.type !== MSG.INIT && message.type !== MSG.SOLVE && !client.joined) return;
 
-  MESSAGE_HANDLERS[message.type](client, message);
+  try {
+    MESSAGE_HANDLERS[message.type](client, message);
+  } catch (error) {
+    // Isolate a faulty handler to this one connection rather than letting the
+    // throw bubble up and take down every other live socket.
+    console.error("Error handling client message", message.type, error);
+    try {
+      client.ws.close(1011, "internal error");
+    } catch {
+      // socket already closing/closed
+    }
+  }
 }
 
 function handleClientClose(client) {
@@ -3020,12 +3823,15 @@ function handleClientClose(client) {
   client.joined = false;
   client.identity = null;
   client.readingActive = false;
+  client.widgetVisible = false;
   if (wasTyping && !Array.from(identity.clients).some((candidate) => candidate.typing)) {
-    broadcast(identity.scene, { type: "typing", id: identity.id, typing: false });
+    broadcastIdentity(identity.scene, { type: MSG.TYPING, id: identity.id, typing: false }, identity);
   }
 
   if (identity.clients.size > 0) {
-    if (refreshIdentityReadingActive(identity)) {
+    const readingActiveChanged = refreshIdentityReadingActive(identity);
+    const widgetVisibleChanged = refreshIdentityWidgetVisible(identity);
+    if (readingActiveChanged || widgetVisibleChanged) {
       broadcastReading(identity.scene, identity);
     }
     syncIdentityAwayState(identity);
@@ -3110,27 +3916,45 @@ wss.on("connection", (ws, req) => {
   }
 
   const origin = normalizeOrigin(req.headers.origin || "");
-  const originAllowed = access.site
-    ? isOriginAllowedForSite(req.headers.origin, access.site)
-    : isAllowedOrigin(req.headers.origin, req.headers.host);
+  // Read-only livestream overlays are served by /overlay on this host and
+  // connect back to it, so they legitimately carry the TownSquare host's own
+  // origin rather than the customer's allowed domains. Accept that same-host
+  // origin (in addition to the site's customer origins, for overlays embedded on
+  // an allowed page). Overlays stay read-only, uncounted, Plus-gated and
+  // PoW-gated, so this exposes nothing a normal site visitor can't already see.
+  const originAllowed = access.watch
+    ? isAllowedOrigin(req.headers.origin, req.headers.host)
+      || (access.site && isOriginAllowedForSite(req.headers.origin, access.site))
+    : access.site
+      ? isOriginAllowedForSite(req.headers.origin, access.site)
+      : isAllowedOrigin(req.headers.origin, req.headers.host);
 
   if (!originAllowed) {
-    ws.close(4003, "origin not allowed");
+    ws.close(4003, CLOSE_REASON.ORIGIN_NOT_ALLOWED);
     return;
   }
 
   if (access.scene.clients.size >= getConnectionLimit(access.site)) {
-    ws.close(1013, "full");
+    ws.close(1013, CLOSE_REASON.FULL);
     return;
   }
 
   const ip = getRequestIp(req);
   if (isIpQuarantined(access.scene, ip)) {
-    ws.close(1008, "rate limited");
+    ws.close(1008, CLOSE_REASON.RATE_LIMITED);
     return;
   }
 
-  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "", ip);
+  // Per-site IP block (set when an admin blocks a visitor). Rejected here, before
+  // the connection can join or pick a fresh browserId, so a reconnecting bot
+  // cannot evade the block by rotating its client-chosen identity.
+  if (access.site && Array.isArray(access.site.blockedIps) && access.site.blockedIps.includes(ip)) {
+    console.log(JSON.stringify({ event: "block_ip_reject", at: new Date().toISOString(), site: access.site.siteKey, ip }));
+    ws.close(4003, CLOSE_REASON.BLOCKED);
+    return;
+  }
+
+  const client = createClient(nextConnectionId++, ws, access.scene, access.site, origin || "", ip, access.watch === true);
   access.scene.clients.set(client.connectionId, client);
   ws.isAlive = true;
 
@@ -3162,7 +3986,14 @@ async function startServer() {
     saveSites();
   }
 
-  const shared = await import("./public/shared/shared-constants.mjs");
+  loadNotifications();
+
+  visitorStats.load();
+  visitorStats.start();
+  messageStats.load();
+  messageStats.start();
+
+  const shared = await import("./shared/shared-constants.mjs");
   MIN_X = shared.MIN_X;
   MAX_X = shared.MAX_X;
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
@@ -3176,25 +4007,45 @@ async function startServer() {
   OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
   randomSpawnX = shared.randomSpawnX;
 
+  // A failure to bind the port is fatal and must not be swallowed by the
+  // uncaughtException guard below — exit so the supervisor can restart.
+  server.on("error", (error) => {
+    console.error(`TownSquare server error: ${error.message}`);
+    process.exit(1);
+  });
+
   server.listen(PORT, HOST, () => {
     console.log(`TownSquare server running at http://${HOST}:${PORT}`);
   });
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule] = await Promise.all([
-    import("./public/shared/site-config.mjs"),
-    import("./public/shared/scene-props.mjs"),
-    import("./public/shared/bird-perches.mjs"),
-    import("./public/shared/scene-prop-geometry.mjs"),
-    import("./public/shared/map-world.mjs"),
-    import("./public/shared/url.mjs"),
+  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
+    import("./shared/site-config-core.mjs"),
+    import("./shared/scene-props.mjs"),
+    import("./shared/bird-perches.mjs"),
+    import("./shared/scene-prop-geometry.mjs"),
+    import("./shared/map-world.mjs"),
+    import("./shared/url.mjs"),
+    import("./shared/protocol.mjs"),
   ]);
+
+  MSG = protocol.MSG;
+  GESTURE = protocol.GESTURE;
+  BIRD_ACTION = protocol.BIRD_ACTION;
+  CLOSE_REASON = protocol.CLOSE_REASON;
+  // Fail loudly at boot if a handler key drifts from the shared vocabulary.
+  for (const type of Object.keys(MESSAGE_HANDLERS)) {
+    if (!Object.values(MSG).includes(type)) {
+      throw new Error(`MESSAGE_HANDLERS has unknown message type "${type}" (not in shared protocol)`);
+    }
+  }
 
   DEFAULT_SITE_SCENE_CONFIG = siteConfig.DEFAULT_SCENE_CONFIG;
   DEFAULT_SITE_STYLE = siteConfig.DEFAULT_SITE_STYLE;
   sanitizeSceneConfig = siteConfig.sanitizeSceneConfig;
   sanitizeConnections = siteConfig.sanitizeConnections;
+  sanitizeMessageBoard = siteConfig.sanitizeMessageBoard;
   sanitizeSiteStyle = siteConfig.sanitizeSiteStyle;
   buildSceneProps = siteConfig.buildSceneProps;
   buildBirdPerches = siteConfig.buildBirdPerches;
@@ -3205,7 +4056,6 @@ async function loadSharedModules() {
   normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
   buildAllowedOrigins = urlModule.buildAllowedOrigins;
   getMatchingWwwOrigin = urlModule.getMatchingWwwOrigin;
-  originUsesMatchingWwwPair = urlModule.originUsesMatchingWwwPair;
   ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
   mapWorld = loadMapWorld();
   ensureMapWorldGrown();
@@ -3213,6 +4063,57 @@ async function loadSharedModules() {
   PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
   BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;
 }
+
+// Last-resort guards: log and keep running rather than letting an unexpected
+// throw/rejection from a non-request code path take down every live connection.
+// A request- or message-scoped error is already caught closer to its source.
+process.on("uncaughtException", (error) => {
+  console.error("uncaughtException", error);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection", reason);
+});
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}, shutting down`);
+
+  // Persist the throttled visitor-stats buffer; systemd sends SIGTERM on
+  // restart/stop and the counts recorded since the last flush would be lost.
+  try {
+    visitorStats.stop();
+    visitorStats.flush();
+    messageStats.stop();
+    messageStats.flush();
+  } catch (error) {
+    console.error("Error flushing visitor stats on shutdown", error);
+  }
+
+  // Flush any pending registry write so a debounced save is not lost.
+  try {
+    flushSites();
+  } catch (error) {
+    console.error("Error flushing sites on shutdown", error);
+  }
+
+  // Stop accepting new sockets, then close the open ones cleanly.
+  for (const ws of wss.clients) {
+    try {
+      ws.close(1001, "server shutting down");
+    } catch {
+      // already closing
+    }
+  }
+  wss.close();
+  server.close(() => process.exit(0));
+
+  // Don't hang forever if a socket refuses to close.
+  setTimeout(() => process.exit(0), 5000).unref?.();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 startServer().catch((error) => {
   console.error(`Failed to start TownSquare server: ${error.message}`);

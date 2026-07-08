@@ -17,6 +17,11 @@ const MODULE_PATH_RE = /^\/[A-Za-z0-9_./-]+\.mjs$/;
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ACTION_RE = /^[A-Za-z][A-Za-z0-9]*$/;
 
+// Bump ONLY on breaking changes to the plugin contract: hook names/signatures,
+// context shape, registration rules, or module-path requirements. Private
+// plugin bundles assert this before starting the server.
+const PLUGIN_API_VERSION = 1;
+
 class PluginManager {
   constructor({ logger = console } = {}) {
     this.logger = logger;
@@ -329,6 +334,7 @@ const plugins = new PluginManager();
 
 module.exports = {
   HOOKS,
+  PLUGIN_API_VERSION,
   PluginManager,
   plugins,
   registerPlugin: (plugin) => plugins.register(plugin),

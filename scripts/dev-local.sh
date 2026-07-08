@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Start TownSquare locally with the Pro plugins enabled.
+# Start TownSquare locally with the Plus plugins enabled.
 #
 #   ./scripts/dev-local.sh
 #
@@ -38,9 +38,9 @@ export TOWNSQUARE_PLUGIN_ASSETS_DIR="$PRO_DIR/public"
 echo "plugin assets: $TOWNSQUARE_PLUGIN_ASSETS_DIR"
 
 # Remove the old dev symlink if a previous run created one.
-if [ -L "$CORE_DIR/public/pro" ]; then
-  rm "$CORE_DIR/public/pro"
-  echo "removed stale symlink $CORE_DIR/public/pro"
+if [ -L "$CORE_DIR/public/plus" ]; then
+  rm "$CORE_DIR/public/plus"
+  echo "removed stale symlink $CORE_DIR/public/plus"
 fi
 
 # 3. Make sure the port is free (don't clobber another server).
@@ -49,7 +49,7 @@ if lsof -ti ":$PORT" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "starting TownSquare Pro on http://localhost:$PORT"
+echo "starting TownSquare Plus on http://localhost:$PORT"
 echo "  service-admin: http://localhost:$PORT/service-admin"
 echo "  admin:         http://localhost:$PORT/admin"
 echo

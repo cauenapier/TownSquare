@@ -18,7 +18,7 @@
 import { clamp } from "./math.mjs";
 
 /**
- * @typedef {import("./dom.mjs").AvatarView} AvatarView
+ * @typedef {import("./avatar.mjs").AvatarView} AvatarView
  */
 
 /**
@@ -60,6 +60,18 @@ export function layoutConfigFor(config, expanded = false) {
   return { ...base, fadeFloor: Math.max(base.fadeFloor, FADE_FLOOR_EXPANDED) };
 }
 
+/** Breathing room kept between neighbouring name tags. */
+const LABEL_GAP = 6;
+/** Name tags never get pushed closer than this to the stage edges. */
+const LABEL_EDGE = 6;
+/** Stage width at/below which distant name tags fade hardest (crowded phones). */
+const LABEL_FADE_NARROW = 360;
+/** Stage width at/above which name tags barely fade (there's room to read all). */
+const LABEL_FADE_WIDE = 700;
+/** Opacity floor for the farthest tags on the narrowest stages. */
+const LABEL_FADE_FLOOR_MIN = 0.25;
+/** Opacity floor for the farthest tags on wide stages — essentially no fade. */
+const LABEL_FADE_FLOOR_MAX = 0.92;
 /** The tail's base stays clear of the live bubble's rounded corners by this much. */
 const TAIL_INSET = 22;
 /** How far the tail's tip can lean past its base toward the speaker. */
@@ -71,14 +83,16 @@ const PROMINENCE_EPSILON = 0.01;
 
 /**
  * Keep the wider history tray inside the same stage bounds as speech bubbles.
+ * The tray width is measured up front (see `measurePresences`) so this stays a
+ * write-only step.
  *
  * @param {AvatarView} avatar
  * @param {number} anchor
  * @param {number} minLeft
  * @param {number} maxRight
+ * @param {number} width Pre-measured `tray.offsetWidth`.
  */
-function placeTray(avatar, anchor, minLeft, maxRight) {
-  const width = avatar.tray.offsetWidth;
+function placeTray(avatar, anchor, minLeft, maxRight, width) {
   if (!width) return;
   const halfWidth = Math.min(width / 2, (maxRight - minLeft) / 2);
   const shift = clamp(anchor, minLeft + halfWidth, maxRight - halfWidth) - anchor;
@@ -93,6 +107,7 @@ function placeTray(avatar, anchor, minLeft, maxRight) {
  * @property {number} anchor Figure centre in stage px — where the column wants to sit.
  * @property {number} width Visual width in stage px (layout width × prominence scale).
  * @property {number} scale Prominence scale applied to the column.
+ * @property {number} [liveWidth] Pre-measured live-bubble width in px (bubble columns only).
  */
 
 /**
@@ -135,19 +150,20 @@ function clusterLeft(cluster, minLeft, maxRight) {
  * Apply final shifts for one cluster. Past the point where the stage can hold
  * every column side by side, non-overlap is unwinnable — so the cluster
  * compresses: member centres squeeze proportionally until the run spans
- * exactly the stage, trading even partial overlap for keeping every bubble
+ * exactly the stage, trading even partial overlap for keeping every item
  * visible and near its speaker.
  *
  * @param {Cluster} cluster
  * @param {number} minLeft
  * @param {number} maxRight
+ * @param {(column: Column, shift: number) => void} apply
  */
-function placeCluster(cluster, minLeft, maxRight) {
+function placeCluster(cluster, minLeft, maxRight, apply) {
   const left = clusterLeft(cluster, minLeft, maxRight);
   const span = maxRight - minLeft;
   if (cluster.width <= span) {
     for (const item of cluster.items) {
-      applyShift(item.column, left + item.centerOffset - item.column.anchor);
+      apply(item.column, left + item.centerOffset - item.column.anchor);
     }
     return;
   }
@@ -160,7 +176,7 @@ function placeCluster(cluster, minLeft, maxRight) {
   const scale = (span - firstHalf - lastHalf) / Math.max(1, cluster.width - firstHalf - lastHalf);
   for (const item of items) {
     const center = minLeft + firstHalf + (item.centerOffset - firstHalf) * scale;
-    applyShift(item.column, center - item.column.anchor);
+    apply(item.column, center - item.column.anchor);
   }
 }
 
@@ -184,6 +200,40 @@ function mergeClusters(a, b, gap) {
     sumIdealLeft: a.sumIdealLeft + b.sumIdealLeft - b.count * offsetDelta,
     items: a.items.concat(b.items),
   };
+}
+
+/**
+ * Resolve adjacent overlaps by seeding one cluster per column, merging any
+ * cluster that collides with the previous one, then applying final shifts.
+ *
+ * @param {Array<Column>} columns
+ * @param {{ minLeft: number, maxRight: number, gap: number, apply: (column: Column, shift: number) => void }} options
+ */
+function solveClusters(columns, { minLeft, maxRight, gap, apply }) {
+  columns.sort((a, b) => a.anchor - b.anchor);
+
+  /** @type {Array<Cluster>} */
+  const clusters = [];
+  for (const column of columns) {
+    /** @type {Cluster} */
+    let cluster = {
+      width: column.width,
+      count: 1,
+      sumIdealLeft: column.anchor - column.width / 2,
+      items: [{ column, centerOffset: column.width / 2 }],
+    };
+    while (clusters.length > 0) {
+      const previous = clusters[clusters.length - 1];
+      const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
+      if (previousRight + gap <= clusterLeft(cluster, minLeft, maxRight)) break;
+      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster, gap);
+    }
+    clusters.push(cluster);
+  }
+
+  for (const cluster of clusters) {
+    placeCluster(cluster, minLeft, maxRight, apply);
+  }
 }
 
 /**
@@ -233,19 +283,19 @@ function setProminenceVars(avatar, scale, fade) {
  * @param {number} shift
  */
 function applyShift(column, shift) {
-  const { avatar, scale } = column;
+  const { avatar, scale, liveWidth = 0 } = column;
   // The tail must always land on its speaker: its base slides along the
   // bubble's flat bottom, and its tip leans the remaining distance. The
   // column shift itself is bounded by that combined reach, so when the
   // solver wants more, this column yields separation (overlap is handled by
   // speak-order stacking) rather than orphan its bubble from the speaker.
   // Tail movement happens inside the scaled column, so the maths run in
-  // pre-scale units.
-  const live = avatar.messages[avatar.messages.length - 1];
+  // pre-scale units. The live bubble's width is pre-measured (see
+  // `measurePresences`) to keep this a write-only step.
   let tailShift = 0;
   let tailTip = 0;
-  if (live) {
-    const reach = Math.max(0, live.el.offsetWidth / 2 - TAIL_INSET);
+  if (liveWidth) {
+    const reach = Math.max(0, liveWidth / 2 - TAIL_INSET);
     const bound = (reach + TAIL_TIP_REACH) * scale;
     shift = clamp(shift, -bound, bound);
     const target = -shift / scale;
@@ -253,6 +303,93 @@ function applyShift(column, shift) {
     tailTip = target - tailShift;
   }
   setShiftVars(avatar, shift, tailShift, tailTip);
+}
+
+/**
+ * @typedef {Object} MeasuredPresence
+ * @property {AvatarView} avatar
+ * @property {number} x Speaker position, normalized.
+ * @property {number} anchor Figure centre in stage px.
+ * @property {number} trayWidth Measured history-tray width.
+ * @property {boolean} hasBubble Whether the bubble column has any children.
+ * @property {number} aboveWidth Measured speech-column width.
+ * @property {number} liveWidth Measured live-bubble width (0 when none).
+ * @property {number} belowWidth Measured name-tag width (0 when hidden).
+ */
+
+/**
+ * The single DOM-read pass. Reading every width up front — with no interleaved
+ * style writes — lets the browser satisfy all reads from one layout, instead of
+ * forcing a reflow each time a read follows a write. The write passes
+ * (`applyBubbleColumns` / `applyNameLabels`) only set transforms and opacity,
+ * neither of which changes these measured widths, so the two phases are
+ * equivalent to the old interleaved code minus the per-avatar reflows.
+ *
+ * @param {Iterable<{ x: number, avatar: AvatarView }>} presences
+ * @param {number} stageWidth
+ * @returns {Array<MeasuredPresence>}
+ */
+function measurePresences(presences, stageWidth) {
+  /** @type {Array<MeasuredPresence>} */
+  const measured = [];
+  for (const presence of presences) {
+    const { avatar } = presence;
+    const live = avatar.messages[avatar.messages.length - 1];
+    const belowWidth = avatar.below ? avatar.below.offsetWidth : 0;
+    const profileWidth = avatar.profileForm && !avatar.profileForm.hidden ? avatar.profileForm.offsetWidth : 0;
+    measured.push({
+      avatar,
+      x: presence.x,
+      anchor: presence.x * stageWidth,
+      trayWidth: avatar.tray.offsetWidth,
+      // Expiring bubbles are out of `messages` but still fading in the DOM, so
+      // visibility is judged by children: keep the column pinned until they
+      // finish, and re-centre the empty column for the next fresh line.
+      hasBubble: avatar.above.childElementCount > 0,
+      aboveWidth: avatar.above.offsetWidth,
+      liveWidth: live ? live.el.offsetWidth : 0,
+      belowWidth: Math.max(belowWidth, profileWidth),
+    });
+  }
+  return measured;
+}
+
+/**
+ * Write pass for the speech-bubble columns: proximity prominence plus overlap
+ * de-confliction, from pre-measured widths.
+ *
+ * @param {Array<MeasuredPresence>} measured
+ * @param {number} selfX
+ * @param {LayoutConfig} cfg
+ * @param {number} stageWidth
+ */
+function applyBubbleColumns(measured, selfX, cfg, stageWidth) {
+  const minLeft = cfg.edgeMargin;
+  const maxRight = stageWidth - cfg.edgeMargin;
+
+  /** @type {Array<Column>} */
+  const columns = [];
+  for (const m of measured) {
+    placeTray(m.avatar, m.anchor, minLeft, maxRight, m.trayWidth);
+    if (!m.hasBubble) {
+      setShiftVars(m.avatar, 0, 0, 0);
+      continue;
+    }
+    if (!m.aboveWidth) continue;
+
+    const prominence = proximity(m.x, selfX, cfg);
+    const scale = cfg.scaleFloor + (1 - cfg.scaleFloor) * prominence;
+    setProminenceVars(m.avatar, scale, cfg.fadeFloor + (1 - cfg.fadeFloor) * prominence);
+    columns.push({ avatar: m.avatar, anchor: m.anchor, width: m.aboveWidth * scale, scale, liveWidth: m.liveWidth });
+  }
+  if (columns.length === 0) return;
+
+  solveClusters(columns, {
+    minLeft,
+    maxRight,
+    gap: cfg.columnGap,
+    apply: applyShift,
+  });
 }
 
 /**
@@ -271,57 +408,123 @@ export function layoutBubbleColumns(stage, presences, selfX, config) {
   const cfg = config ? { ...DEFAULT_LAYOUT_CONFIG, ...config } : DEFAULT_LAYOUT_CONFIG;
   const stageWidth = stage.clientWidth;
   if (!stageWidth) return;
+  applyBubbleColumns(measurePresences(presences, stageWidth), selfX, cfg, stageWidth);
+}
 
-  const minLeft = cfg.edgeMargin;
-  const maxRight = stageWidth - cfg.edgeMargin;
+/**
+ * Push the resolved name-tag shift to the DOM, skipping sub-pixel-noise writes.
+ *
+ * @param {AvatarView} avatar
+ * @param {number} shift
+ */
+function setLabelShift(avatar, shift) {
+  if (!avatar.below) return;
+  if (Math.abs((avatar.labelShift ?? 0) - shift) <= SHIFT_EPSILON) return;
+  avatar.labelShift = shift;
+  avatar.below.style.setProperty("--label-shift", `${shift.toFixed(1)}px`);
+}
+
+/**
+ * Push the resolved name-tag opacity to the DOM, skipping noise writes.
+ *
+ * @param {AvatarView} avatar
+ * @param {number} fade
+ */
+function setLabelFade(avatar, fade) {
+  if (!avatar.below) return;
+  if (Math.abs((avatar.labelFade ?? 1) - fade) <= PROMINENCE_EPSILON) return;
+  avatar.labelFade = fade;
+  avatar.below.style.setProperty("--label-fade", fade.toFixed(3));
+}
+
+/**
+ * De-conflict the always-visible name tags so none — including your own —
+ * covers another. Same 1D cluster solver as the speech-bubble columns, but over
+ * the figures' name-tag widths, written as a `--label-shift` on each `below`.
+ *
+ * Distant tags also fade toward an opacity floor (like the bubble columns), so
+ * a crowded narrow stage stays legible — you focus on who's near you, and the
+ * unavoidable overlap of far tags recedes instead of fighting for attention. On
+ * wide stages the floor stays high, so there's effectively no fade.
+ *
+ * Run once per animation frame alongside layoutBubbleColumns.
+ *
+ * @param {Array<MeasuredPresence>} measured
+ * @param {number} selfX
+ * @param {LayoutConfig} cfg
+ * @param {number} stageWidth
+ */
+function applyNameLabels(measured, selfX, cfg, stageWidth) {
+  const minLeft = LABEL_EDGE;
+  const maxRight = stageWidth - LABEL_EDGE;
+
+  // Narrow stages fade distant tags hard; wide stages keep the floor near 1.
+  const widthT = clamp((stageWidth - LABEL_FADE_NARROW) / (LABEL_FADE_WIDE - LABEL_FADE_NARROW), 0, 1);
+  const fadeFloor = LABEL_FADE_FLOOR_MIN + (LABEL_FADE_FLOOR_MAX - LABEL_FADE_FLOOR_MIN) * widthT;
 
   /** @type {Array<Column>} */
   const columns = [];
-  for (const presence of presences) {
-    const { avatar } = presence;
-    placeTray(avatar, presence.x * stageWidth, minLeft, maxRight);
-    // Expiring bubbles are out of `messages` but still fading in the DOM, so
-    // visibility is judged by children: keep their column pinned until they
-    // finish, and re-centre the empty column for the next fresh line.
-    if (avatar.above.childElementCount === 0) {
-      setShiftVars(avatar, 0, 0, 0);
+  for (const m of measured) {
+    const prominence = proximity(m.x, selfX, cfg);
+    setLabelFade(m.avatar, fadeFloor + (1 - fadeFloor) * prominence);
+    // A tag hidden via CSS (display:none) measures 0 — leave it un-shifted.
+    if (!m.belowWidth) {
+      setLabelShift(m.avatar, 0);
       continue;
     }
-    const width = avatar.above.offsetWidth;
-    if (!width) continue;
-
-    const prominence = proximity(presence.x, selfX, cfg);
-    const scale = cfg.scaleFloor + (1 - cfg.scaleFloor) * prominence;
-    setProminenceVars(avatar, scale, cfg.fadeFloor + (1 - cfg.fadeFloor) * prominence);
-    columns.push({ avatar, anchor: presence.x * stageWidth, width: width * scale, scale });
+    columns.push({ avatar: m.avatar, anchor: m.anchor, width: m.belowWidth, scale: 1 });
   }
   if (columns.length === 0) return;
 
-  columns.sort((a, b) => a.anchor - b.anchor);
+  solveClusters(columns, {
+    minLeft,
+    maxRight,
+    gap: LABEL_GAP,
+    apply: (column, shift) => setLabelShift(column.avatar, shift),
+  });
+}
 
-  // Classic 1D label placement: seed one cluster per column, and while a new
-  // cluster would overlap the one before it, merge them. Each merge re-centres
-  // the group on the mean of its anchors, which can cascade further left.
-  /** @type {Array<Cluster>} */
-  const clusters = [];
-  for (const column of columns) {
-    /** @type {Cluster} */
-    let cluster = {
-      width: column.width,
-      count: 1,
-      sumIdealLeft: column.anchor - column.width / 2,
-      items: [{ column, centerOffset: column.width / 2 }],
-    };
-    while (clusters.length > 0) {
-      const previous = clusters[clusters.length - 1];
-      const previousRight = clusterLeft(previous, minLeft, maxRight) + previous.width;
-      if (previousRight + cfg.columnGap <= clusterLeft(cluster, minLeft, maxRight)) break;
-      cluster = mergeClusters(/** @type {Cluster} */ (clusters.pop()), cluster, cfg.columnGap);
-    }
-    clusters.push(cluster);
-  }
+/**
+ * De-conflict the always-visible name tags so none — including your own —
+ * covers another. See {@link applyNameLabels}; this is the standalone
+ * measure-then-write entry point.
+ *
+ * @param {HTMLElement} stage
+ * @param {Iterable<{ x: number, avatar: AvatarView }>} presences
+ * @param {number} selfX Your figure's position, normalized — the focus point.
+ * @param {Partial<LayoutConfig>} [config] Tuning overrides; defaults fill the rest.
+ */
+export function layoutNameLabels(stage, presences, selfX, config) {
+  const cfg = config ? { ...DEFAULT_LAYOUT_CONFIG, ...config } : DEFAULT_LAYOUT_CONFIG;
+  const stageWidth = stage.clientWidth;
+  if (!stageWidth) return;
+  applyNameLabels(measurePresences(presences, stageWidth), selfX, cfg, stageWidth);
+}
 
-  for (const cluster of clusters) {
-    placeCluster(cluster, minLeft, maxRight);
-  }
+/**
+ * Lay out both speech bubbles and name tags for one frame in a single
+ * measure-then-write cycle: every width is read up front, then both passes
+ * write their transforms/opacity with no intervening reads. This keeps the
+ * frame to one layout flush instead of one per read-after-write, which is the
+ * dominant cost in a busy scene (see review G1).
+ *
+ * The per-frame hot path: `config` is expected to already carry every dial
+ * (the loop passes `layoutConfigFor` output), so this takes it as-is rather
+ * than re-spreading defaults every frame (review D1). The single fresh merge in
+ * `layoutConfigFor` is deliberate — the dev scene mutates its tuning object in
+ * place, and re-reading it each frame is what makes the sliders live.
+ *
+ * @param {HTMLElement} stage
+ * @param {Iterable<{ x: number, avatar: AvatarView }>} presences
+ * @param {number} selfX Your figure's position, normalized — the focus point.
+ * @param {LayoutConfig} [config] Complete config (from `layoutConfigFor`); defaults when omitted.
+ */
+export function layoutStage(stage, presences, selfX, config) {
+  const cfg = config || DEFAULT_LAYOUT_CONFIG;
+  const stageWidth = stage.clientWidth;
+  if (!stageWidth) return;
+
+  const measured = measurePresences(presences, stageWidth);
+  applyBubbleColumns(measured, selfX, cfg, stageWidth);
+  applyNameLabels(measured, selfX, cfg, stageWidth);
 }

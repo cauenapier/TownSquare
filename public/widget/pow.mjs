@@ -5,7 +5,13 @@
  * SHA-256(`${salt}:${nonce}`) starts with `difficulty` zero bits. A raw script
  * that never runs the widget cannot produce this; a scripted solver pays CPU per
  * join. A small synchronous SHA-256 keeps the search loop fast and dependency-free.
+ *
+ * The search runs in a Web Worker (built from these same primitives via a blob)
+ * so a high-difficulty challenge can't freeze the host page; an inline,
+ * event-loop-yielding loop is the fallback where Workers are unavailable.
  */
+
+export const MAX_CHALLENGE_DIFFICULTY = 24;
 
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -61,8 +67,8 @@ function sha256(bytes) {
   }
 
   const out = new Uint8Array(32);
-  new DataView(out.buffer).setUint32(0, h[0]);
-  for (let i = 0; i < 8; i++) new DataView(out.buffer).setUint32(i * 4, h[i]);
+  const outView = new DataView(out.buffer);
+  for (let i = 0; i < 8; i++) outView.setUint32(i * 4, h[i]);
   return out;
 }
 
@@ -80,17 +86,141 @@ function leadingZeroBits(buffer) {
 }
 
 /**
- * Find a nonce satisfying the challenge difficulty. Yields to the event loop
- * periodically so the page stays responsive on slower devices.
+ * @param {number} difficulty
+ * @returns {number}
+ */
+function clampDifficulty(difficulty) {
+  if (!Number.isFinite(difficulty)) return 0;
+  return Math.max(0, Math.min(MAX_CHALLENGE_DIFFICULTY, Math.floor(difficulty)));
+}
+
+function challengeCanceledError() {
+  const error = new Error("challenge canceled");
+  error.name = "AbortError";
+  return error;
+}
+
+/**
+ * Inline search loop. Used as the fallback when Web Workers are unavailable; it
+ * yields to the event loop periodically so the page stays responsive, but the
+ * hashing still competes with rendering on the main thread.
  *
  * @param {{salt:string, difficulty:number}} challenge
+ * @param {{ canceled: boolean }} state
  * @returns {Promise<string>}
  */
-export async function solveChallenge({ salt, difficulty }) {
+async function solveInline({ salt, difficulty }, state) {
   const encoder = new TextEncoder();
   for (let nonce = 0; ; nonce++) {
+    if (state.canceled) throw challengeCanceledError();
     const hash = sha256(encoder.encode(`${salt}:${nonce}`));
     if (leadingZeroBits(hash) >= difficulty) return String(nonce);
-    if ((nonce & 0x3fff) === 0x3fff) await new Promise((resolve) => setTimeout(resolve));
+    if ((nonce & 0x3fff) === 0x3fff) {
+      await new Promise((resolve) => setTimeout(resolve));
+      if (state.canceled) throw challengeCanceledError();
+    }
   }
+}
+
+function workerSupported() {
+  return typeof Worker === "function"
+    && typeof Blob === "function"
+    && typeof URL !== "undefined"
+    && typeof URL.createObjectURL === "function";
+}
+
+// Build the worker body once from the very same hashing primitives, so the
+// solver has a single source of truth: we stringify the functions rather than
+// duplicating the SHA-256 implementation. The worker can't run a stuck page, so
+// it searches in a tight loop with no yielding.
+let workerUrl = null;
+function getWorkerUrl() {
+  if (workerUrl) return workerUrl;
+  const source = `
+const K = new Uint32Array([${Array.from(K).join(",")}]);
+const rotr = ${rotr.toString()};
+const sha256 = ${sha256.toString()};
+const leadingZeroBits = ${leadingZeroBits.toString()};
+onmessage = (event) => {
+  const { salt, difficulty } = event.data;
+  const encoder = new TextEncoder();
+  for (let nonce = 0; ; nonce++) {
+    if (leadingZeroBits(sha256(encoder.encode(salt + ":" + nonce))) >= difficulty) {
+      postMessage(String(nonce));
+      return;
+    }
+  }
+};`;
+  workerUrl = URL.createObjectURL(new Blob([source], { type: "application/javascript" }));
+  return workerUrl;
+}
+
+/**
+ * @param {{salt:string, difficulty:number}} challenge
+ * @param {{ canceled: boolean, worker: Worker | null, reject: ((error: Error | Event) => void) | null }} state
+ * @returns {Promise<string>}
+ */
+function solveInWorker(challenge, state) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(getWorkerUrl());
+    state.worker = worker;
+    state.reject = reject;
+    worker.onmessage = (event) => {
+      if (state.worker === worker) state.worker = null;
+      state.reject = null;
+      worker.terminate();
+      if (state.canceled) {
+        reject(challengeCanceledError());
+        return;
+      }
+      resolve(String(event.data));
+    };
+    worker.onerror = (event) => {
+      if (state.worker === worker) state.worker = null;
+      state.reject = null;
+      worker.terminate();
+      reject(event);
+    };
+    worker.postMessage(challenge);
+  });
+}
+
+/**
+ * Find a nonce satisfying the challenge difficulty. Runs the search in a Web
+ * Worker so a high-difficulty challenge can't freeze the host page, and falls
+ * back to the inline (main-thread, yielding) loop where Workers aren't available.
+ *
+ * @param {{salt:string, difficulty:number}} challenge
+ * @returns {{ promise: Promise<string>, cancel: () => void }}
+ */
+export function solveChallenge(challenge) {
+  const normalized = {
+    salt: challenge.salt,
+    difficulty: clampDifficulty(challenge.difficulty),
+  };
+  const state = { canceled: false, worker: null, reject: null };
+  const promise = (async () => {
+    if (workerSupported()) {
+      try {
+        return await solveInWorker(normalized, state);
+      } catch (error) {
+        if (state.canceled) throw error;
+        // Worker construction or execution failed (e.g. a strict CSP blocking
+        // blob: workers); fall through to the inline solver.
+      }
+    }
+    return solveInline(normalized, state);
+  })();
+
+  return {
+    promise,
+    cancel() {
+      if (state.canceled) return;
+      state.canceled = true;
+      state.worker?.terminate();
+      state.worker = null;
+      state.reject?.(challengeCanceledError());
+      state.reject = null;
+    },
+  };
 }

@@ -21,6 +21,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 
 - `server.js` — Node server for static assets, health checks, and WebSocket presence
 - `public/townsquare.mjs` — reusable embeddable widget mount API (public embed URL `/townsquare.mjs`)
+- `public/townsquare-counter.mjs` — lightweight "N people here" counter embed (public URL `/townsquare-counter.mjs`); reads `/api/site-presence`
 - `public/widget/` — widget implementation modules (DOM, chat, presence, protocol, movement)
 - `public/shared/` — protocol, scene, style, and map definitions shared with the server
 - `public/widget.css` — embeddable widget styling (scoped to `#townsquare-root`)
@@ -30,6 +31,7 @@ Self-hosted should not mean forever disconnected: a self-hosted TownSquare may a
 - `public/lib/` — generic browser helpers shared across pages (e.g. `ui-common.mjs`)
 - `public/hosted/` — hosted registration/admin pages and scripts, served at `/register`, `/admin`, `/service-admin`
 - `public/map.html` — public map of verified, enabled TownSquares, served at `/map`
+- `/overlay` — alias reserved for the private Plus livestream overlay asset supplied by `TOWNSQUARE_PLUGIN_ASSETS_DIR`; hosted overlay sockets require Plus
 - `public/dev/` — local dev tooling: `dev.html` (simulation, `/dev`) and `walk-sandbox.html` (`/walk-sandbox`)
 - `public/staging.html` — live widget demo for the staging instance, served at `/staging` (gated by `ENABLE_STAGING_PAGE`)
 - `scripts/smoke-test.js` — automated websocket smoke test
@@ -140,17 +142,70 @@ Notes:
 - `socketPath` defaults to `/live`; set it explicitly when your reverse proxy exposes TownSquare on a different websocket path such as `/townsquare/live`.
 - `siteKey` is only needed when using one hosted TownSquare server for multiple registered sites.
 - `theme: "host"` syncs with common host-page dark mode signals such as
-  `html.dark`, `body.dark`, `data-theme`, `data-bs-theme`, and `data-color-mode`,
+  `html.dark`, `body.dark`, `html.dark-mode`, `body.dark-mode`, `data-theme`,
+  `data-bs-theme`, and `data-color-mode`,
   or an explicit `color-scheme: light|dark` on `html`/`body`. When none of those
   are present it stays on the light palette so macOS dark mode does not restyle
   the widget on a light page. Omit `theme` to use `auto`, which follows
   `prefers-color-scheme`.
-- To restyle the square, set the palette tokens (`--scene`, `--page`, `--surface`,
-  `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`, `--ground`) on
-  `#townsquare-root` in your own stylesheet. The widget writes no inline palette
-  styles, so your CSS wins. See [Customization](#customization).
+- To restyle the square, set the palette tokens (`--scene`, `--ground-fill`,
+  `--surface`, `--ink`, `--you`, `--tree-trunk`, `--tree-canopy`, `--other`,
+  `--ground-line`) on `#townsquare-root` in your own stylesheet. The pre-rename
+  names `--page` (ground fill) and `--ground` (ground line) still work. The
+  widget writes no inline palette styles, so your CSS wins. See
+  [Customization](#customization).
 - The host page owns placement and surrounding layout.
 - TownSquare owns the scene, movement, chat, and realtime transport inside the mount root.
+
+### Presence counter
+
+For pages where the full square is too heavy, embed the lightweight counter — a
+self-contained "N people here" pill that links to the square. It loads no
+stylesheet and opens no socket, so showing it never adds a visitor to the square:
+
+```html
+<div id="townsquare-count"></div>
+<script type="module">
+  import { mountTownSquareCounter } from "https://your-townsquare-host/townsquare-counter.mjs";
+
+  mountTownSquareCounter(document.getElementById("townsquare-count"), {
+    serverOrigin: "https://your-townsquare-host",
+    // siteKey: "…",                       // only for multi-site hosted servers
+    variant: "pill",                       // pill | minimal | solid | outline
+    accent: "#c8641f",                     // optional; sets --ts-counter-accent
+    townSquareUrl: "https://your-site/townsquare"
+  });
+</script>
+```
+
+Hosted owners don't have to write this by hand: the admin page (Appearance tab →
+**Presence counter**) has a style picker with a live preview that generates the
+snippet for you.
+
+Notes:
+
+- A town square is keyed per **site**, not per page (everyone with the widget
+  open on any page of the site shares one square). So the counter's "here" count
+  is the whole site's live presence — the same number whether the counter sits on
+  the same page as the square or a different one.
+- The count is read from `GET /api/site-presence?siteKey=…`, a public, read-only
+  endpoint that reports the live scene count without joining it. A counter-only
+  page therefore never inflates the number or appears as a ghost to people in the
+  square.
+- Clicking the counter takes the visitor to the square: it scrolls to a full
+  widget already on the same page (`#townsquare-root`) if one exists, otherwise it
+  navigates to `townSquareUrl`. With neither, it renders as plain text.
+- `variant` picks one of four built-in looks (`pill`, `minimal`, `solid`,
+  `outline`); each is just a class painted from CSS variables.
+- Options can also be set via data attributes on the mount node:
+  `data-townsquare-server-origin`, `data-townsquare-site-key`,
+  `data-townsquare-url`, `data-townsquare-variant`, `data-townsquare-accent`.
+  `pollMs` defaults to 20s (floored at 5s).
+- For full control, override the CSS variables on the `.ts-counter` element:
+  `--ts-counter-accent`, `--ts-counter-bg`, `--ts-counter-ink`,
+  `--ts-counter-radius`, `--ts-counter-font-size`, `--ts-counter-pad-x`,
+  `--ts-counter-pad-y`. By default it uses system colors and follows light/dark
+  automatically.
 
 ## Hosted registration
 
@@ -182,9 +237,9 @@ The admin page can:
 
 - show install/seen status
 - show active visitors
-- customize the scene (bench/tree/lamp/bird counts and placement) and colors, with a live preview (see [Customization](#customization))
+- customize the scene (bench/tree/lamp/bird counts and placement), colors, and a clickable message board, with a live preview (see [Customization](#customization))
 - mark an active visitor as the verified site owner (and unmark them)
-- kick or block active visitors
+- kick, hide, or block active visitors
 - disable chat
 - disable the site
 - clear recent in-memory messages
@@ -215,22 +270,51 @@ Every square ships with a default hosted style — the palette baked into
 `public/tokens.css` (light and dark), which `DEFAULT_SITE_STYLE` in
 `public/shared/site-config.mjs` mirrors. No setup is needed to look good.
 
-The admin and registration pages expose two kinds of customization, each with a
-live preview:
+### How customization reaches a site
 
-- **Scene** — bench/tree/lamp/bird counts and per-prop placement. Saved server-side
-  per site in `sceneConfig` and pushed to live embeds by `siteKey`, so changes take
-  effect immediately without re-pasting anything (`refreshSiteScenes` in `server.js`).
-- **Colors** — a palette per mode (light/dark) saved in `styleConfig`. Because hosted
-  embeds never write palette tokens inline, colors are delivered as a small scoped CSS
-  block (`buildSiteCss`) the owner copies into their own stylesheet. The admin/register
-  pages generate this **Customization CSS** block from the swatch choices. Re-copy it
-  after changing colors.
+There are two delivery channels, and the split is deliberate:
+
+1. **Install-once snippet (identity only).** `buildEmbedSnippet` emits a small
+   snippet carrying just `serverOrigin`, `siteKey`, `theme` (and any plugin
+   modules). The owner pastes it **once**. It does not change when they tweak the
+   square, so it never needs re-pasting.
+2. **Live by `siteKey` over the socket.** Per-site content the owner edits in
+   admin is delivered in the `hello` payload and re-pushed when it changes, so
+   edits show up on embedded sites immediately:
+   - **Scene** — bench/tree/lamp/bird counts and placement (`sceneConfig`),
+     broadcast as a `scene` message on edit.
+   - **Connections** — neighbouring-town links (`connections`), broadcast as a
+     `connections` message.
+   - **Message board** — an optional clickable note prop (`messageBoard`),
+     broadcast as a `messageBoard` message. Title, body, art variant, accent, and
+     position; visitors see a "!" badge until they open the current message
+     (read-state kept per site in `localStorage`).
+
+   Hosted sites (those with a `siteKey`) start with an empty scene and fill it in
+   the moment the socket connects, so they never flash the stock default props.
+
+**Power-user overrides.** Any of `scene`, `connections`, or `messageBoard` can be
+pinned directly in the snippet's `mountTownSquare` options. A field declared inline
+is a deliberate override: it wins and the widget stops applying live updates for
+*that* field (other fields stay dashboard-managed). This is the same "the dashboard
+generates it, but you own it if you want" idea as the colors CSS below — see
+`ctx.applyLiveConfig` / `inlineConfig` in `public/townsquare.mjs`.
+
+**Colors** are the one exception, delivered as CSS rather than live. A palette per
+mode (light/dark) is saved in `styleConfig` and emitted as a small scoped CSS block
+(`buildSiteCss`) the owner pastes into their own stylesheet — so host-page CSS can
+override it, owners can hand-edit it, and the widget never writes inline palette
+styles that would fight the host. The admin/register pages generate this
+**Customization CSS** block from the swatch choices; **re-copy it after changing
+colors** (scene, connections, and the board do not need this).
 
 The CSS sets these tokens, scoped to `#townsquare-root` for light, explicit dark, and
-`prefers-color-scheme` dark: `--scene` (background), `--page` (ground), `--surface`
+`prefers-color-scheme` dark: `--scene` (sky), `--ground-fill` (ground), `--surface`
 (buttons/tags), `--ink` (text/line work), `--you` (accent), `--tree-trunk`,
-`--tree-canopy`, `--other`, and `--ground`. Advanced owners can edit that block or
+`--tree-canopy`, `--other`, and `--ground-line` (the 1px line where sky meets
+ground). The snippet also emits the pre-rename names `--page` and `--ground` as
+aliases of `--ground-fill`/`--ground-line`, and the widget still reads them, so
+CSS pasted before the rename keeps working. Advanced owners can edit that block or
 write their own rules on the same tokens — the widget writes no inline palette styles
 for hosted embeds, so host CSS always wins.
 
@@ -240,7 +324,7 @@ Set `PUBLIC_ORIGIN` in production so generated snippets use the public HTTPS ori
 Set `LANDING_ORIGIN` when this server should redirect `/`, `/docs`, and `/changelog` to a separately hosted public site.
 Set `PLAUSIBLE_DOMAIN` and `PLAUSIBLE_SCRIPT_SRC` to inject Plausible into every HTML page served by TownSquare. The landing repository loads the same tracker from its shared `site.mjs` on the canonical production hostname.
 Set `AUTH_FAILURES_PER_HOUR` to tune per-IP failed admin sign-in throttling; `0` disables it.
-Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering, freehand lakes, and curved rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
+Set `SERVICE_ADMIN_PASSWORD` to enable `/service-admin`, where the service operator can manage registered sites and paint the global `/map` scenery. The editor supports density-controlled tree scattering and a freehand water brush for lakes and rivers. Saved maps live in `DATA_DIR/map-world.json`; see the map modules for schema and validation details.
 Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to send a Telegram notification whenever a chat message is sent.
 Set `INACTIVE_DISCONNECT_MS` and `INACTIVE_CHECK_INTERVAL_MS` to control away/inactive disconnects (see `.env.example`).
 For local runs, copy `.env.example` to `.env` (or create `.env` directly); `server.js` loads it on startup. Real environment variables win over `.env` values.
@@ -431,7 +515,7 @@ The smoke test verifies:
 - say
 - leave
 - hosted site isolation and admin token hashing
-- moderation tools (word filter, mute/unmute, slow mode, moderation log)
+- moderation tools (word filter, mute/unmute, hide/unhide, slow mode, moderation log)
 - service-admin map validation and persistence
 - per-IP identity, join, state-event, chat, and synchronized-action quarantine limits
 
@@ -479,4 +563,4 @@ It also means leaving room for self-hosted TownSquares to optionally communicate
 
 ## License
 
-TBD
+MIT — see [LICENSE](LICENSE).

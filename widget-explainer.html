@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TownSquare Widget — Code Explainer</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+</script>
+<style>
+  :root {
+    --ink: #1b2230;
+    --muted: #5a6577;
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --line: #e3e7ee;
+    --accent: #2f6df0;
+    --warn: #b54708;
+    --warn-bg: #fff6ed;
+    --warn-line: #f4caa0;
+    --code-bg: #1e2430;
+    --code-ink: #e6e9ef;
+    --good: #18794e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 120px; }
+  header.hero {
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 16px; margin: 0; }
+  h2 {
+    font-size: 22px;
+    margin: 48px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+    letter-spacing: -0.01em;
+  }
+  h3 { font-size: 17px; margin: 26px 0 8px; }
+  p { margin: 10px 0; }
+  code.inline {
+    background: #eceff4;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font: 13.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: #324;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 18px 0;
+  }
+  .lede {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    color: var(--ink);
+  }
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    font-size: 14px;
+    margin: 18px 0 0;
+  }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* module grid */
+  .modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+  .mod { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .mod b { font: 13px ui-monospace, Menlo, monospace; color: var(--accent); }
+  .mod span { display: block; color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+  /* code blocks */
+  figure.code { margin: 18px 0; }
+  figure.code figcaption {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  figure.code figcaption b { color: var(--ink); }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font: 13px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    margin: 0;
+  }
+  pre .c { color: #8c98ad; font-style: italic; }   /* comment */
+  pre .k { color: #c792ea; }                        /* keyword */
+  pre .s { color: #c3e88d; }                        /* string */
+  pre .f { color: #82aaff; }                        /* function/ident */
+  pre .n { color: #f78c6c; }                        /* number/const */
+  pre .hl { background: rgba(47,109,240,0.18); display: block; margin: 0 -18px; padding: 0 18px; }
+
+  .ann { margin: 12px 0 0; padding-left: 0; list-style: none; }
+  .ann li { position: relative; padding: 6px 0 6px 26px; border-top: 1px dashed var(--line); }
+  .ann li:first-child { border-top: none; }
+  .ann li::before {
+    content: "›";
+    position: absolute; left: 6px; top: 6px;
+    color: var(--accent); font-weight: 700;
+  }
+  .ann b { color: var(--ink); }
+
+  /* gotchas */
+  .gotcha {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-line);
+    border-radius: 10px;
+    padding: 14px 18px 14px 18px;
+    margin: 12px 0;
+  }
+  .gotcha h4 { margin: 0 0 4px; font-size: 15px; color: var(--warn); }
+  .gotcha p { margin: 4px 0; font-size: 14.5px; }
+  .gotcha .where { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .sev { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; vertical-align: middle; margin-left: 8px; }
+  .sev.med { background: #fde6c9; color: #92400e; }
+  .sev.low { background: #e6edf7; color: #2b5797; }
+  .sev.bug { background: #fde0e0; color: #9b1c1c; }
+  .sev.fixed { background: #d6f0e0; color: #18794e; }
+  .gotcha.done { background: #f3faf6; border-color: #b9e3cb; }
+  .gotcha.done h4 { color: var(--good); }
+  .gotcha .fix { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cfe7d8; }
+  .gotcha .fix b { color: var(--good); }
+
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td code { font: 12.5px ui-monospace, Menlo, monospace; color: #324; }
+  .mermaid { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 16px 0; text-align: center; }
+  footer { margin-top: 60px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+  /* product view */
+  .feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin: 16px 0; }
+  .feat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .feat .t { font-weight: 700; font-size: 14.5px; }
+  .feat .d { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .two-col .panel { margin: 0; }
+  .two-col h4 { margin: 0 0 8px; font-size: 15px; }
+  .two-col ul { margin: 0; padding-left: 18px; }
+  .two-col li { margin: 5px 0; font-size: 14.5px; }
+  .journey { counter-reset: step; list-style: none; padding: 0; margin: 16px 0; }
+  .journey li { position: relative; padding: 8px 0 8px 40px; border-top: 1px solid var(--line); font-size: 14.5px; }
+  .journey li:first-child { border-top: none; }
+  .journey li::before { counter-increment: step; content: counter(step); position: absolute; left: 4px; top: 8px; width: 24px; height: 24px; border-radius: 50%; background: #ece7ff; color: #5b3ed6; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+  @media (max-width: 680px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>TownSquare Widget — Code Explainer</h1>
+  <p class="sub">How the embeddable widget mounts, animates, and talks to the realtime server — read top to bottom.</p>
+  <nav class="toc">
+    <a href="#overview">Overview</a>
+    <a href="#product">Product view</a>
+    <a href="#flow">Flow diagram</a>
+    <a href="#modules">Module map</a>
+    <a href="#snippets">Key code</a>
+    <a href="#lifecycle">Lifecycle</a>
+    <a href="#gotchas">Gotchas &amp; limits</a>
+  </nav>
+</header>
+
+<!-- ───────────────────────── OVERVIEW ───────────────────────── -->
+<section id="overview">
+  <h2>1 · What the widget is</h2>
+  <div class="lede">
+    A host page imports <code class="inline">public/townsquare.mjs</code> and calls
+    <code class="inline">mountTownSquare(rootEl, options)</code>. That single call owns everything inside the
+    mount root: scene rendering, keyboard/pointer input, a local animation loop, chat bubbles, and one
+    WebSocket connection to a TownSquare server. It returns a handle with
+    <code class="inline">updateConfig()</code>, <code class="inline">destroy()</code>, and a live <code class="inline">ctx</code>.
+  </div>
+  <p>
+    The implementation is split by concern under <code class="inline">public/widget/</code>; the mount file is just an
+    orchestrator. All per-mount state lives in a single <b>context object</b> (<code class="inline">ctx</code>) that is
+    threaded through every module — there is no hidden per-mount state hiding in module scope.
+  </p>
+  <table>
+    <tr><th>Run mode</th><th>Socket?</th><th>Peers/birds?</th><th>Use</th></tr>
+    <tr><td><code>live</code> (default)</td><td>real WS</td><td>yes</td><td>production embed</td></tr>
+    <tr><td><code>solo</code></td><td>real WS</td><td>hidden client-side</td><td>distraction-free</td></tr>
+    <tr><td><code>preview</code></td><td>stub (closed)</td><td>no birds, local settle</td><td>admin/registration palette preview</td></tr>
+    <tr><td><code>simulate</code></td><td>stub (closed)</td><td>yes, caller-driven</td><td><code>/dev</code> scene harness</td></tr>
+  </table>
+</section>
+
+<!-- ───────────────────────── PRODUCT VIEW ───────────────────────── -->
+<section id="product" class="pm">
+  <h2>Product view</h2>
+  <div class="lede">
+    <b>In one line:</b> TownSquare turns a normally-empty web page into a shared, real-time space where visitors
+    appear as little characters, see who else is reading the same page right now, walk around, and chat — making a
+    solitary visit feel social and alive.
+  </div>
+
+  <h3>The visitor experience, start to finish</h3>
+  <ol class="journey">
+    <li><b>Arrival.</b> A small "town square" scene sits on the page (e.g. a strip along the bottom). The visitor's
+      own character appears and a brief "Connecting…" status shows while it joins.</li>
+    <li><b>"I'm not alone."</b> Other people on the same page show up as characters, each with a name and a
+      <b>"visiting &lt;page&gt;"</b> tag that follows them as they move between pages of the site.</li>
+    <li><b>Moving around.</b> Walk with arrow keys, by clicking/tapping where you want to go, or by swiping on mobile.
+      Standing still next to a bench, the character sits down on its own.</li>
+    <li><b>Talking.</b> Press a key (or tap your character) to type; your message pops as a speech bubble above you,
+      then gently fades. Recent lines are recoverable in a hover tray. An owner-set "slow mode" can space out messages.</li>
+    <li><b>Playing.</b> Quick gestures — jump, and raise-hand / high-five (you high-five a nearby person who also raised
+      their hand) — add lightweight, low-stakes interaction.</li>
+    <li><b>Going deeper.</b> Expand to a fullscreen view for more room, follow a signpost at the edge to a
+      "neighbouring town" (a linked site), or open the owner's message board.</li>
+    <li><b>Stepping back.</b> A "quiet" toggle mutes/hides the experience for visitors who'd rather just read; switching
+      tabs fades the character to an "away" state so presence stays honest.</li>
+  </ol>
+
+  <h3>What it does — functionality at a glance</h3>
+  <div class="feat-grid">
+    <div class="feat"><div class="t">Live presence</div><div class="d">See who else is on the page in real time, as characters that move and react.</div></div>
+    <div class="feat"><div class="t">"Currently reading" tags</div><div class="d">Each visitor shows the page they're on; it updates as they navigate, even on single-page sites.</div></div>
+    <div class="feat"><div class="t">Ephemeral chat</div><div class="d">Speech bubbles that fade, with a recent-history tray. Conversation feels ambient, not a logged chat room.</div></div>
+    <div class="feat"><div class="t">Expressive gestures</div><div class="d">Walk, sit, jump, raise hand, high-five — body language without words.</div></div>
+    <div class="feat"><div class="t">Identity, lightweight</div><div class="d">Pick a display name and color; remembered on the device. No account or sign-up.</div></div>
+    <div class="feat"><div class="t">Verified owner badge</div><div class="d">Site owners get an anti-spoofed crown so visitors know who runs the space.</div></div>
+    <div class="feat"><div class="t">Customizable scene</div><div class="d">Owners set props (benches, trees, lamps), birds, clouds, colors and light/dark theme — changes apply live.</div></div>
+    <div class="feat"><div class="t">Neighbouring towns</div><div class="d">Edge signposts link to other TownSquare sites, so spaces can form a small network.</div></div>
+    <div class="feat"><div class="t">Owner message board</div><div class="d">A clickable prop that shows a note from the owner — announcements, welcome, rules.</div></div>
+    <div class="feat"><div class="t">Mobile-ready</div><div class="d">Touch walking/swiping and on-screen-keyboard handling so it works on phones.</div></div>
+    <div class="feat"><div class="t">Drop-in embed</div><div class="d">Added to any page with a small snippet; works self-hosted or via a hosted site key.</div></div>
+    <div class="feat"><div class="t">Quiet / focus mode</div><div class="d">Visitors can mute the experience entirely; a "solo" mode hides others while staying connected.</div></div>
+  </div>
+
+  <h3>Who controls what</h3>
+  <div class="two-col">
+    <div class="panel">
+      <h4>The visitor decides</h4>
+      <ul>
+        <li>Display name &amp; character color</li>
+        <li>Where to walk, sit, and what to say</li>
+        <li>Whether to expand, go quiet, or ignore it</li>
+        <li>Whether to follow a signpost to another site</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h4>The site owner controls (live, no re-embed)</h4>
+      <ul>
+        <li>Scene look: props, birds, clouds, palette, theme</li>
+        <li>Chat "slow mode" cooldown &amp; blocked words</li>
+        <li>Message board content</li>
+        <li>Neighbour links to other towns</li>
+        <li>Moderation: remove/kick or block disruptive visitors</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Why it matters &amp; where it fits</h3>
+  <table>
+    <tr><th>Good fit</th><th>The product bet</th></tr>
+    <tr><td>Blogs, docs, landing &amp; launch pages, event/stream pages, personal sites</td>
+        <td>The web is full of pages people visit <em>at the same time</em> but experience <em>alone</em>. Showing that shared presence — cheaply, with no sign-up — creates connection and stickiness a static page can't.</td></tr>
+  </table>
+
+  <h3>Limitations to set expectations on</h3>
+  <div class="feat-grid">
+    <div class="feat"><div class="t">Ephemeral by design</div><div class="d">Chat isn't a persistent history; bubbles fade and a refresh won't replay the room. Great for "now," not a record.</div></div>
+    <div class="feat"><div class="t">Presence, not messaging</div><div class="d">No DMs, threads, or notifications when you're away — it's about being together in the moment on a page.</div></div>
+    <div class="feat"><div class="t">Capacity per square</div><div class="d">A space can fill up; very high concurrency on one page isn't the current target.</div></div>
+    <div class="feat"><div class="t">Per-device identity</div><div class="d">No accounts: identity lives in the browser, so it doesn't follow a person across devices.</div></div>
+    <div class="feat"><div class="t">Single-site focus today</div><div class="d">Built first for self-hosted, single-site use; multi-site hosting and a wider town network are the growth path, not finished products.</div></div>
+    <div class="feat"><div class="t">Light-touch moderation</div><div class="d">Slow mode, blocked words, and owner kick/block exist; rich moderation tooling is still early.</div></div>
+  </div>
+</section>
+
+<!-- ───────────────────────── FLOW DIAGRAM ───────────────────────── -->
+<section id="flow">
+  <h2>2 · The flow</h2>
+
+  <h3>2.1 Mount → connect → steady state</h3>
+  <div class="mermaid">
+flowchart TD
+    A["Host page calls<br/>mountTownSquare(root, options)"] --> B["Build ctx:<br/>self state, scene props,<br/>bird perches, DOM shell"]
+    B --> C{localOnly?<br/>preview / simulate}
+    C -- "yes" --> D["socket = stub<br/>(readyState CLOSED)"]
+    C -- "no" --> E["new WebSocket(socketUrl)<br/>wireSocket(ctx)"]
+    D --> F["startGameLoop(ctx)<br/>requestAnimationFrame tick"]
+    E --> F
+    E -.->|"on open"| G["send INIT<br/>{browserId, secret, x, profile}"]
+    G --> H{"server replies"}
+    H -->|CHALLENGE| I["solveChallenge (PoW)<br/>→ send SOLVE"]
+    I --> H
+    H -->|HELLO| J["self.id set · apply scene/<br/>connections/board · seed peers · birds"]
+    J --> F
+    F --> K["per frame: move self,<br/>maybe settle on prop,<br/>layout bubbles + name tags,<br/>maybeSendMove (throttled)"]
+  </div>
+
+  <h3>2.2 Who talks to whom each frame / event</h3>
+  <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as User input
+    participant L as tick loop
+    participant S as WebSocket
+    participant SRV as Server
+    participant P as Peers and DOM
+
+    U->>L: keys, tap or swipe set movingLeft, movingRight, targetX
+    loop every animation frame
+        L->>L: integrate x, clamp, clear pose
+        L->>S: MOVE x  - only if moved and over 45ms since last
+        L->>L: maybeRequestPropSettle then SETTLE propId
+        L->>P: layoutBubbleColumns and layoutNameLabels
+    end
+    SRV-->>S: MOVE, JOIN, LEAVE, SAY, ACTION, READING
+    S->>P: applyPeerState, sayMessage, playJump
+    Note over S,SRV: SAY and ACTION for self are echoed back - the self bubble shows immediately on submit (optimistic)
+  </div>
+</section>
+
+<!-- ───────────────────────── MODULE MAP ───────────────────────── -->
+<section id="modules">
+  <h2>3 · Module map</h2>
+  <p>Everything below lives in <code class="inline">public/widget/</code> unless marked <code class="inline">shared/</code>.</p>
+  <div class="modules">
+    <div class="mod"><b>townsquare.mjs</b><span>Public mount API + orchestration of all modules</span></div>
+    <div class="mod"><b>context.mjs</b><span>The <code>ctx</code> typedef — the one state bag</span></div>
+    <div class="mod"><b>protocol.mjs</b><span>Socket wire-up &amp; inbound message router</span></div>
+    <div class="mod"><b>movement.mjs</b><span>Input, the rAF game loop, prop settling</span></div>
+    <div class="mod"><b>chat.mjs</b><span>Speech bubbles, ghost stack, typing, slow-mode</span></div>
+    <div class="mod"><b>presence.mjs</b><span>self/peer state apply, status text</span></div>
+    <div class="mod"><b>dom.mjs / figure.mjs</b><span>Shell + avatar DOM, poses, props</span></div>
+    <div class="mod"><b>bubble-layout.mjs</b><span>Per-frame bubble &amp; name-tag positioning</span></div>
+    <div class="mod"><b>pow.mjs</b><span>SHA-256 proof-of-work solver (anti-bot)</span></div>
+    <div class="mod"><b>page-watch.mjs</b><span>"currently reading" tag, SPA nav watching</span></div>
+    <div class="mod"><b>expand.mjs</b><span>Fullscreen/expanded controller</span></div>
+    <div class="mod"><b>birds / clouds / connections / message-board</b><span>Ambient + edge features</span></div>
+    <div class="mod"><b>shared/site-config.mjs</b><span>Scene/style defaults, sanitizers (browser+Node)</span></div>
+  </div>
+</section>
+
+<!-- ───────────────────────── KEY CODE ───────────────────────── -->
+<section id="snippets">
+  <h2>4 · Key code, annotated</h2>
+
+  <!-- Snippet 1: ctx -->
+  <figure class="code">
+    <figcaption><b>4.1 The context object</b> — <span>townsquare.mjs · the single source of mount state</span></figcaption>
+<pre><span class="k">const</span> ctx = {
+  root, options, inlineConfig, serverOrigin, socketUrl, browserId,
+  peers,                          <span class="c">// Map&lt;id, PeerState&gt;</span>
+  chat: chatScope,                <span class="c">// per-mount { expandedView, speakOrder }</span>
+  sceneProps, propsById, birdPerchesById,
+  chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
+  self: { id: <span class="k">null</span>, x: spawnX, movingLeft: <span class="k">false</span>, targetX: <span class="k">null</span>,
+          pose: <span class="k">null</span>, propId: <span class="k">null</span>, displayName, color,
+          settlePropId: <span class="k">null</span>, settleRequested: <span class="k">false</span>,
+          avatar: createAvatar({ chatScope, <span class="c">/* … callbacks … */</span> }) },
+<span class="hl">  socket: localOnly
+    ? { readyState: WebSocket.CLOSED, close() {}, send() {} }   <span class="c">// stub</span>
+    : <span class="k">new</span> WebSocket(socketUrl),</span>
+  quiet: <span class="k">false</span>, expanded: <span class="k">false</span>, disposed: <span class="k">false</span>,
+  lastFrameAt: performance.now(), frameHandle: <span class="k">null</span>,
+  onKeyDown: () =&gt; {}, onStagePointerDown: () =&gt; {}, <span class="c">/* … */</span>
+};</pre>
+    <ul class="ann">
+      <li><b>One bag, no hidden closures.</b> Every module receives <code class="inline">ctx</code> and reads/writes it, so adding a feature module never requires rewiring the orchestrator.</li>
+      <li><b>The socket stub is the key trick.</b> In <code class="inline">preview</code>/<code class="inline">simulate</code> there is no server, so <code class="inline">socket</code> is a fake whose <code class="inline">readyState</code> is <code class="inline">CLOSED</code>. Every <code class="inline">send</code> site guards on <code class="inline">readyState === OPEN</code>, so the same code path runs with or without a server.</li>
+      <li><b>Self vs peers are asymmetric.</b> <code class="inline">self</code> carries input intent (<code class="inline">movingLeft</code>, <code class="inline">targetX</code>, send throttles, settle bookkeeping); peers are pure render targets driven by inbound messages.</li>
+      <li><b>Chat state is per-mount, not per-module.</b> <code class="inline">chat</code> holds <code class="inline">{ expandedView, speakOrder }</code> and is handed to every avatar (self and peers) via <code class="inline">createAvatar({ chatScope })</code>, so two widgets on one page keep independent bubble limits and speak-order counters.</li>
+    </ul>
+  </figure>
+
+  <!-- Snippet 2: tick -->
+  <figure class="code">
+    <figcaption><b>4.2 The game loop</b> — <span>movement.mjs · <code>tick(ctx, now)</code>, runs every animation frame</span></figcaption>
+<pre><span class="k">export function</span> <span class="f">tick</span>(ctx, now) {
+  <span class="k">if</span> (ctx.disposed) <span class="k">return</span>;                         <span class="c">// stop scheduling once destroyed</span>
+  <span class="k">const</span> dt = Math.min(<span class="n">0.05</span>, (now - ctx.lastFrameAt) / <span class="n">1000</span>); <span class="c">// clamp dt: tab-switch safe</span>
+  ctx.lastFrameAt = now;
+  <span class="c">// … quiet mode: freeze, reschedule, return …</span>
+
+<span class="hl">  <span class="k">const</span> held = Number(ctx.self.movingRight) - Number(ctx.self.movingLeft);
+  <span class="k">if</span> (held !== <span class="n">0</span>) ctx.self.targetX = <span class="k">null</span>;     <span class="c">// keys override a pending tap</span></span>
+  <span class="k">let</span> direction = held;
+  <span class="k">if</span> (direction === <span class="n">0</span> &amp;&amp; ctx.self.targetX !== <span class="k">null</span>) {
+    direction = (ctx.self.targetX - ctx.self.x) &lt; <span class="n">0</span> ? -<span class="n">1</span> : <span class="n">1</span>;
+    arrived = Math.abs(ctx.self.targetX - ctx.self.x) &lt;= MOVEMENT_SPEED * dt;
+  }
+
+  <span class="k">if</span> (direction !== <span class="n">0</span>) {
+    resetPropSettle(ctx); ctx.self.pose = <span class="k">null</span>;       <span class="c">// walking cancels any seat</span>
+    ctx.self.x = clampSelfX(ctx.self.x + direction * MOVEMENT_SPEED * dt);
+    renderAvatar(ctx.self.avatar, ctx.self.x);
+<span class="hl">    maybeSendMove(ctx, now);                          <span class="c">// throttled MOVE → server (frame clock)</span></span>
+  } <span class="k">else</span> {
+    maybeRequestPropSettle(ctx, now);                <span class="c">// idle near a bench? sit down</span>
+  }
+
+  layoutBubbleColumns(ctx.stage, presences, ctx.self.x, layoutCfg);
+  layoutNameLabels(ctx.stage, presences, ctx.self.x, layoutCfg);
+  ctx.frameHandle = requestAnimationFrame((n) =&gt; <span class="f">tick</span>(ctx, n));
+}</pre>
+    <ul class="ann">
+      <li><b><code class="inline">x</code> is normalized 0..1</b> (<code class="inline">MIN_X</code>..<code class="inline">MAX_X</code>), not pixels — the stage scales it. This is why pointer math divides by <code class="inline">rect.width</code> and movement is framerate-independent via <code class="inline">dt</code>.</li>
+      <li><b>Two input intents, one resolver.</b> Held arrow keys (<code class="inline">held</code>) always beat a tap destination (<code class="inline">targetX</code>); a tap walks until <code class="inline">arrived</code>. Movement and seating are mutually exclusive — any motion calls <code class="inline">resetPropSettle</code>.</li>
+      <li><b>The network is decoupled from the frame.</b> The loop renders every frame but only emits <code class="inline">MOVE</code> when moved &gt; 0.002 <em>and</em> &gt; <code class="inline">SEND_INTERVAL_MS</code> (45 ms) — see <code class="inline">maybeSendMove</code>. Peers interpolate from these sparse updates.</li>
+      <li><b>Prop settling is a debounce.</b> Standing in a bench's zone for <code class="inline">PROP_SETTLE_MS</code> (700 ms) sends <code class="inline">SETTLE</code>; the server arbitrates the seat and echoes it back via <code class="inline">applySelfState</code> (locally applied in preview/simulate).</li>
+    </ul>
+  </figure>
+
+  <!-- Snippet 3: router -->
+  <figure class="code">
+    <figcaption><b>4.3 The inbound router</b> — <span>protocol.mjs · <code>wireSocket(ctx)</code> message handler + reconnect</span></figcaption>
+<pre>socket.addEventListener(<span class="s">"message"</span>, (event) =&gt; {
+  <span class="k">let</span> message; <span class="k">try</span> { message = JSON.parse(event.data); } <span class="k">catch</span> { <span class="k">return</span>; }
+
+<span class="hl">  <span class="k">if</span> (message.type === MSG.CHALLENGE) {            <span class="c">// anti-bot proof-of-work gate</span>
+    solveChallenge(message).then((nonce) =&gt;
+      socket.send(JSON.stringify({ type: MSG.SOLVE, nonce })));
+    <span class="k">return</span>;
+  }</span>
+  <span class="k">if</span> (message.type === MSG.HELLO) {
+    self.id = message.id; saveBrowserSecret(message.browserSecret);
+    ctx.chatThrottleMs = message.chatThrottleMs ?? ctx.chatThrottleMs;
+    applySelfState(ctx, message);
+    <span class="k">for</span> (<span class="k">const</span> peer <span class="k">of</span> message.peers) applyPeerState(ctx, peer);
+    ctx.applyLiveConfig?.({ scene, connections, messageBoard }); <span class="c">// inline overrides win</span>
+    syncBirdsFromHello(ctx, message.birds);
+    <span class="k">return</span>;
+  }
+  <span class="k">if</span> (message.type === MSG.MOVE)    { <span class="c">/* self → bumpWalking, else applyPeerState */</span> }
+  <span class="k">if</span> (message.type === MSG.SAY)     { <span class="c">/* quiet? record to tray : sayMessage bubble */</span> }
+  <span class="k">if</span> (message.type === MSG.ACTION)  { <span class="c">/* JUMP / RAISE_HAND / HIGH_FIVE */</span> }
+  <span class="c">// … JOIN, LEAVE, TYPING, PROFILE, READING, BIRD, SCENE, CONNECTIONS …</span>
+  console.warn(<span class="s">"[townsquare] ignoring unknown message type:"</span>, message.type);
+});
+
+socket.addEventListener(<span class="s">"close"</span>, (event) =&gt; {
+  <span class="k">if</span> (ctx.disposed) <span class="k">return</span>;
+  <span class="k">const</span> permanent = PERMANENT_CLOSE_MESSAGES.get(event.reason || <span class="s">""</span>);
+<span class="hl">  <span class="k">if</span> (permanent) { setStatusMessage(ctx, permanent); <span class="k">return</span>; }  <span class="c">// kicked/blocked: don't retry</span>
+  ctx.reconnectTimer = setTimeout(connect, reconnectDelay);
+  reconnectDelay = Math.min(reconnectDelay * <span class="n">2</span>, MAX_RECONNECT_DELAY_MS);</span> <span class="c">// exp. backoff</span>
+});</pre>
+    <ul class="ann">
+      <li><b>Single flat dispatcher.</b> Every server frame is a typed JSON object routed by <code class="inline">message.type</code> against the frozen <code class="inline">MSG</code> map in <code class="inline">shared/protocol.mjs</code> — the one vocabulary both client and server import, so a rename fails loudly.</li>
+      <li><b>The connect handshake.</b> <code class="inline">open → INIT</code>, optional <code class="inline">CHALLENGE → SOLVE</code> loop, then <code class="inline">HELLO</code> carries id, peers, scene, birds, and slow-mode in one shot. Self messages are <em>echoed</em> — your own <code class="inline">MOVE</code> comes back and re-applies authoritative state.</li>
+      <li><b>Reconnect is exponential backoff (0.5s → 8s), reset on open.</b> A small allow-list of close reasons (<code class="inline">kicked</code>, <code class="inline">blocked</code>, <code class="inline">rate limited</code>…) is treated as permanent and stops retrying.</li>
+      <li><b>Unknown types are warned, not dropped silently</b> — a deliberate forward-compat choice that surfaces protocol drift in the console.</li>
+    </ul>
+  </figure>
+
+  <!-- Snippet 4: optimistic chat + slow mode -->
+  <figure class="code">
+    <figcaption><b>4.4 Optimistic chat with client-side slow-mode</b> — <span>chat.mjs · <code>submitChat(ctx)</code></span></figcaption>
+<pre><span class="k">export function</span> <span class="f">submitChat</span>(ctx) {
+  <span class="k">if</span> (ctx.quiet) <span class="k">return</span> <span class="k">false</span>;
+  <span class="k">const</span> text = ctx.self.avatar.input.value.trim().slice(<span class="n">0</span>, MESSAGE_MAX); <span class="c">// mirror server cap</span>
+  <span class="k">if</span> (!text) <span class="k">return</span> <span class="k">false</span>;
+
+  <span class="k">const</span> localOnly = ctx.options.preview === <span class="k">true</span> || ctx.options.simulate === <span class="k">true</span>;
+  <span class="k">if</span> (!localOnly &amp;&amp; ctx.socket.readyState !== WebSocket.OPEN) <span class="k">return</span> <span class="k">false</span>;
+
+<span class="hl">  <span class="k">const</span> cooldown = ctx.chatThrottleMs || <span class="n">0</span>;          <span class="c">// server-driven slow mode</span>
+  <span class="k">const</span> now = Date.now();
+  <span class="k">if</span> (cooldown &gt; <span class="n">0</span> &amp;&amp; now - ctx.self.lastSayAt &lt; cooldown) {
+    showCooldownHint(ctx, cooldown - (now - ctx.self.lastSayAt)); <span class="c">// "Wait 3s…"</span>
+    <span class="k">return</span> <span class="k">false</span>;                                  <span class="c">// keep text, stay open</span>
+  }</span>
+
+  <span class="k">if</span> (ctx.socket.readyState === WebSocket.OPEN)
+    ctx.socket.send(JSON.stringify({ type: MSG.SAY, text }));
+<span class="hl">  sayMessage(ctx.self.avatar, { text, at: now });    <span class="c">// optimistic: show now, don't wait</span></span>
+  ctx.self.lastSayAt = now;
+  ctx.self.avatar.input.value = <span class="s">""</span>;
+  <span class="k">return</span> <span class="k">true</span>;
+}</pre>
+    <ul class="ann">
+      <li><b>Optimistic echo.</b> The line is shown on your own figure immediately rather than waiting for the server's <code class="inline">SAY</code> round-trip — the inbound handler then de-dupes by ignoring/echoing your own id.</li>
+      <li><b>Slow-mode is enforced twice.</b> The server is authoritative, but the client also blocks early and shows a "Wait Ns…" hint so a dropped line never silently disappears behind the optimistic echo.</li>
+      <li><b>Return value is a protocol with the composer.</b> <code class="inline">false</code> means "I kept your text, stay open" (slow-mode / empty / no socket); the avatar composer uses it to decide whether to clear and close.</li>
+      <li><b>Bubbles self-expire.</b> <code class="inline">sayMessage</code> pushes onto a per-avatar <code class="inline">messages</code> stack where each bubble runs its own fade timer (<code class="inline">BUBBLE_TTL_MS</code>), and older ones become shrinking "ghosts" — see <code class="inline">renderGhostStack</code>.</li>
+    </ul>
+  </figure>
+</section>
+
+<!-- ───────────────────────── LIFECYCLE ───────────────────────── -->
+<section id="lifecycle">
+  <h2>5 · Lifecycle &amp; teardown</h2>
+  <p>
+    <code class="inline">destroy()</code> is thorough and worth using as the checklist of everything a mount owns:
+    it sets <code class="inline">ctx.disposed = true</code> (which short-circuits the rAF loop and the reconnect handler),
+    then unwinds in reverse: <code class="inline">stopGameLoop</code> → destroy birds/clouds/plugins → unwire keyboard, stage
+    pointer, help panel → teardown connections &amp; message board → remove button listeners → unwatch page
+    (restoring the patched <code class="inline">history.pushState/replaceState</code>) → clear reconnect/typing timers →
+    <code class="inline">socket.close()</code> → <code class="inline">root.replaceChildren()</code>.
+  </p>
+  <div class="panel">
+    <b>Mental model:</b> <code class="inline">mount</code> wires N subsystems onto one <code class="inline">ctx</code>; <code class="inline">destroy</code> must unwire all N.
+    Any new <code class="inline">addEventListener</code>, timer, or global patch added during mount is a teardown obligation —
+    that symmetry is the thing to protect when refactoring.
+  </div>
+</section>
+
+<!-- ───────────────────────── GOTCHAS ───────────────────────── -->
+<section id="gotchas">
+  <h2>6 · Gotchas, limits &amp; refactor targets</h2>
+  <p>No gotchas or refactor targets found as of today.</p>
+
+  <h3>Deliberate limits (by design — see <code class="inline">docs/architecture.md</code>)</h3>
+  <table>
+    <tr><th>Limit</th><th>Why it's fine for now</th></tr>
+    <tr><td>One Node process, in-memory scene state</td><td>Self-hosted single-site is the current target; hosted multi-site is a later layer <em>around</em> this contract.</td></tr>
+    <tr><td>Peers render from sparse <code>MOVE</code> updates (no interpolation buffer in widget)</td><td>45 ms send interval + CSS transitions are smooth enough; a jitter buffer is the upgrade path if it isn't.</td></tr>
+    <tr><td><code>solo</code> still opens a real socket</td><td>It only hides peers <em>client-side</em>; bandwidth is unchanged. Intentional, but note it for cost/perf.</td></tr>
+    <tr><td>Scene flashes empty then fills on hosted sites</td><td>Avoided on purpose via <code>EMPTY_SCENE_CONFIG</code> so stock props don't flash before the server scene arrives.</td></tr>
+  </table>
+</section>
+
+<footer>
+  Generated from a read of <code>public/townsquare.mjs</code> and <code>public/widget/*</code> (+ <code>shared/protocol.mjs</code>).
+  Source is the source of truth — file references reflect the current code.
+</footer>
+
+</div>
+</body>
+</html>

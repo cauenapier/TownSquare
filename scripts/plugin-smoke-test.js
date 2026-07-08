@@ -1,12 +1,88 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
+const net = require("net");
 const path = require("path");
+const { spawn } = require("child_process");
 const WebSocket = require("ws");
+const { handleSmokeSocketMessage, withTimeout } = require("./smoke-ws-helpers");
 
-const HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
-const WS_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
+// `let` so the self-contained harness can repoint them at a spawned server.
+let HTTP_ORIGIN = process.env.TOWNSQUARE_HTTP_ORIGIN || "http://127.0.0.1:8787";
+let WS_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
+let DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
+const CONNECT_TIMEOUT_MS = Number(process.env.SMOKE_CONNECT_TIMEOUT_MS || 15000);
+
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForHealth(origin, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${origin}/healthz`);
+      if (res.ok) return;
+    } catch {
+      // not up yet
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("managed server did not become healthy in time");
+}
+
+// Spawn a server with the test-feature contract fixture injected via
+// TOWNSQUARE_EXTRA_PLUGINS, so the plugin contract is exercised end-to-end.
+async function startManagedServer() {
+  const port = await findFreePort();
+  const host = "127.0.0.1";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "townsquare-plugin-smoke-"));
+  const httpOrigin = `http://${host}:${port}`;
+  const fixture = path.join(__dirname, "..", "server", "fixtures", "feature-plugin.js");
+
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+    env: {
+      ...process.env,
+      HOST: host,
+      PORT: String(port),
+      DATA_DIR: dataDir,
+      ALLOWED_ORIGINS: httpOrigin,
+      MIN_HUMAN_SAY_MS: "0",
+      POW_DIFFICULTY_BITS: process.env.POW_DIFFICULTY_BITS || "1",
+      TOWNSQUARE_EXTRA_PLUGINS: fixture,
+    },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+
+  HTTP_ORIGIN = httpOrigin;
+  WS_URL = `ws://${host}:${port}/live`;
+  DATA_DIR = dataDir;
+
+  try {
+    await waitForHealth(httpOrigin);
+  } catch (error) {
+    child.kill("SIGKILL");
+    throw error;
+  }
+
+  return () => {
+    child.kill("SIGTERM");
+    try {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+  };
+}
 
 async function post(pathname, body) {
   const response = await fetch(`${HTTP_ORIGIN}${pathname}`, {
@@ -17,24 +93,57 @@ async function post(pathname, body) {
   return { response, body: await response.json() };
 }
 
-function connect(siteKey) {
-  return new Promise((resolve, reject) => {
+function connect(siteKey, { browserId = "plugin-smoke", x = 0.5 } = {}) {
+  const label = "connect plugin-smoke";
+  const promise = new Promise((resolve, reject) => {
     const url = new URL(WS_URL);
     url.searchParams.set("siteKey", siteKey);
     const ws = new WebSocket(url, { headers: { Origin: HTTP_ORIGIN } });
     const seen = [];
-    ws.on("open", () => ws.send(JSON.stringify({ type: "init", browserId: "plugin-smoke", x: 0.5 })));
+    let joined = false;
+    ws.on("open", () => ws.send(JSON.stringify({ type: "init", browserId, x })));
     ws.on("message", (raw) => {
-      const message = JSON.parse(String(raw));
-      seen.push(message);
-      if (message.type === "hello") resolve({ ws, seen, hello: message });
+      let message;
+      try {
+        message = JSON.parse(String(raw));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      try {
+        handleSmokeSocketMessage(ws, message, {
+          seen,
+          onHello: (hello) => {
+            joined = true;
+            resolve({ ws, seen, hello });
+          },
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
     ws.on("error", reject);
+    ws.on("close", (code, reason) => {
+      if (!joined) {
+        reject(new Error(`${label} closed before hello (${code}: ${String(reason)})`));
+      }
+    });
   });
+  return withTimeout(promise, CONNECT_TIMEOUT_MS, label);
 }
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function waitForValue(read, predicate, message, { timeout = 2500, interval = 50 } = {}) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const value = read();
+    if (predicate(value)) return value;
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  throw new Error(message);
 }
 
 async function main() {
@@ -56,6 +165,36 @@ async function main() {
     before.body.pluginModules?.some((entry) => entry.name === "test-feature"),
     "admin response did not include the admin module",
   );
+  const labelledBeforeToggle = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    plugin: "test-labelled",
+    action: "update",
+    input: { value: "before-toggle" },
+  });
+  assert(labelledBeforeToggle.response.status === 400, "labelled plugin action should be rejected while disabled");
+
+  const toggleLabelled = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    action: "setPluginEnabled",
+    name: "test-labelled",
+    enabled: true,
+  });
+  assert(toggleLabelled.response.ok, toggleLabelled.body.error || "labelled plugin toggle failed");
+
+  const labelledAfterToggle = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    plugin: "test-labelled",
+    action: "update",
+    input: { value: "after-toggle" },
+  });
+  assert(labelledAfterToggle.response.ok, labelledAfterToggle.body.error || "labelled plugin action failed after toggle");
+  assert(
+    labelledAfterToggle.body.plugins?.["test-labelled"]?.value === "after-toggle",
+    "labelled plugin action data was not returned after toggle",
+  );
 
   const updated = await post("/api/admin/action", {
     siteKey,
@@ -75,15 +214,55 @@ async function main() {
     "plugin action did not broadcast updated visitor data",
   );
 
-  const persisted = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "sites.json"), "utf8"));
-  const savedSite = persisted.sites.find((site) => site.siteKey === siteKey);
+  const mover = await connect(siteKey, { browserId: "plugin-smoke-mover", x: 0.25 });
+  const joinForMover = await waitForValue(
+    () => visitor.seen.find((message) => message.type === "join" && message.peer?.id === mover.hello.id),
+    (message) => message?.peer?.plugins?.["test-feature"]?.hat === "top-hat",
+    "join did not include plugin data for mover",
+  );
+  assert(joinForMover.peer.plugins?.["test-feature"]?.hat === "top-hat", "join did not include plugin data for mover");
+
+  mover.ws.send(JSON.stringify({ type: "move", x: 0.75 }));
+  const moveForMover = await waitForValue(
+    () => visitor.seen.find((message) => message.type === "move" && message.id === mover.hello.id && message.x === 0.75),
+    (message) => message && !Object.hasOwn(message, "plugins"),
+    "move included plugin data or did not arrive",
+  );
+  assert(!Object.hasOwn(moveForMover, "plugins"), "move should not include plugin data");
+  mover.ws.close();
+
+  // Registry writes are debounced (~1s), so poll for the eventual persist
+  // rather than reading the file immediately.
+  const savedSite = await waitForValue(
+    () => {
+      try {
+        const persisted = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "sites.json"), "utf8"));
+        return persisted.sites.find((site) => site.siteKey === siteKey);
+      } catch {
+        return null;
+      }
+    },
+    (site) => site?.plugins?.["test-feature"]?.hat === "top-hat",
+    "plugin data was not persisted",
+  );
   assert(savedSite?.plugins?.["test-feature"]?.hat === "top-hat", "plugin data was not persisted");
 
   visitor.ws.close();
   console.log("Plugin smoke test passed.");
 }
 
-main().catch((error) => {
-  console.error(error.message);
+async function run() {
+  const external = Boolean(process.env.TOWNSQUARE_HTTP_ORIGIN);
+  if (!external && !process.env.POW_DIFFICULTY_BITS) process.env.POW_DIFFICULTY_BITS = "1";
+  const cleanup = external ? null : await startManagedServer();
+  try {
+    await main();
+  } finally {
+    cleanup?.();
+  }
+}
+
+run().catch((error) => {
+  console.error(error.stack || error.message);
   process.exitCode = 1;
 });

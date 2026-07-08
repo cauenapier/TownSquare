@@ -3,10 +3,13 @@
  */
 
 import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } from "./connections.mjs";
-import { layoutBubbleColumns, layoutConfigFor } from "./bubble-layout.mjs";
+import { layoutStage, layoutConfigFor } from "./bubble-layout.mjs";
 import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
-import { findSettleProp } from "../shared/scene-prop-geometry.mjs";
+import { findSettleProp } from "../../lib/scene-prop-geometry.mjs";
+import { MSG, GESTURE } from "../../lib/protocol.mjs";
 import { clamp } from "./math.mjs";
+import { sendToServer } from "./protocol.mjs";
+import { isTypingTarget } from "./utils.mjs";
 import {
   clearPresencePose,
   needsStandUp,
@@ -18,7 +21,7 @@ import {
   setWalking,
   updatePose,
   updatePropEffects,
-} from "./dom.mjs";
+} from "./gestures.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
@@ -42,7 +45,7 @@ export function resetPropSettle(ctx) {
 }
 
 /**
- * @param {import("../shared/scene-props.mjs").SceneProp} prop
+ * @param {import("../../lib/scene-props.mjs").SceneProp} prop
  * @param {number} requestedX
  * @returns {number}
  */
@@ -57,7 +60,7 @@ function findNearestSeatX(prop, requestedX) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {import("../shared/scene-props.mjs").SceneProp} prop
+ * @param {import("../../lib/scene-props.mjs").SceneProp} prop
  */
 function applyLocalPropSettle(ctx, prop) {
   const { self } = ctx;
@@ -76,7 +79,7 @@ function applyLocalPropSettle(ctx, prop) {
  * @param {number} now
  */
 export function maybeRequestPropSettle(ctx, now) {
-  const { self, socket } = ctx;
+  const { self } = ctx;
   if (self.pose) return;
 
   const prop = findSettleProp(ctx.sceneProps, self.x);
@@ -95,33 +98,34 @@ export function maybeRequestPropSettle(ctx, now) {
     return;
   }
 
-  if (ctx.options.preview === true || ctx.options.simulate === true) {
+  if (ctx.localOnly) {
     applyLocalPropSettle(ctx, prop);
     return;
   }
 
-  if (socket.readyState !== WebSocket.OPEN) return;
-
-  self.settleRequested = true;
-  socket.send(JSON.stringify({ type: "settle", propId: prop.id }));
+  if (sendToServer(ctx, MSG.SETTLE, { propId: prop.id })) {
+    self.settleRequested = true;
+  }
 }
 
 /**
  * @param {WidgetContext} ctx
+ * @param {number} now Frame timestamp (`performance.now()`), shared with the loop
+ *   so send-throttle timing uses the same clock as prop-settle and frame timing.
  */
-export function maybeSendMove(ctx) {
-  const { self, socket } = ctx;
-  const now = Date.now();
+export function maybeSendMove(ctx, now) {
+  const { self } = ctx;
   const movedEnough = Math.abs(self.x - self.lastSentX) > 0.002;
   const waitedLongEnough = now - self.lastSendAt > SEND_INTERVAL_MS;
 
-  if (socket.readyState !== WebSocket.OPEN || !movedEnough || !waitedLongEnough) {
+  if (!movedEnough || !waitedLongEnough) {
     return;
   }
 
-  self.lastSentX = self.x;
-  self.lastSendAt = now;
-  socket.send(JSON.stringify({ type: "move", x: self.x }));
+  if (sendToServer(ctx, MSG.MOVE, { x: self.x })) {
+    self.lastSentX = self.x;
+    self.lastSendAt = now;
+  }
 }
 
 // Block re-jumping until the current jump animation finishes.
@@ -131,26 +135,11 @@ const SWIPE_THRESHOLD_PX = 12;
 const SWIPE_CLICK_SUPPRESSION_MS = 500;
 
 /**
- * @param {EventTarget | null} target
- * @returns {boolean}
- */
-function isTypingTarget(target) {
-  return target instanceof HTMLInputElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLSelectElement
-    || Boolean(target instanceof Element && target.closest("[contenteditable]"));
-}
-
-/**
  * @param {WidgetContext} ctx
  */
 function clearSelfPoseForAction(ctx) {
   resetPropSettle(ctx);
-  ctx.self.pose = null;
-  ctx.self.propId = null;
-  updatePose(ctx.self.avatar, ctx.self.pose);
-  updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
-  setWalking(ctx.self.avatar, false);
+  clearPresencePose(ctx.self, ctx.sceneProps);
 }
 
 /**
@@ -166,9 +155,7 @@ export function triggerJump(ctx) {
   clearSelfPoseForAction(ctx);
   playJump(ctx.self.avatar);
 
-  if (ctx.socket.readyState === WebSocket.OPEN) {
-    ctx.socket.send(JSON.stringify({ type: "action", action: "jump" }));
-  }
+  sendToServer(ctx, MSG.ACTION, { action: GESTURE.JUMP });
 }
 
 /**
@@ -204,17 +191,13 @@ export function triggerHighFive(ctx) {
     clearSelfPoseForAction(ctx);
     clearPresencePose(peer, ctx.sceneProps);
     playHighFivePair(ctx.self, peer, standUpFirst);
-    if (ctx.socket.readyState === WebSocket.OPEN) {
-      ctx.socket.send(JSON.stringify({ type: "action", action: "high-five", targetId: peer.id }));
-    }
+    sendToServer(ctx, MSG.ACTION, { action: GESTURE.HIGH_FIVE, targetId: peer.id });
     return;
   }
 
   clearSelfPoseForAction(ctx);
   playRaisedHand(ctx.self.avatar);
-  if (ctx.socket.readyState === WebSocket.OPEN) {
-    ctx.socket.send(JSON.stringify({ type: "action", action: "raise-hand" }));
-  }
+  sendToServer(ctx, MSG.ACTION, { action: GESTURE.RAISE_HAND });
 }
 
 /**
@@ -252,9 +235,7 @@ export function tick(ctx, now) {
 
   if (direction !== 0) {
     resetPropSettle(ctx);
-    ctx.self.pose = null;
-    ctx.self.propId = null;
-    updatePose(ctx.self.avatar, ctx.self.pose);
+    clearPresencePose(ctx.self, ctx.sceneProps);
     ctx.self.x = clampSelfX(arrived ? ctx.self.targetX : ctx.self.x + direction * MOVEMENT_SPEED * dt);
     if (arrived) {
       ctx.self.targetX = null;
@@ -263,7 +244,7 @@ export function tick(ctx, now) {
     setFacing(ctx.self.avatar, direction < 0);
     updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
     setWalking(ctx.self.avatar, true);
-    maybeSendMove(ctx);
+    maybeSendMove(ctx, now);
   } else {
     setWalking(ctx.self.avatar, false);
     updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
@@ -272,12 +253,11 @@ export function tick(ctx, now) {
 
   updateConnectionProximity(ctx);
 
-  layoutBubbleColumns(
-    ctx.stage,
-    ctx.options.preview === true || ctx.options.solo === true ? [ctx.self] : [ctx.self, ...ctx.peers.values()],
-    ctx.self.x,
-    layoutConfigFor(ctx.options.layout, ctx.expanded),
-  );
+  const presences = ctx.preview || ctx.solo
+    ? [ctx.self]
+    : [ctx.self, ...ctx.peers.values()];
+  const layoutCfg = layoutConfigFor(ctx.options.layout, ctx.expanded);
+  layoutStage(ctx.stage, presences, ctx.self.x, layoutCfg);
 
   ctx.frameHandle = requestAnimationFrame((nextNow) => tick(ctx, nextNow));
 }
@@ -301,6 +281,67 @@ export function stopGameLoop(ctx) {
 }
 
 /**
+ * Run the game loop only while the widget is on screen.
+ *
+ * `requestAnimationFrame` keeps firing for any visible tab, even when the mount
+ * is scrolled out of view — and blog embeds routinely sit below the fold, so
+ * the layout work in `tick` would otherwise burn CPU for a widget nobody can
+ * see. An IntersectionObserver on the shell stops the loop when it leaves the
+ * viewport and restarts it (with a fresh frame clock, so `dt` never jumps) when
+ * any part re-enters. Peer positions still update from incoming messages while
+ * paused; the loop just stops re-laying-out an invisible stage.
+ *
+ * @param {WidgetContext} ctx
+ * @returns {() => void} Disposer that disconnects the observer and stops the loop.
+ */
+export function wireGameLoop(ctx) {
+  let running = false;
+  const start = () => {
+    if (running || ctx.disposed) return;
+    running = true;
+    startGameLoop(ctx);
+  };
+  const stop = () => {
+    if (!running) return;
+    running = false;
+    stopGameLoop(ctx);
+  };
+
+  // Without IntersectionObserver support, keep the previous always-on behaviour.
+  if (typeof IntersectionObserver !== "function") {
+    start();
+    return stop;
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) start();
+    else stop();
+  });
+  observer.observe(ctx.app);
+
+  return () => {
+    observer.disconnect();
+    stop();
+  };
+}
+
+/**
+ * Single-key gesture shortcuts, all gated by the same "no modifier, no repeat"
+ * guard in the keydown handler. Keyed by the lower-cased `event.key`.
+ *
+ * @type {Record<string, (ctx: WidgetContext, event: KeyboardEvent) => void>}
+ */
+const KEY_SHORTCUTS = {
+  j: (ctx) => triggerJump(ctx),
+  h: (ctx) => triggerHighFive(ctx),
+  t: (ctx, event) => {
+    // The keystroke would otherwise land in the input we're about to focus.
+    event.preventDefault();
+    ctx.self.avatar.openComposer?.();
+  },
+};
+
+/**
  * @param {WidgetContext} ctx
  */
 export function wireKeyboard(ctx) {
@@ -316,16 +357,9 @@ export function wireKeyboard(ctx) {
         openConnectionsModal(ctx, side);
       }
     }
-    if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "j") {
-      triggerJump(ctx);
-    }
-    if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "h") {
-      triggerHighFive(ctx);
-    }
-    if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "t") {
-      // The keystroke would otherwise land in the input we're about to focus.
-      event.preventDefault();
-      ctx.self.avatar.openComposer?.();
+    if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const shortcut = KEY_SHORTCUTS[event.key.toLowerCase()];
+      if (shortcut) shortcut(ctx, event);
     }
   };
 
@@ -394,7 +428,11 @@ export function wireStagePointer(ctx) {
     if (rect.width <= 0) return;
     if (!swipe.dragging) {
       swipe.dragging = true;
-      ctx.stage.setPointerCapture(event.pointerId);
+      try {
+        ctx.stage.setPointerCapture(event.pointerId);
+      } catch {
+        // The browser may have already taken over the touch gesture.
+      }
     }
     ctx.self.targetX = clampSelfX(swipe.startX + deltaX / rect.width);
   };

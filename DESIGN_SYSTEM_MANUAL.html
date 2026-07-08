@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TownSquare Design System Manual</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      color: #2a2926;
+      background: #f5f3f1;
+      padding: 0;
+      margin: 0;
+    }
+    .page-wrapper {
+      display: flex;
+      min-height: 100vh;
+    }
+    .sidebar {
+      width: 260px;
+      background: #fdf8f4;
+      border-right: 1px solid #e6e1d9;
+      padding: 24px 16px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      font-size: 0.95em;
+    }
+    .sidebar h2 {
+      font-size: 0.85em;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #7c766c;
+      margin: 20px 0 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e6e1d9;
+    }
+    .sidebar h2:first-child {
+      border-top: none;
+      margin-top: 0;
+    }
+    .sidebar nav a {
+      display: block;
+      padding: 8px 12px;
+      margin: 4px 0;
+      border-radius: 6px;
+      color: #2a2926;
+      text-decoration: none;
+      transition: background 120ms;
+    }
+    .sidebar nav a:hover {
+      background: #f0ebe3;
+    }
+    .sidebar nav a.active {
+      background: #e6e1d9;
+      font-weight: 600;
+    }
+    .content {
+      flex: 1;
+      padding: 48px;
+      max-width: 1200px;
+    }
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 8px;
+      color: #2a2926;
+    }
+    .subtitle {
+      color: #7c766c;
+      font-size: 1.1em;
+      margin-bottom: 40px;
+    }
+    h2 {
+      font-size: 1.8em;
+      margin: 48px 0 20px;
+      border-bottom: 2px solid #e6e1d9;
+      padding-bottom: 12px;
+    }
+    h3 {
+      font-size: 1.3em;
+      margin: 28px 0 16px;
+      color: #2a2926;
+    }
+    h4 {
+      font-size: 1.05em;
+      margin: 16px 0 8px;
+      color: #2a2926;
+      font-weight: 600;
+    }
+    section {
+      background: white;
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 32px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    section:first-of-type {
+      margin-top: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e6e1d9;
+    }
+    table th {
+      background: #fafbf9;
+      font-weight: 600;
+      font-size: 0.95em;
+    }
+    table tr:hover {
+      background: #fafbf9;
+    }
+    .token-swatch {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 1px solid #e6e1d9;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 8px 0;
+    }
+    .color-swatch {
+      flex: 0 0 60px;
+      height: 60px;
+      border-radius: 8px;
+      border: 1px solid #e6e1d9;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 8px;
+      font-size: 0.75em;
+      color: #7c766c;
+    }
+    .button-demo {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 16px 0;
+    }
+    .demo-button {
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      border: 1px solid rgba(170, 160, 150, 0.76);
+      border-radius: 8px;
+      background: rgba(245, 243, 241, 0.78);
+      color: #8b8480;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .demo-button--sm {
+      width: 30px;
+      height: 30px;
+    }
+    .demo-button--md {
+      width: 42px;
+      height: 42px;
+      background: rgba(245, 243, 241, 0.84);
+      font-weight: 700;
+      font-size: 18px;
+    }
+    .demo-button:hover {
+      color: #2a2926;
+      border-color: #aaa096;
+      background: #f5f3f1;
+    }
+    .name-tag-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      padding: 5px 11px;
+      border-radius: 11px;
+      background: #fdf8f4;
+      box-shadow: 0 9px 16px -10px rgba(60, 40, 20, 0.3), 0 2px 5px -2px rgba(60, 40, 20, 0.16);
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #c8641f;
+    }
+    .name-tag-demo::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: -46px;
+      width: 46px;
+      height: 100%;
+    }
+    .name-tag-demo__dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #c8641f;
+    }
+    .name-tag-demo__edit {
+      position: absolute;
+      left: calc(100% + 8px);
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .name-tag-demo__edit svg {
+      width: 13px;
+      height: 13px;
+    }
+    .name-tag-demo--editing {
+      min-width: 165px;
+      height: 40px;
+      color: #2a2926;
+    }
+    .name-tag-demo__big-dot {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #fdf8f4;
+      border-radius: 999px;
+      background: #c8641f;
+      box-shadow: 0 0 0 1px #e6e1d9, inset 0 0 0 1px rgba(42, 41, 38, 0.18);
+    }
+    .name-tag-demo__input {
+      width: 112px;
+      height: 30px;
+      border: 1px solid #e6e1d9;
+      border-radius: 7px;
+      background: #fafbf9;
+      padding: 0 2px;
+      font: 520 13px/1.2 inherit;
+    }
+    .info-box {
+      background: #eef3f8;
+      border-left: 4px solid #4a8fd4;
+      padding: 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+    .info-box h4 {
+      margin-top: 0;
+      color: #1a5294;
+    }
+    .code-block {
+      background: #fafbf9;
+      border: 1px solid #e6e1d9;
+      border-radius: 6px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: "Courier New", monospace;
+      font-size: 0.9em;
+      line-height: 1.5;
+      margin: 16px 0;
+    }
+    .checklist {
+      list-style: none;
+      padding: 0;
+    }
+    .checklist li {
+      padding: 8px 0;
+      padding-left: 28px;
+      position: relative;
+    }
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #2d6e4e;
+      font-weight: 700;
+    }
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 16px 0;
+    }
+    .comparison-item {
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #e6e1d9;
+    }
+    .comparison-before {
+      background: #fef3f2;
+    }
+    .comparison-after {
+      background: #f0f9f4;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin: 16px 0;
+    }
+    .card {
+      background: #fafbf9;
+      border: 1px solid #e6e1d9;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.85em;
+      font-weight: 600;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+    .tag-color { background: #dbe9f1; color: #1a5294; }
+    .tag-layout { background: #e8d5f2; color: #6b2d7f; }
+    .tag-type { background: #f5e5d3; color: #8b5a0c; }
+    .tag-component { background: #d4e8d4; color: #2d5a2d; }
+    .tag-motion { background: #f0dfe3; color: #6b3a45; }
+    .tag-a11y { background: #e8e4f0; color: #3d2e5f; }
+    @media (max-width: 1024px) {
+      .page-wrapper { flex-direction: column; }
+      .sidebar { width: 100%; height: auto; position: relative; border-right: none; border-bottom: 1px solid #e6e1d9; }
+      .content { padding: 32px 24px; }
+      .comparison { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <div class="sidebar">
+      <h1 style="font-size: 1.3em; margin: 0 0 24px; color: #2a2926;">Design System</h1>
+      <h2>Foundation</h2>
+      <nav>
+        <a href="#colors">Color Palette</a>
+        <a href="#tokens">Design Tokens</a>
+        <a href="#typography">Typography</a>
+      </nav>
+      <h2>Layout</h2>
+      <nav>
+        <a href="#zones">Zone Architecture</a>
+        <a href="#spacing">Spacing System</a>
+        <a href="#responsive">Responsive Design</a>
+      </nav>
+      <h2>Components</h2>
+      <nav>
+        <a href="#buttons">Buttons</a>
+        <a href="#forms">Forms</a>
+        <a href="#identity-tags">Identity Tags</a>
+        <a href="#dialogs">Dialogs & Modals</a>
+        <a href="#lists">Lists & Cards</a>
+      </nav>
+      <h2>Interaction</h2>
+      <nav>
+        <a href="#motion">Motion & Animation</a>
+        <a href="#states">States & Feedback</a>
+      </nav>
+      <h2>Standards</h2>
+      <nav>
+        <a href="#accessibility">Accessibility</a>
+        <a href="#best-practices">Best Practices</a>
+      </nav>
+    </div>
+
+    <div class="content">
+      <h1>🎨 TownSquare Design System Manual</h1>
+      <p class="subtitle">Complete reference for building consistent, accessible experiences in TownSquare</p>
+
+      <!-- COLORS & TOKENS -->
+      <section id="colors">
+        <h2><span class="tag tag-color">FOUNDATION</span> Color Palette</h2>
+
+        <p>TownSquare uses a warm, humanistic palette with semantic naming. The system emphasizes accessibility (WCAG AAA contrast) and performs across both light and dark themes.</p>
+
+        <h3>Light Theme (Default)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Token</th>
+              <th>Value</th>
+              <th>Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="token-swatch" style="background: #e4e2dd;"></span> Scene</td>
+              <td><code>--scene</code></td>
+              <td>#e4e2dd</td>
+              <td>Base neutral background</td>
+            </tr>
+            <tr>
+              <td><span class="token-swatch" style="background: #fdf8f4;"></span> Surface</td>
+              <td><code>--surface</code></td>
+              <td>#fdf8f4</td>
+              <td>Interactive components</td>
+            </tr>
+            <tr>
+              <td><span class="token-swatch" style="background: #2a2926;"></span> Ink</td>
+              <td><code>--ink</code></td>
+              <td>#2a2926</td>
+              <td>Primary text (12.5:1 contrast)</td>
+            </tr>
+            <tr>
+              <td><span class="token-swatch" style="background: #c8641f;"></span> Accent</td>
+              <td><code>--you</code></td>
+              <td>#c8641f</td>
+              <td>User mark, interactive elements</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Dark Theme</h3>
+        <p>Automatically applied via <code>prefers-color-scheme: dark</code> or <code>data-townsquare-theme="dark"</code>. The palette inverts with identical contrast ratios.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Light</th>
+              <th>Dark</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>--scene</code></td>
+              <td>#e4e2dd</td>
+              <td>#242521</td>
+            </tr>
+            <tr>
+              <td><code>--surface</code></td>
+              <td>#fdf8f4</td>
+              <td>#24231f</td>
+            </tr>
+            <tr>
+              <td><code>--ink</code></td>
+              <td>#2a2926</td>
+              <td>#f2eee6</td>
+            </tr>
+            <tr>
+              <td><code>--you</code></td>
+              <td>#c8641f (terracotta)</td>
+              <td>#df8a43 (warmer orange)</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- TOKENS -->
+      <section id="tokens">
+        <h2><span class="tag tag-color">FOUNDATION</span> Design Tokens</h2>
+
+        <h3>Shadow & Elevation</h3>
+        <div class="code-block">/* Basic elevation (buttons, dropdowns) */
+--bshadow: 0 9px 16px -10px rgba(60, 40, 20, 0.3),
+           0 2px 5px -2px rgba(60, 40, 20, 0.16);
+
+/* Large elevation (trays, modals) */
+--tray-shadow: 0 14px 30px -16px rgba(60, 40, 20, 0.42),
+               0 3px 8px -4px rgba(60, 40, 20, 0.2);</div>
+
+        <h3>Border Radius Scale</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Value</th>
+              <th>Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>--r</code></td>
+              <td>20px</td>
+              <td>Large components (bubbles, modals)</td>
+            </tr>
+            <tr>
+              <td><code>--r-sm</code></td>
+              <td>13px</td>
+              <td>Standard (buttons, inputs)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="info-box">
+          <h4>Token Scope</h4>
+          <p>All tokens are scoped to <code>#townsquare-root</code> so they don't leak into host pages. This enables clean embedding in any website.</p>
+        </div>
+      </section>
+
+      <!-- TYPOGRAPHY -->
+      <section id="typography">
+        <h2><span class="tag tag-type">FOUNDATION</span> Typography</h2>
+
+        <h3>Font Stack</h3>
+        <p><strong>Widget:</strong> <code>"Hanken Grotesk", ui-sans-serif, system-ui, sans-serif</code></p>
+        <p>No web font is loaded in the widget CSS—it ships in every embed. Hanken Grotesk is optional (host can load it); fallback is the system UI font.</p>
+
+        <h3>Type Scale</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Level</th>
+              <th>Size</th>
+              <th>Weight</th>
+              <th>Use Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Speech</td>
+              <td>12px</td>
+              <td>480</td>
+              <td>Chat bubbles, messages</td>
+            </tr>
+            <tr>
+              <td>Name</td>
+              <td>13.5px</td>
+              <td>600</td>
+              <td>User labels, nameplates</td>
+            </tr>
+            <tr>
+              <td>Time</td>
+              <td>12px</td>
+              <td>500</td>
+              <td>Timestamps (tabular-nums)</td>
+            </tr>
+            <tr>
+              <td>Input</td>
+              <td>17px</td>
+              <td>460</td>
+              <td>Composer text input</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Color & Contrast</h3>
+        <ul class="checklist">
+          <li>Primary text (<code>--ink</code>): 12.5:1 ratio — WCAG AAA</li>
+          <li>Secondary text (<code>--ink-soft</code>): 6:1 ratio — WCAG AA</li>
+          <li>Disabled text (<code>--ink-faint</code>): 3:1 ratio — reduced prominence</li>
+        </ul>
+      </section>
+
+      <!-- ZONES -->
+      <section id="zones">
+        <h2><span class="tag tag-layout">LAYOUT</span> Zone Architecture</h2>
+
+        <p>TownSquare's layout is built on three independent vertical zones, each with specific height and z-index:</p>
+
+        <div class="code-block">┌─────────────────────────────────┐
+│   CONTROLS (UI)  z-index: 2B+1 │  ← expand, help buttons
+│                                 │
+│ ┌─────────────────────────────┐ │
+│ │   STAGE (sky)   180px       │ │  ← scene, figures, props
+│ │                             │ │
+│ └─────────────────────────────┘ │
+│ ────────────────────────────────  ← ground line (1px border)
+│       GROUND (nameplate) 40px    │  ← name tags, presence
+│ ────────────────────────────────
+│    ACTION-ZONE (toolbar) 60px    │  ← composer, action buttons
+└─────────────────────────────────┘</div>
+
+        <h3>Height Variables</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Value</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>--ts-zone-stage-height</code></td>
+              <td>180px</td>
+              <td>Scene canvas (flex in expanded mode)</td>
+            </tr>
+            <tr>
+              <td><code>--ts-zone-ground-height</code></td>
+              <td>40px</td>
+              <td>Nameplate band</td>
+            </tr>
+            <tr>
+              <td><code>--ts-zone-action-height</code></td>
+              <td>60px</td>
+              <td>Toolbar area</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Coordinate System</h3>
+        <p>Props anchor to the <strong>ground plane</strong> at <code>--ts-ground-level: 0px</code>. This is the stage's bottom edge—the walkable plane for figures. Positioning uses <code>transform</code> (not top/left) to avoid layout thrashing.</p>
+      </section>
+
+      <!-- SPACING -->
+      <section id="spacing">
+        <h2><span class="tag tag-layout">LAYOUT</span> Spacing System</h2>
+
+        <h3>Inset & Gap Tokens</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Value</th>
+              <th>Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>--ts-controls-inset</code></td>
+              <td>8px (10px expanded)</td>
+              <td>Top-right control panel distance</td>
+            </tr>
+            <tr>
+              <td><code>--ts-controls-gap</code></td>
+              <td>6px</td>
+              <td>Gap between control buttons</td>
+            </tr>
+            <tr>
+              <td><code>--ts-toolbar-inset</code></td>
+              <td>10px</td>
+              <td>Toolbar horizontal margin</td>
+            </tr>
+            <tr>
+              <td><code>--ts-toolbar-gap</code></td>
+              <td>8px</td>
+              <td>Gap between toolbar items</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="info-box">
+          <h4>Touch Mode</h4>
+          <p>On touch devices (<code>@media (pointer: coarse)</code>), control buttons enlarge from 30×30px to 40×40px, and tap zones expand to 20-34px. Status row adjustments prevent overlap.</p>
+        </div>
+      </section>
+
+      <!-- RESPONSIVE -->
+      <section id="responsive">
+        <h2><span class="tag tag-layout">LAYOUT</span> Responsive Design</h2>
+
+        <h3>Modes</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Stage Height</th>
+              <th>Trigger</th>
+              <th>Key Changes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Compact</strong> (default)</td>
+              <td>180px fixed</td>
+              <td>Normal widget</td>
+              <td>Floating composer, action buttons on right</td>
+            </tr>
+            <tr>
+              <td><strong>Expanded</strong></td>
+              <td>flex (full height)</td>
+              <td>User clicks expand button</td>
+              <td>Fixed fullscreen, docked toolbar, larger 10px insets</td>
+            </tr>
+            <tr>
+              <td><strong>Quiet</strong></td>
+              <td>Hidden</td>
+              <td>Toggle switch off</td>
+              <td>Only nameplate visible (46px), no scene</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Container Queries</h3>
+        <p>Speech bubbles use <code>container-type: inline-size</code> to cap width based on widget width, not viewport:</p>
+        <ul class="checklist">
+          <li>Wide stages (460px+): <code>72cqw</code> max-width</li>
+          <li>Narrow stages (&lt;460px): <code>52cqw</code> max-width</li>
+        </ul>
+      </section>
+
+      <!-- BUTTONS -->
+      <section id="buttons">
+        <h2><span class="tag tag-component">COMPONENTS</span> Buttons</h2>
+
+        <h3>Unified Button System</h3>
+        <p>All buttons use the base <code>.townsquare__button</code> class with size variants.</p>
+
+        <h4>Small Buttons (30×30, 40×40 on touch)</h4>
+        <div class="button-demo">
+          <button class="demo-button demo-button--sm" title="Edit">✎</button>
+          <button class="demo-button demo-button--sm" title="Expand">⛶</button>
+          <button class="demo-button demo-button--sm">?</button>
+          <span style="color: #7c766c; font-size: 0.9em;">Expand, Help, Edit buttons</span>
+        </div>
+
+        <h4>Medium Buttons (42×42)</h4>
+        <div class="button-demo">
+          <button class="demo-button demo-button--md">↑</button>
+          <button class="demo-button demo-button--md">🙌</button>
+          <span style="color: #7c766c; font-size: 0.9em;">Jump & High-five actions</span>
+        </div>
+
+        <h3>Button States</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>State</th>
+              <th>Appearance</th>
+              <th>Trigger</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Default</td>
+              <td>Soft colors, 1px border</td>
+              <td>Initial state</td>
+            </tr>
+            <tr>
+              <td>Hover</td>
+              <td>Full color, stronger border</td>
+              <td>Mouse over</td>
+            </tr>
+            <tr>
+              <td>Focus</td>
+              <td>2px accent outline, 2px offset</td>
+              <td>Keyboard/tab navigation</td>
+            </tr>
+            <tr>
+              <td>Active</td>
+              <td>Class <code>--active</code> for expand button</td>
+              <td>Widget is expanded</td>
+            </tr>
+            <tr>
+              <td>Disabled</td>
+              <td>40% opacity, no cursor</td>
+              <td>Disabled attribute</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="info-box">
+          <h4>Implementation</h4>
+          <p><strong>Classes:</strong> <code>.townsquare__button</code> + <code>.townsquare__button--sm</code> or <code>--md</code></p>
+          <p><strong>Usage:</strong> controls, actions, and the self name-tag edit affordance share this base. The name-tag pencil uses the small button shell with a slightly smaller icon so it does not overpower the tag.</p>
+          <p><strong>Source:</strong> <code>public/widget.css</code>, <code>public/widget/shell.mjs</code>, <code>public/widget/avatar.mjs</code></p>
+        </div>
+      </section>
+
+      <!-- FORMS -->
+      <section id="forms">
+        <h2><span class="tag tag-component">COMPONENTS</span> Forms & Inputs</h2>
+
+        <h3>Text Inputs</h3>
+        <ul class="checklist">
+          <li>Height: 30px (composer 38px for padding)</li>
+          <li>Font: 17px / 460 weight for comfort while typing</li>
+          <li>Border: 1px <code>--hair</code> in default, <code>--hair-2</code> on focus</li>
+          <li>Padding: 8px horizontal, 0px vertical (center via line-height)</li>
+          <li>Placeholder: <code>--ink-faint</code> color</li>
+        </ul>
+
+        <h3>Toggle Switch</h3>
+        <ul class="checklist">
+          <li>Dimensions: 36×30px (pill-shaped)</li>
+          <li>Track: <code>--surface</code> background with 1px <code>--hair-2</code> border</li>
+          <li>Thumb: 14px circle, <code>--ink-soft</code> by default, <code>--you-deep</code> when checked</li>
+          <li>Animation: 150ms ease transition (respects <code>prefers-reduced-motion</code>)</li>
+        </ul>
+
+        <h3>Color Swatches</h3>
+        <ul class="checklist">
+          <li>Palette swatches: 20×20px circles</li>
+          <li>Inline current-color control: 24×24px circle in the active name editor</li>
+          <li>Border: 2px <code>--surface</code> when active, transparent by default</li>
+          <li>Focus: 2px <code>--you</code> outline</li>
+          <li>Grid: 4 columns, 6px gap</li>
+        </ul>
+      </section>
+
+      <!-- IDENTITY TAGS -->
+      <section id="identity-tags">
+        <h2><span class="tag tag-component">COMPONENTS</span> Identity Tags</h2>
+
+        <p>The self identity tag stays compact in its resting state. Editing is progressive: the pencil appears beside the tag, then the tag itself becomes the editor after activation.</p>
+
+        <h3>Resting State</h3>
+        <div class="button-demo">
+          <span class="name-tag-demo">
+            <span class="name-tag-demo__dot"></span>
+            <span>you</span>
+            <button class="demo-button demo-button--sm name-tag-demo__edit" title="Edit character" aria-label="Edit character">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path>
+              </svg>
+            </button>
+          </span>
+          <span style="color: #7c766c; font-size: 0.9em;">Pencil appears outside the tag on hover/focus; touch keeps it reachable.</span>
+        </div>
+
+        <ul class="checklist">
+          <li>The pencil does not reserve layout space inside the resting tag.</li>
+          <li>A transparent hover bridge keeps hover active between the tag and pencil.</li>
+          <li>The pencil uses <code>.townsquare__button --sm</code>; only the glyph is reduced.</li>
+          <li>On coarse pointers, the pencil is visible/reachable instead of hover-only.</li>
+        </ul>
+
+        <h3>Editing State</h3>
+        <div class="button-demo">
+          <span class="name-tag-demo name-tag-demo--editing">
+            <button class="name-tag-demo__big-dot" title="Choose character color" aria-label="Choose character color"></button>
+            <input class="name-tag-demo__input" value="display name" aria-label="Display name">
+          </span>
+          <span style="color: #7c766c; font-size: 0.9em;">The tag converts in place into the input and color control.</span>
+        </div>
+
+        <ul class="checklist">
+          <li>Clicking the pencil opens an inline input inside the name tag, not a modal.</li>
+          <li>The small identity dot becomes a larger clickable color dot.</li>
+          <li>The color palette opens above the tag, anchored to the enlarged dot.</li>
+          <li>Changes save live as the input or color changes; blur/Escape closes the editor.</li>
+        </ul>
+
+        <div class="info-box">
+          <h4>Source of Truth</h4>
+          <p>Keep implementation details in sync with <code>public/widget/avatar.mjs</code> and <code>public/widget.css</code>. The label collision solver in <code>public/widget/bubble-layout.mjs</code> accounts for the open editor width so the tag remains clamped on narrow screens.</p>
+        </div>
+      </section>
+
+      <!-- DIALOGS -->
+      <section id="dialogs">
+        <h2><span class="tag tag-component">COMPONENTS</span> Dialogs & Modals</h2>
+
+        <div class="info-box">
+          <h4>Not Used for Rename</h4>
+          <p>The self rename/color flow is an inline identity-tag editor, not a dialog. Use the modal pattern only for overlays such as help, message board, and connections.</p>
+        </div>
+
+        <h3>Modal Pattern</h3>
+        <ul class="checklist">
+          <li>Backdrop: Fixed, inset 0, 34–38% dark overlay with 6px blur</li>
+          <li>Panel: Centered via flex, max 88% width / 86% height</li>
+          <li>Max-width: 320px for help panel, connections (280px)</li>
+          <li>Padding: 14-16px</li>
+          <li>Border: 1px <code>--hair-2</code></li>
+          <li>Shadow: <code>--tray-shadow</code></li>
+          <li>Close: Typically an X button or Escape key</li>
+        </ul>
+
+        <h3>Modal Types</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Max Width</th>
+              <th>Border Accent</th>
+              <th>Content</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Help Panel</td>
+              <td>320px</td>
+              <td>None</td>
+              <td>Instructions, links, about</td>
+            </tr>
+            <tr>
+              <td>Message Board</td>
+              <td>320px</td>
+              <td>3px <code>--you</code> top border</td>
+              <td>Owner message + unread badge</td>
+            </tr>
+            <tr>
+              <td>Connections</td>
+              <td>280px</td>
+              <td>None</td>
+              <td>Neighbor town links</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- LISTS -->
+      <section id="lists">
+        <h2><span class="tag tag-component">COMPONENTS</span> Lists & Cards</h2>
+
+        <h3>Connection Items</h3>
+        <ul class="checklist">
+          <li>Grid: 2-column (name/host grow, go fixed)</li>
+          <li>Padding: 9-11px</li>
+          <li>Border: 1px <code>--hair-2</code></li>
+          <li>Border-radius: 8px</li>
+          <li>Hover: <code>--you</code> border + <code>--you-tint</code> background</li>
+        </ul>
+
+        <h3>Nameplate Badges</h3>
+        <ul class="checklist">
+          <li>Display name + online dot + optional crown (owner)</li>
+          <li>Background: <code>--surface</code></li>
+          <li>Padding: 6px 13px / 6px 11px</li>
+          <li>Border-radius: 11px</li>
+          <li>Shadow: <code>--bshadow</code></li>
+          <li>Owner variant: Special gold-tinted background</li>
+          <li>Self tag: edit affordance appears outside the tag so the resting label remains compact</li>
+        </ul>
+      </section>
+
+      <!-- MOTION -->
+      <section id="motion">
+        <h2><span class="tag tag-motion">INTERACTION</span> Motion & Animation</h2>
+
+        <h3>Animation Timing Strategy</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Duration</th>
+              <th>Use Case</th>
+              <th>Easing</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>80–120ms</td>
+              <td>Micro-interactions (button hover, signpost fade)</td>
+              <td>ease</td>
+            </tr>
+            <tr>
+              <td>140–220ms</td>
+              <td>State changes (bubbles, overlays, toggles, inline color dot)</td>
+              <td>ease</td>
+            </tr>
+            <tr>
+              <td>560–760ms</td>
+              <td>Celebratory actions (jump, high-five)</td>
+              <td>cubic-bezier spring</td>
+            </tr>
+            <tr>
+              <td>0.8–3s</td>
+              <td>Walk cycles, bird animations</td>
+              <td>linear</td>
+            </tr>
+            <tr>
+              <td>60s</td>
+              <td>Ambient (cloud drift in expanded mode)</td>
+              <td>linear infinite</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Core Animations</h3>
+        <ul class="checklist">
+          <li><strong>Walk cycle</strong> (800ms): Natural gait with counter-rotating limbs, phase-offset legs, vertical bob</li>
+          <li><strong>Jump</strong> (560ms): Snappy prep, exaggerated apex at 45%, springy landing</li>
+          <li><strong>High-five</strong> (760ms): Synchronized pair gesture, meeting point at 46–58%</li>
+          <li><strong>Typing indicator</strong> (900ms): Sequential 3-dot bobbing</li>
+          <li><strong>Cloud drift</strong> (60s): Only in expanded mode; paused in reduced-motion</li>
+        </ul>
+
+        <h3>Accessibility: Reduced Motion</h3>
+        <p>All animations respect <code>@media (prefers-reduced-motion: reduce)</code>:</p>
+        <ul class="checklist">
+          <li>Animations pause rather than remove (elements stay in place)</li>
+          <li>Transitions snap instantly</li>
+          <li>No flashing or strobing</li>
+          <li>5 locations in code: toggle switch, clouds, typing, toggle tracks, general keyframes</li>
+        </ul>
+      </section>
+
+      <!-- STATES -->
+      <section id="states">
+        <h2><span class="tag tag-motion">INTERACTION</span> States & Feedback</h2>
+
+        <h3>Interactive States</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>State</th>
+              <th>Visual Cue</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Hover</td>
+              <td>Color change, border emphasis, lift (transform: translateY)</td>
+              <td>Button, nameplate plate</td>
+            </tr>
+            <tr>
+              <td>Focus</td>
+              <td>2px <code>--you</code> outline, 2px offset</td>
+              <td>All interactive elements</td>
+            </tr>
+            <tr>
+              <td>Active/Pressed</td>
+              <td>Class <code>--active</code> or <code>aria-pressed="true"</code></td>
+              <td>Expand button when expanded</td>
+            </tr>
+            <tr>
+              <td>Disabled</td>
+              <td>40% opacity, no cursor</td>
+              <td>Send button during rate limit</td>
+            </tr>
+            <tr>
+              <td>Expanded</td>
+              <td>ARIA + CSS class</td>
+              <td>Profile editor when open</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Avatar States</h3>
+        <ul class="checklist">
+          <li><strong>Walking</strong>: Walk cycle animation plays continuously</li>
+          <li><strong>Jumping</strong>: Jump animation triggered by action</li>
+          <li><strong>High-fiving</strong>: Pair gesture animation (synchronized)</li>
+          <li><strong>Typing</strong>: Typing indicator shows above avatar</li>
+          <li><strong>Raised hand</strong>: 🙌 emoji appears above avatar</li>
+          <li><strong>Reading away</strong>: 22% opacity fade + "Zz" indicator</li>
+          <li><strong>Asleep</strong>: Full fade out after long idle (respects focus state)</li>
+          <li><strong>Profile editing</strong>: Self name tag expands in place into input + color dot</li>
+        </ul>
+      </section>
+
+      <!-- ACCESSIBILITY -->
+      <section id="accessibility">
+        <h2><span class="tag tag-a11y">STANDARDS</span> Accessibility</h2>
+
+        <h3>ARIA & Semantics</h3>
+        <ul class="checklist">
+          <li><code>aria-label</code> on all icon buttons (expand, help, edit, jump, high-five)</li>
+          <li><code>aria-expanded</code> on toggles and profile editor</li>
+          <li><code>aria-pressed</code> on expand button (reflects expanded state)</li>
+          <li><code>aria-pressed</code> on color swatches to identify the selected color</li>
+          <li><code>aria-hidden="true"</code> on decorative SVGs</li>
+          <li><code>role="img"</code> on semantic emojis (crown, hand)</li>
+          <li>Semantic HTML: <code>&lt;button&gt;</code>, <code>&lt;input&gt;</code>, <code>&lt;section&gt;</code>, <code>&lt;dialog&gt;</code></li>
+        </ul>
+
+        <h3>Focus Management</h3>
+        <ul class="checklist">
+          <li>Clear <code>:focus-visible</code> outlines (2px widget, 3px public pages)</li>
+          <li>2–3px <code>outline-offset</code> for breathing room</li>
+          <li>Focus restored after modal closes</li>
+          <li>Inline profile editor selects the current name on open and closes on blur/Escape</li>
+          <li>Tab order follows DOM structure</li>
+          <li>Escape key closes dialogs</li>
+        </ul>
+
+        <h3>Contrast & Color</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Text</th>
+              <th>Light Theme</th>
+              <th>Dark Theme</th>
+              <th>Ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Primary (<code>--ink</code>)</td>
+              <td>#2a2926 on #fdf8f4</td>
+              <td>#f2eee6 on #24231f</td>
+              <td>12.5:1 WCAG AAA</td>
+            </tr>
+            <tr>
+              <td>Secondary (<code>--ink-soft</code>)</td>
+              <td>#7c766c on #fdf8f4</td>
+              <td>#beb7aa on #24231f</td>
+              <td>6:1 WCAG AA</td>
+            </tr>
+            <tr>
+              <td>Tertiary (<code>--ink-faint</code>)</td>
+              <td>#aba59b on #fdf8f4</td>
+              <td>#898276 on #24231f</td>
+              <td>3.5:1 reduced</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Touch Targets</h3>
+        <ul class="checklist">
+          <li>Minimum 30px buttons (40px on touch devices)</li>
+          <li>Name-tag edit pencil is visible/reachable on coarse pointers because hover is unavailable</li>
+          <li>Avatar tap zones: 34–58px via pseudo-element <code>::before</code></li>
+          <li>8px+ spacing between interactive elements</li>
+          <li>@media (pointer: coarse) auto-enlarges controls</li>
+        </ul>
+
+        <h3>Keyboard Navigation</h3>
+        <ul class="checklist">
+          <li>Tab: Navigate controls in reading order</li>
+          <li>Enter: Activate buttons, submit forms</li>
+          <li>Space: Toggle switches, press buttons</li>
+          <li>Escape: Close dialogs, clear selections</li>
+          <li>Arrow keys: Move avatars (movement.mjs)</li>
+        </ul>
+
+        <h3>Motion</h3>
+        <ul class="checklist">
+          <li><code>@media (prefers-reduced-motion: reduce)</code> respected everywhere</li>
+          <li>No flashing or strobing</li>
+          <li>Animations freeze rather than remove</li>
+          <li>Subtle, non-jarring transitions (120–280ms)</li>
+        </ul>
+
+        <h3>Mobile & Virtual Keyboard</h3>
+        <ul class="checklist">
+          <li>Toolbar mode hides floating UI under virtual keyboard</li>
+          <li><code>--ts-keyboard</code> variable tracks keyboard height</li>
+          <li><code>touch-action: pan-y pinch-zoom</code> preserves vertical scroll</li>
+          <li>100dvh (dynamic viewport height) accounts for mobile bottom bars</li>
+        </ul>
+      </section>
+
+      <!-- BEST PRACTICES -->
+      <section id="best-practices">
+        <h2><span class="tag tag-a11y">STANDARDS</span> Best Practices</h2>
+
+        <h3>Design Principles</h3>
+        <ul class="checklist">
+          <li><strong>Semantic HTML first, ARIA second:</strong> Avoid over-annotation; use native elements</li>
+          <li><strong>Mobile first:</strong> Design for touch targets, then enhance</li>
+          <li><strong>Performance:</strong> Use transform for animations, not top/left</li>
+          <li><strong>Warmth:</strong> Terracotta accents, brown shadows, cream surfaces (never clinical gray)</li>
+          <li><strong>Accessibility by default:</strong> High contrast, clear focus, motion support built in</li>
+        </ul>
+
+        <h3>When Extending the System</h3>
+        <div class="comparison">
+          <div class="comparison-item comparison-after">
+            <h4>✓ DO</h4>
+            <ul>
+              <li>Use existing tokens for colors/sizing</li>
+              <li>Respect <code>prefers-reduced-motion</code></li>
+              <li>Test with keyboard + screen readers</li>
+              <li>Add <code>aria-label</code> to icon buttons</li>
+              <li>Scope styles to <code>#townsquare-root</code></li>
+              <li>Use <code>transform</code> for animations</li>
+            </ul>
+          </div>
+          <div class="comparison-item comparison-before">
+            <h4>✗ DON'T</h4>
+            <ul>
+              <li>Inline color hex values</li>
+              <li>Skip focus indicators</li>
+              <li>Add decorative HTML elements</li>
+              <li>Use auto-playing audio/video</li>
+              <li>Load blocking web fonts</li>
+              <li>Animate top/left (use transform)</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>Pre-Ship Accessibility Checklist</h3>
+        <ul class="checklist">
+          <li>All buttons have <code>aria-label</code> or visible text</li>
+          <li>Focus visible on all interactive elements</li>
+          <li>Modals trap focus and have close buttons</li>
+          <li>Contrast ratio ≥ 4.5:1 (AA) for text</li>
+          <li>Touch targets ≥ 40×40px on mobile</li>
+          <li>Test with keyboard only (no mouse)</li>
+          <li>Test in a screen reader (NVDA, JAWS, VoiceOver)</li>
+          <li>Verify <code>prefers-reduced-motion: reduce</code> works</li>
+          <li>Test in light & dark themes</li>
+        </ul>
+
+        <h3>Testing Tools & Resources</h3>
+        <div class="grid-3">
+          <div class="card">
+            <h4>Contrast Checking</h4>
+            <ul>
+              <li>WebAIM Contrast Checker</li>
+              <li>Accessibility Insights</li>
+              <li>Color Contrast Analyzer</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Screen Readers</h4>
+            <ul>
+              <li>NVDA (Windows, free)</li>
+              <li>JAWS (Windows, paid)</li>
+              <li>VoiceOver (macOS/iOS, built-in)</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Automated Tools</h4>
+            <ul>
+              <li>axe DevTools</li>
+              <li>Lighthouse (Chrome DevTools)</li>
+              <li>WAVE (browser extension)</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- FOOTER -->
+      <section style="text-align: center; background: #fafbf9;">
+        <p style="color: #7c766c; margin: 0;">TownSquare Design System v1.0 — Last updated July 2026</p>
+        <p style="color: #aba59b; margin: 8px 0 0; font-size: 0.9em;">Comprehensive reference for building consistent, accessible, and maintainable experiences.</p>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    // Smooth navigation
+    document.querySelectorAll('.sidebar nav a').forEach(link => {
+      link.addEventListener('click', (e) => {
+        document.querySelectorAll('.sidebar nav a').forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+      });
+    });
+
+    // Mark active section on scroll
+    window.addEventListener('scroll', () => {
+      const sections = document.querySelectorAll('section[id]');
+      let current = '';
+
+      sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        if (window.pageYOffset >= sectionTop - 100) {
+          current = section.getAttribute('id');
+        }
+      });
+
+      document.querySelectorAll('.sidebar nav a').forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href').slice(1) === current) {
+          link.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

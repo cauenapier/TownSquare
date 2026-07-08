@@ -2,9 +2,9 @@
  * WebSocket wire-up and server message routing for the widget runtime.
  */
 
-import { recordMessage, sayMessage } from "./chat.mjs";
+import { recordMessage, sayMessage, setHistory } from "./chat.mjs";
 import { applyBirdFlee, applyBirdSpawn, syncBirdsFromHello } from "./birds.mjs";
-import { clearPresencePose, needsStandUp, playHighFivePair, playJump, playRaisedHand, setWalking } from "./dom.mjs";
+import { clearPresencePose, needsStandUp, playHighFivePair, playJump, playRaisedHand, setWalking } from "./gestures.mjs";
 import {
   applyPeerState,
   applyProfileState,
@@ -16,27 +16,25 @@ import {
 } from "./presence.mjs";
 import { getBrowserSecret, saveBrowserSecret } from "./utils.mjs";
 import { solveChallenge } from "./pow.mjs";
+import { MSG, GESTURE, BIRD_ACTION, CLOSE_REASON } from "../../lib/protocol.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
  */
-
-function isSolo(ctx) {
-  return ctx.options.solo === true;
-}
 
 const WALK_BUMP_MS = 120;
 const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 8000;
 // Server-initiated closes that no amount of retrying will fix.
 const PERMANENT_CLOSE_MESSAGES = new Map([
-  ["kicked", "You were removed from the square."],
-  ["blocked", "You can't join this square right now."],
-  ["inactive", "You were away for a while and left the square. Refresh the page to rejoin."],
-  ["site disabled", "This TownSquare isn't available right now."],
-  ["site disabled or unknown", "This TownSquare isn't available right now."],
-  ["origin not allowed", "This page isn't registered to TownSquare yet."],
-  ["rate limited", "Too many visitors are connecting from this network. Try again later."],
+  [CLOSE_REASON.KICKED, "You were removed from the square."],
+  [CLOSE_REASON.BLOCKED, "You can't join this square right now."],
+  [CLOSE_REASON.INACTIVE, "You were away for a while and left the square. Refresh the page to rejoin."],
+  [CLOSE_REASON.SITE_DISABLED, "This TownSquare isn't available right now."],
+  [CLOSE_REASON.SITE_DISABLED_OR_UNKNOWN, "This TownSquare isn't available right now."],
+  [CLOSE_REASON.ORIGIN_NOT_ALLOWED, "This page isn't registered to TownSquare yet."],
+  [CLOSE_REASON.PLUS_REQUIRED, "Livestream overlays are available with TownSquare Plus."],
+  [CLOSE_REASON.RATE_LIMITED, "Too many visitors are connecting from this network. Try again later."],
 ]);
 
 function bumpWalking(presence) {
@@ -51,10 +49,6 @@ function clearPeers(ctx) {
   }
 }
 
-function clearPresencePoseForAction(ctx, presence) {
-  clearPresencePose(presence, ctx.sceneProps);
-}
-
 function presenceById(ctx, id) {
   return id === ctx.self.id ? ctx.self : ctx.peers.get(id);
 }
@@ -62,14 +56,14 @@ function presenceById(ctx, id) {
 function applyJump(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
-  clearPresencePoseForAction(ctx, presence);
+  clearPresencePose(presence, ctx.sceneProps);
   playJump(presence.avatar);
 }
 
 function applyRaiseHand(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
-  clearPresencePoseForAction(ctx, presence);
+  clearPresencePose(presence, ctx.sceneProps);
   playRaisedHand(presence.avatar);
 }
 
@@ -79,9 +73,215 @@ function applyHighFive(ctx, id, targetId) {
   if (!initiator || !target) return;
   const standUpFirst = needsStandUp(initiator) || needsStandUp(target);
   for (const presence of [initiator, target]) {
-    clearPresencePoseForAction(ctx, presence);
+    clearPresencePose(presence, ctx.sceneProps);
   }
   playHighFivePair(initiator, target, standUpFirst);
+}
+
+/**
+ * @param {WebSocket} socket
+ * @param {string} type
+ * @param {Record<string, unknown>} [payload]
+ * @returns {boolean}
+ */
+function sendToSocket(socket, type, payload = {}) {
+  if (socket.readyState !== WebSocket.OPEN) return false;
+  socket.send(JSON.stringify({ type, ...payload }));
+  return true;
+}
+
+/**
+ * @param {WidgetContext} ctx
+ * @param {string} type
+ * @param {Record<string, unknown>} [payload]
+ * @returns {boolean}
+ */
+export function sendToServer(ctx, type, payload = {}) {
+  return sendToSocket(ctx.socket, type, payload);
+}
+
+function handleChallenge(ctx, socket, message) {
+  if (typeof message.salt !== "string" || typeof message.difficulty !== "number") return;
+  ctx.challenge?.cancel();
+  const challenge = solveChallenge({ salt: message.salt, difficulty: message.difficulty });
+  ctx.challenge = challenge;
+  challenge.promise.then((nonce) => {
+    if (ctx.challenge === challenge) ctx.challenge = null;
+    sendToSocket(socket, MSG.SOLVE, { nonce });
+  }).catch(() => {
+    if (ctx.challenge === challenge) ctx.challenge = null;
+  });
+}
+
+function handleHello(ctx, _socket, message) {
+  ctx.widgetPlugins?.setModules(message.pluginModules || ctx.options.pluginModules || []);
+  if (typeof message.chatThrottleMs === "number") ctx.chatThrottleMs = message.chatThrottleMs;
+  // A spectator hello carries no self identity, so skip own-avatar setup.
+  if (!ctx.watch) {
+    ctx.self.id = message.id;
+    saveBrowserSecret(message.browserSecret);
+    applySelfState(ctx, message);
+    // Backlog seeds the hover tray only — it never pops a live bubble, so a
+    // refresh doesn't replay everyone's last messages into the scene.
+    setHistory(ctx.self.avatar, []);
+    for (const recent of message.messages || []) {
+      recordMessage(ctx.self.avatar, recent);
+    }
+  }
+  if (!ctx.solo) {
+    for (const peer of message.peers) {
+      applyPeerState(ctx, peer);
+    }
+  }
+  // Hosted sites deliver scene, connections, and the message board over the
+  // socket so admin edits apply live without re-pasting the snippet. Apply
+  // before birds so their perches exist. Inline overrides are respected inside
+  // applyLiveConfig.
+  ctx.applyLiveConfig?.({
+    scene: message.scene,
+    // Overlays receive the site appearance (plus any overlay-only overrides)
+    // over the socket; on-page embeds theme via their pasted snippet and omit this.
+    styleConfig: message.styleConfig,
+    connections: message.connections,
+    messageBoard: message.messageBoard,
+  });
+  syncBirdsFromHello(ctx, message.birds);
+  ctx.widgetPlugins?.applyEntities(message.pluginEntities);
+  updateStatus(ctx);
+}
+
+function handleChatThrottle(ctx, _socket, message) {
+  if (typeof message.ms === "number") ctx.chatThrottleMs = message.ms;
+}
+
+function handleScene(ctx, _socket, message) {
+  ctx.applyLiveConfig?.({ scene: message.scene });
+}
+
+function handleConnections(ctx, _socket, message) {
+  ctx.applyLiveConfig?.({ connections: message.connections });
+}
+
+function handleMessageBoard(ctx, _socket, message) {
+  ctx.applyLiveConfig?.({ messageBoard: message.messageBoard });
+}
+
+function handleBird(ctx, _socket, message) {
+  if (message.action === BIRD_ACTION.SPAWN) {
+    applyBirdSpawn(ctx, message);
+  } else if (message.action === BIRD_ACTION.FLEE) {
+    applyBirdFlee(ctx, message);
+  }
+}
+
+function handleJoin(ctx, _socket, message) {
+  if (!ctx.solo) {
+    applyPeerState(ctx, message.peer);
+  }
+}
+
+function handleLeave(ctx, _socket, message) {
+  if (!ctx.solo) {
+    removePeer(ctx, message.id);
+  }
+}
+
+function handleMove(ctx, _socket, message) {
+  if (message.id === ctx.self.id) {
+    const hadPose = Boolean(ctx.self.pose);
+    applySelfState(ctx, message);
+    if (!ctx.self.pose && !hadPose) {
+      bumpWalking(ctx.self);
+    }
+    return;
+  }
+
+  if (ctx.solo) return;
+
+  const peer = applyPeerState(ctx, message);
+  if (!peer.pose) {
+    bumpWalking(peer);
+  }
+}
+
+function handleAction(ctx, _socket, message) {
+  if (message.id !== ctx.self.id && ctx.solo) return;
+  if (message.action === GESTURE.JUMP) {
+    applyJump(ctx, message.id);
+  } else if (message.action === GESTURE.RAISE_HAND) {
+    applyRaiseHand(ctx, message.id);
+  } else if (message.action === GESTURE.HIGH_FIVE) {
+    applyHighFive(ctx, message.id, message.targetId);
+  }
+}
+
+function handleSay(ctx, _socket, message) {
+  if (message.id === ctx.self.id) {
+    if (ctx.quiet) {
+      recordMessage(ctx.self.avatar, { text: message.text, at: message.at });
+      return;
+    }
+    sayMessage(ctx.self.avatar, { text: message.text, at: message.at });
+    return;
+  }
+
+  if (ctx.solo) return;
+
+  const peer = ctx.peers.get(message.id);
+  if (!peer) return;
+  peer.avatar.el.classList.remove("townsquare-avatar--typing");
+  if (ctx.quiet) {
+    recordMessage(peer.avatar, { text: message.text, at: message.at });
+    return;
+  }
+  sayMessage(peer.avatar, { text: message.text, at: message.at });
+}
+
+function handleTyping(ctx, _socket, message) {
+  if (message.id === ctx.self.id || ctx.solo) return;
+  const peer = ctx.peers.get(message.id);
+  peer?.avatar.el.classList.toggle("townsquare-avatar--typing", message.typing === true);
+}
+
+function handleProfile(ctx, _socket, message) {
+  if (message.id === ctx.self.id || !ctx.solo) {
+    applyProfileState(ctx, message);
+  }
+}
+
+function handleReading(ctx, _socket, message) {
+  if (message.id === ctx.self.id || !ctx.solo) {
+    applyReadingState(ctx, message);
+  }
+}
+
+function handlePlugin(ctx, _socket, message) {
+  ctx.widgetPlugins?.applyEntity(message.plugin, message);
+}
+
+const MESSAGE_HANDLERS = {
+  [MSG.CHALLENGE]: handleChallenge,
+  [MSG.HELLO]: handleHello,
+  [MSG.CHAT_THROTTLE]: handleChatThrottle,
+  [MSG.SCENE]: handleScene,
+  [MSG.CONNECTIONS]: handleConnections,
+  [MSG.MESSAGE_BOARD]: handleMessageBoard,
+  [MSG.BIRD]: handleBird,
+  [MSG.JOIN]: handleJoin,
+  [MSG.LEAVE]: handleLeave,
+  [MSG.MOVE]: handleMove,
+  [MSG.ACTION]: handleAction,
+  [MSG.SAY]: handleSay,
+  [MSG.TYPING]: handleTyping,
+  [MSG.PROFILE]: handleProfile,
+  [MSG.READING]: handleReading,
+  [MSG.PLUGIN]: handlePlugin,
+};
+
+for (const type of Object.keys(MESSAGE_HANDLERS)) {
+  if (!Object.values(MSG).includes(type)) {
+    throw new Error(`MESSAGE_HANDLERS has unknown message type "${type}" (not in shared protocol)`);
+  }
 }
 
 /**
@@ -90,7 +290,7 @@ function applyHighFive(ctx, id, targetId) {
  * @param {WidgetContext} ctx
  */
 export function wireSocket(ctx) {
-  const { browserId, self, peers } = ctx;
+  const { browserId, self } = ctx;
   let reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
 
   const connect = (socket = new WebSocket(ctx.socketUrl)) => {
@@ -98,21 +298,23 @@ export function wireSocket(ctx) {
 
     socket.addEventListener("open", () => {
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
-      const init = {
-        type: "init",
-        browserId,
-        browserSecret: getBrowserSecret(),
-        x: self.x,
-        displayName: self.displayName,
-        color: self.color,
-        readingLabel: self.readingLabel,
-        readingUrl: self.readingUrl,
-        readingActive: self.readingActive,
-      };
+      const init = ctx.watch
+        ? { type: MSG.INIT }
+        : {
+            type: MSG.INIT,
+            browserId,
+            browserSecret: getBrowserSecret(),
+            x: self.x,
+            displayName: self.displayName,
+            color: self.color,
+            readingLabel: self.readingLabel,
+            readingUrl: self.readingUrl,
+            readingActive: self.readingActive,
+            widgetVisible: self.widgetVisible,
+          };
       socket.send(JSON.stringify(init));
-      const siteKey = ctx.options.siteKey || ctx.root.dataset.townsquareSiteKey || "";
-      if (!siteKey && ctx.options.scene) {
-        socket.send(JSON.stringify({ type: "sceneConfig", sceneConfig: ctx.options.scene }));
+      if (!ctx.watch && !ctx.siteKey && ctx.options.scene) {
+        sendToSocket(socket, MSG.SCENE_CONFIG, { sceneConfig: ctx.options.scene });
       }
     });
 
@@ -134,147 +336,13 @@ export function wireSocket(ctx) {
         return;
       }
 
-      // Per-site bot protection: solve the proof-of-work, then the server
-      // replays our init and proceeds to the normal hello.
-      if (message.type === "challenge") {
-        if (typeof message.salt !== "string" || typeof message.difficulty !== "number") return;
-        solveChallenge({ salt: message.salt, difficulty: message.difficulty }).then((nonce) => {
-          if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "solve", nonce }));
-          }
-        });
+      const handler = MESSAGE_HANDLERS[message.type];
+      if (!handler) {
+        // Unknown type: surface it rather than dropping the frame silently.
+        console.warn("[townsquare] ignoring unknown message type:", message.type);
         return;
       }
-
-      if (message.type === "hello") {
-        self.id = message.id;
-        saveBrowserSecret(message.browserSecret);
-        ctx.widgetPlugins?.setModules(message.pluginModules || ctx.options.pluginModules || []);
-        if (typeof message.chatThrottleMs === "number") ctx.chatThrottleMs = message.chatThrottleMs;
-        applySelfState(ctx, message);
-        // Backlog seeds the hover tray only — it never pops a live bubble, so a
-        // refresh doesn't replay everyone's last messages into the scene.
-        for (const recent of message.messages || []) {
-          recordMessage(self.avatar, recent);
-        }
-        if (!isSolo(ctx)) {
-          for (const peer of message.peers) {
-            applyPeerState(ctx, peer);
-          }
-        }
-        syncBirdsFromHello(ctx, message.birds);
-        ctx.widgetPlugins?.applyEntities(message.pluginEntities);
-        updateStatus(ctx);
-        return;
-      }
-
-      // Owner changed slow mode mid-session: keep the local cooldown in sync.
-      if (message.type === "chatThrottle") {
-        if (typeof message.ms === "number") ctx.chatThrottleMs = message.ms;
-        return;
-      }
-
-      if (message.type === "plugin") {
-        ctx.widgetPlugins?.applyEntity(message.plugin, message);
-        return;
-      }
-
-      if (message.type === "bird") {
-        if (message.action === "spawn") {
-          applyBirdSpawn(ctx, message);
-        } else if (message.action === "flee") {
-          applyBirdFlee(ctx, message);
-        }
-        return;
-      }
-
-      if (message.type === "join") {
-        if (!isSolo(ctx)) {
-          applyPeerState(ctx, message.peer);
-        }
-        return;
-      }
-
-      if (message.type === "leave") {
-        if (!isSolo(ctx)) {
-          removePeer(ctx, message.id);
-        }
-        return;
-      }
-
-      if (message.type === "move") {
-        if (message.id === self.id) {
-          const hadPose = Boolean(self.pose);
-          applySelfState(ctx, message);
-          if (!self.pose && !hadPose) {
-            bumpWalking(self);
-          }
-          return;
-        }
-
-        if (isSolo(ctx)) return;
-
-        const peer = applyPeerState(ctx, message);
-        if (!peer.pose) {
-          bumpWalking(peer);
-        }
-        return;
-      }
-
-      if (message.type === "action") {
-        if (message.id !== self.id && isSolo(ctx)) return;
-        if (message.action === "jump") {
-          applyJump(ctx, message.id);
-        } else if (message.action === "raise-hand") {
-          applyRaiseHand(ctx, message.id);
-        } else if (message.action === "high-five") {
-          applyHighFive(ctx, message.id, message.targetId);
-        }
-        return;
-      }
-
-      if (message.type === "say") {
-        if (message.id === self.id) {
-          if (ctx.quiet) {
-            recordMessage(self.avatar, { text: message.text, at: message.at });
-            return;
-          }
-          sayMessage(self.avatar, { text: message.text, at: message.at });
-          return;
-        }
-
-        if (isSolo(ctx)) return;
-
-        const peer = peers.get(message.id);
-        if (!peer) return;
-        peer.avatar.el.classList.remove("townsquare-avatar--typing");
-        if (ctx.quiet) {
-          recordMessage(peer.avatar, { text: message.text, at: message.at });
-          return;
-        }
-        sayMessage(peer.avatar, { text: message.text, at: message.at });
-        return;
-      }
-
-      if (message.type === "typing") {
-        if (message.id === self.id || isSolo(ctx)) return;
-        const peer = peers.get(message.id);
-        peer?.avatar.el.classList.toggle("townsquare-avatar--typing", message.typing === true);
-        return;
-      }
-
-      if (message.type === "profile") {
-        if (message.id === self.id || !isSolo(ctx)) {
-          applyProfileState(ctx, message);
-        }
-        return;
-      }
-
-      if (message.type === "reading") {
-        if (message.id === self.id || !isSolo(ctx)) {
-          applyReadingState(ctx, message);
-        }
-      }
+      handler(ctx, socket, message);
     });
 
     socket.addEventListener("close", (event) => {
@@ -282,6 +350,8 @@ export function wireSocket(ctx) {
 
       const wasJoined = Boolean(self.id);
       self.id = null;
+      ctx.challenge?.cancel();
+      ctx.challenge = null;
       clearTimeout(ctx.typingTimer);
       ctx.typingTimer = null;
       self.typing = false;
@@ -293,7 +363,7 @@ export function wireSocket(ctx) {
         return;
       }
 
-      if (event.reason === "full") {
+      if (event.reason === CLOSE_REASON.FULL) {
         setStatusMessage(ctx, "Square is full right now. Retrying…");
       } else {
         setStatusMessage(ctx, wasJoined ? "Disconnected. Reconnecting…" : "Connecting…");

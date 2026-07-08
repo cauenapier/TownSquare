@@ -4,6 +4,10 @@
  * Joint groups nest so a parent rotation carries its children (hip carries
  * knee, shoulder carries elbow). The pivot points live in widget.css as
  * transform-origins and must match this geometry.
+ *
+ * The viewBox bottom edge (y=42) IS the standing feet: with xMidYMax the art
+ * pins to the element's bottom edge, which the scene anchors on the ground
+ * plane (--ts-ground-level), so the feet touch the ground line at any scale.
  */
 
 /**
@@ -12,7 +16,7 @@
  */
 export function figureMarkup(svgAttributes = "") {
   return `
-    <svg viewBox="0 0 20 44" preserveAspectRatio="xMidYMax meet" ${svgAttributes}>
+    <svg viewBox="0 0 20 42" preserveAspectRatio="xMidYMax meet" ${svgAttributes}>
       <g class="figure-core">
         <circle class="head" cx="10" cy="6.2" r="3.4"></circle>
         <line x1="10" y1="10" x2="10" y2="26"></line>
@@ -23,7 +27,8 @@ export function figureMarkup(svgAttributes = "") {
           </g>
         </g>
         <g class="joint arm-r">
-          <line x1="10.6" y1="14" x2="13.9" y2="20"></line>
+          <line class="limb" x1="10.6" y1="14" x2="13.9" y2="20"></line>
+          <line class="book-stub" x1="10.6" y1="14" x2="12.1" y2="16.7"></line>
           <g class="joint elbow-r">
             <line x1="13.9" y1="20" x2="15.3" y2="26"></line>
           </g>
@@ -39,6 +44,15 @@ export function figureMarkup(svgAttributes = "") {
           <g class="joint knee-r">
             <line x1="12.9" y1="34" x2="14.6" y2="42"></line>
           </g>
+        </g>
+        <g class="book">
+          <line x1="9" y1="17.6" x2="9" y2="22.2"></line>
+          <line x1="9" y1="17.6" x2="12.2" y2="16.8"></line>
+          <line x1="9" y1="22.2" x2="12.2" y2="22.6"></line>
+          <line x1="12.2" y1="16.8" x2="12.2" y2="22.6"></line>
+          <line x1="12.2" y1="16.8" x2="15.3" y2="14.8"></line>
+          <line x1="12.2" y1="22.6" x2="15.3" y2="21.8"></line>
+          <line x1="15.3" y1="14.8" x2="15.3" y2="21.8"></line>
         </g>
       </g>
     </svg>

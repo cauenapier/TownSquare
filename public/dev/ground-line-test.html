@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare — ground line test fixture</title>
+    <link rel="stylesheet" href="/widget.css" />
+    <link rel="stylesheet" href="/page.css" />
+  </head>
+  <body class="dev-page">
+    <main class="dev-shell">
+      <section class="townsquare-host dev-host" aria-label="TownSquare ground-line test scene">
+        <div id="townsquare-root"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { mountTownSquare } from "/townsquare.mjs";
+
+      // Static customization preview: no socket, fixed spawn, and — crucially for
+      // this fixture — `style: {}` makes the widget write the inline palette that
+      // flips on `data-townsquare-surface`, which is what paints the sky/ground
+      // gradient we're checking (see #townsquare-root[data-townsquare-surface] in
+      // widget.css). Plain `preview: true` alone leaves the stage transparent.
+      mountTownSquare(document.getElementById("townsquare-root"), {
+        preview: true,
+        style: {},
+        scene: { benches: 0, trees: 0, lamps: 0, birds: 0 },
+      });
+    </script>
+  </body>
+</html>

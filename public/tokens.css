@@ -1,13 +1,16 @@
 /*
- * TownSquare design tokens.
+ * TownSquare widget design tokens.
  *
- * Shared palette and type scale for the widget and TownSquare host pages.
- * Custom properties are inert on external hosts unless something reads them.
+ * Scoped to the embed mount point so host-page :root palettes are untouched.
+ *
+ * No web font is loaded here on purpose: this file ships in every embed via
+ * widget.css, and a render-blocking cross-origin font request would tax the
+ * host page's first paint. The widget uses the host's system UI font through
+ * the `--font` fallback stack below; a host that wants Hanken Grotesk can load
+ * it themselves and it will be picked up.
  */
-@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,460;0,500;0,600;0,650;1,460&display=swap");
 
-#townsquare-root,
-:root {
+#townsquare-root {
   /* Surfaces — warm gray scene, cream chrome */
   --scene: #e4e2dd;
   --scene-edge: #dad8d1;
@@ -51,6 +54,15 @@
   --fw-name: 600;
   --fs-time: 12px;
   --fw-time: 500;
+
+  /* Motion & Transitions */
+  --ts-transition-micro: 80ms;
+  --ts-transition-short: 120ms;
+  --ts-transition-standard: 220ms;
+  --ts-transition-long: 560ms;
+
+  /* Opacity */
+  --ts-opacity-disabled: 0.42;
 
   /* Legacy aliases — host page chrome uses the same palette */
   --bg: var(--page);

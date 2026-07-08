@@ -47,8 +47,8 @@ test("visitor extensions are namespaced and browser modules respect enablement",
   const manager = new PluginManager();
   manager.register({
     name: "owner-figure",
-    adminModule: "/pro/owner-figure/admin.mjs",
-    widgetModule: "/pro/owner-figure/widget.mjs",
+    adminModule: "/plus/owner-figure/admin.mjs",
+    widgetModule: "/plus/owner-figure/widget.mjs",
     isEnabled: ({ site }) => site.supporter,
     extendVisitor: (_visitor, { data, visitor }) => (visitor.isOwner ? data : undefined),
   });
@@ -70,7 +70,7 @@ test("visitor extensions are namespaced and browser modules respect enablement",
     },
   );
   assert.deepEqual(manager.browserModules("admin", context({ supporter: true }, {})), [
-    { name: "owner-figure", module: "/pro/owner-figure/admin.mjs" },
+    { name: "owner-figure", module: "/plus/owner-figure/admin.mjs" },
   ]);
   assert.deepEqual(manager.browserModules("widget", context({ supporter: false }, {})), []);
 });
@@ -83,7 +83,7 @@ test("labelled plugins stay off until a site enables them", () => {
     label: "Telegram notifications",
     description: "Forward chat messages to Telegram.",
     onMessage: () => calls.push("telegram"),
-    adminModule: "/pro/telegram/admin.mjs",
+    adminModule: "/plus/telegram/admin.mjs",
   });
 
   assert.deepEqual(manager.toggleable(), [
@@ -100,7 +100,7 @@ test("labelled plugins stay off until a site enables them", () => {
   manager.run("onMessage", () => ({ enabled: true }));
   assert.deepEqual(calls, ["telegram"]);
   assert.deepEqual(manager.browserModules("admin", () => ({ enabled: true })), [
-    { name: "telegram", module: "/pro/telegram/admin.mjs" },
+    { name: "telegram", module: "/plus/telegram/admin.mjs" },
   ]);
 });
 
@@ -110,24 +110,24 @@ test("toggleable plugins are filtered to entitled sites", () => {
   manager.register({
     name: "owner-figure",
     label: "Owner figure",
-    isEnabled: ({ site }) => site?.pro === true,
+    isEnabled: ({ site }) => site?.plus === true,
     onMessage: () => calls.push("owner-figure"),
   });
 
   // Listed everywhere when no context is given; hidden where the site lacks the
   // entitlement, even if its toggle is on.
   assert.deepEqual(manager.toggleable().map((plugin) => plugin.name), ["owner-figure"]);
-  assert.deepEqual(manager.toggleable(() => ({ site: { pro: false }, enabled: true })), []);
+  assert.deepEqual(manager.toggleable(() => ({ site: { plus: false }, enabled: true })), []);
   assert.deepEqual(
-    manager.toggleable(() => ({ site: { pro: true } })).map((plugin) => plugin.name),
+    manager.toggleable(() => ({ site: { plus: true } })).map((plugin) => plugin.name),
     ["owner-figure"],
   );
 
-  // A pro site still has to switch it on for it to actually run.
-  manager.run("onMessage", () => ({ site: { pro: true }, enabled: false }));
-  manager.run("onMessage", () => ({ site: { pro: false }, enabled: true }));
+  // A plus site still has to switch it on for it to actually run.
+  manager.run("onMessage", () => ({ site: { plus: true }, enabled: false }));
+  manager.run("onMessage", () => ({ site: { plus: false }, enabled: true }));
   assert.deepEqual(calls, []);
-  manager.run("onMessage", () => ({ site: { pro: true }, enabled: true }));
+  manager.run("onMessage", () => ({ site: { plus: true }, enabled: true }));
   assert.deepEqual(calls, ["owner-figure"]);
 });
 
