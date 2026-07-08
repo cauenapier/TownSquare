@@ -976,8 +976,8 @@
   position: absolute;
   top: -18px;
   left: var(--wx, 50%);
-  width: 2px;
-  height: calc(14px * var(--w-scale, 1));
+  width: 1px;
+  height: calc(4px * var(--w-scale, 1));
   border-radius: 1px;
   background: color-mix(in oklab, var(--ink) 42%, transparent);
   animation: weather-fall calc(var(--w-duration, 1.1s) * var(--ts-weather-time-scale, 1)) linear infinite;
@@ -993,8 +993,8 @@
    with the animated transform, so the fall vector tilts with the streak and
    the drops travel along their own slant. */
 .townsquare--weather-storm .weather-drop {
-  width: 2.5px;
-  height: calc(18px * var(--w-scale, 1));
+  width: 1.5px;
+  height: calc(4 * var(--w-scale, 1));
   rotate: -14deg;
   background: color-mix(in oklab, var(--ink) 52%, transparent);
 }
