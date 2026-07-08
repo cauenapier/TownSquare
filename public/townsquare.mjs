@@ -9,6 +9,7 @@
 import { createChatScope, setLocalTyping, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds, syncBirdPerches } from "./widget/birds.mjs";
 import { initClouds, destroyClouds } from "./widget/clouds.mjs";
+import { initWeather, destroyWeather } from "./widget/weather.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
 import { setupMessageBoard, teardownMessageBoard } from "./widget/message-board.mjs";
 import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
@@ -74,6 +75,7 @@ import {
  * @property {Array<{ side: "left"|"right", label?: string, url: string }>} [connections] Neighbouring towns linked at the stage edges. Each grows a signpost on its side that opens a "walk over" modal.
  * @property {{ enabled?: boolean, x?: number, variant?: string, accent?: string, title?: string, body?: string }} [messageBoard] Owner message board: a single clickable prop that opens a modal with the owner's note. Sanitized client-side; disabled when blank.
  * @property {Array<{ name: string, module: string }>} [pluginModules] Trusted widget feature modules registered by the TownSquare server.
+ * @property {"clear" | "rain" | "storm" | "snow"} [weather] Pin the ambient weather. Omit to follow the shared hourly schedule every visitor sees.
  */
 
 /**
@@ -412,8 +414,10 @@ export function mountTownSquare(root, options = {}) {
   if (!preview) {
     initBirds(ctx);
     initClouds(ctx);
+    initWeather(ctx);
     disposers.push(() => destroyBirds(ctx));
     disposers.push(() => destroyClouds(ctx));
+    disposers.push(() => destroyWeather(ctx));
   }
   // Watch (overlay) mode is a passive viewer: it renders the real crowd but
   // never shows or moves a self avatar.

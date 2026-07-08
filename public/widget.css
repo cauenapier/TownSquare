@@ -906,6 +906,240 @@
   .cloud { animation-play-state: paused; }
 }
 
+/* ============================================================================
+   WEATHER — ambient light rain, thunderstorm, and snow
+
+   Painted by widget/weather.mjs into .townsquare__weather (a stage overlay).
+   Base precipitation, the sky tint, and storm flashes show in the collapsed
+   widget too, so a passing storm is legible at a glance. High-altitude detail
+   — weather clouds, lightning bolts, background depth precipitation — carries
+   .weather--high and only paints in expanded mode, where the taller sky gives
+   it room. All motion is CSS keyframes on transform/opacity; JS never
+   animates weather.
+   ============================================================================ */
+
+.townsquare__weather {
+  /* How far a particle falls before recycling: a little past the collapsed
+     stage height. Expanded stretches it to the viewport-tall sky, with a time
+     stretch so the fall reads slightly faster, not 4× faster. */
+  --ts-weather-fall: 230px;
+  --ts-weather-time-scale: 1;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Above props and figures — precipitation is the nearest scene layer — but
+     below the widget UI and chat bubbles/trays (--ts-z-ui and up). */
+  z-index: 1000;
+}
+
+.townsquare--expanded .townsquare__weather {
+  --ts-weather-fall: 105dvh;
+  --ts-weather-time-scale: 2.4;
+}
+
+/* Sky tint — the strongest collapsed-view tell that the weather changed. */
+.townsquare__weather::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--ts-weather-tint, transparent);
+  opacity: 0;
+  transition: opacity 800ms ease;
+}
+
+.townsquare--weather-rain .townsquare__weather::before {
+  --ts-weather-tint: rgba(96, 112, 132, 0.14);
+  opacity: 1;
+}
+
+.townsquare--weather-storm .townsquare__weather::before {
+  --ts-weather-tint: rgba(42, 50, 68, 0.26);
+  opacity: 1;
+}
+
+.townsquare--weather-snow .townsquare__weather::before {
+  --ts-weather-tint: rgba(226, 234, 244, 0.16);
+  opacity: 1;
+}
+
+/* High-altitude detail only exists in the expanded sky. */
+.townsquare__weather .weather--high {
+  display: none;
+}
+
+.townsquare--expanded .townsquare__weather .weather--high {
+  display: block;
+}
+
+.weather-drop {
+  position: absolute;
+  top: -18px;
+  left: var(--wx, 50%);
+  width: 2px;
+  height: calc(14px * var(--w-scale, 1));
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--ink) 42%, transparent);
+  animation: weather-fall calc(var(--w-duration, 1.1s) * var(--ts-weather-time-scale, 1)) linear infinite;
+  animation-delay: var(--w-delay, 0s);
+}
+
+.weather-drop.weather--high {
+  width: 1.5px;
+  opacity: 0.5;
+}
+
+/* Storm rain: thicker, darker, and slanted. The independent `rotate` composes
+   with the animated transform, so the fall vector tilts with the streak and
+   the drops travel along their own slant. */
+.townsquare--weather-storm .weather-drop {
+  width: 2.5px;
+  height: calc(18px * var(--w-scale, 1));
+  rotate: -14deg;
+  background: color-mix(in oklab, var(--ink) 52%, transparent);
+}
+
+.townsquare--weather-storm .weather-drop.weather--high {
+  width: 1.5px;
+}
+
+.weather-flake {
+  position: absolute;
+  top: -12px;
+  left: var(--wx, 50%);
+  animation: weather-fall calc(var(--w-duration, 6s) * var(--ts-weather-time-scale, 1)) linear infinite;
+  animation-delay: var(--w-delay, 0s);
+}
+
+.weather-flake i {
+  display: block;
+  width: calc(5px * var(--w-scale, 1));
+  height: calc(5px * var(--w-scale, 1));
+  border-radius: 50%;
+  /* A whisper of ink keeps flakes legible on pale skies in both themes. */
+  background: color-mix(in oklab, #fff 86%, var(--ink));
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ink) 18%, transparent);
+  animation: weather-sway var(--w-sway-duration, 2.2s) ease-in-out infinite alternate;
+  animation-delay: var(--w-delay, 0s);
+}
+
+.weather-flake.weather--high {
+  opacity: 0.55;
+}
+
+/* Settled snow along the ground line — visible collapsed too. */
+.weather-ground {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 7px;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
+}
+
+/* Lightning: a brief double-pulse sheet flash over the whole sky (both views),
+   plus expanded-only bolts that share the same cycle so they strike together. */
+.weather-flash {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(235, 242, 255, 0.85),
+    rgba(235, 242, 255, 0.28) 60%,
+    rgba(235, 242, 255, 0) 100%
+  );
+  opacity: 0;
+  animation: weather-flash var(--flash-duration, 9s) linear infinite;
+  animation-delay: var(--flash-delay, 0s);
+}
+
+.weather-bolt {
+  position: absolute;
+  top: var(--bolt-top, 6%);
+  left: var(--bolt-x, 30%);
+  width: clamp(26px, 5cqw, 54px);
+  color: #f4f8ff;
+  filter: drop-shadow(0 0 6px rgba(190, 214, 255, 0.9));
+  opacity: 0;
+  animation: weather-bolt var(--flash-duration, 9s) linear infinite;
+  animation-delay: var(--flash-delay, 0s);
+}
+
+.weather-bolt svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.weather-bolt svg path {
+  fill: currentColor;
+}
+
+/* Weather clouds ride the ambient .cloud drift, recolored per kind; the
+   ambient cloud layer itself also darkens so the whole sky agrees. */
+.weather-cloud {
+  color: rgba(148, 163, 184, 0.78);
+}
+
+.townsquare--weather-storm .weather-cloud {
+  color: rgba(84, 96, 116, 0.88);
+}
+
+.townsquare--weather-rain .townsquare__clouds .cloud {
+  color: rgba(170, 182, 196, 0.8);
+}
+
+.townsquare--weather-storm .townsquare__clouds .cloud {
+  color: rgba(112, 124, 142, 0.8);
+}
+
+@keyframes weather-fall {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, var(--ts-weather-fall, 230px), 0);
+  }
+}
+
+@keyframes weather-sway {
+  from {
+    transform: translateX(calc(-1 * var(--w-sway, 7px)));
+  }
+  to {
+    transform: translateX(var(--w-sway, 7px));
+  }
+}
+
+@keyframes weather-flash {
+  0%, 4.4% { opacity: 0; }
+  5% { opacity: 0.85; }
+  5.6% { opacity: 0.12; }
+  6.2% { opacity: 0.55; }
+  8% { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+@keyframes weather-bolt {
+  0%, 4.4% { opacity: 0; }
+  4.8%, 6% { opacity: 1; }
+  7% { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Freeze the motion but keep the sky tint and the scattered particles (their
+   negative delays leave them mid-fall), so the weather still reads as a
+   static illustration. */
+@media (prefers-reduced-motion: reduce) {
+  .weather-drop,
+  .weather-flake,
+  .weather-flake i,
+  .weather-flash,
+  .weather-bolt {
+    animation-play-state: paused;
+  }
+}
+
 .bird {
   position: absolute;
   left: calc(var(--bird-x) * 100%);

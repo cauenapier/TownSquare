@@ -106,6 +106,10 @@
  * @property {Map<number, import("./birds.mjs").BirdView>} [birds]
  * @property {HTMLElement} [birdLayer]
  * @property {HTMLElement} [cloudLayer]
+ * @property {HTMLElement} [weatherLayer]
+ * @property {string} [weather] Active ambient weather kind ("clear" | "rain" | "storm" | "snow").
+ * @property {string | null} [weatherOverride] Pinned weather (mount option or dev override); null follows the shared hourly schedule.
+ * @property {ReturnType<typeof setInterval> | null} [weatherTimer]
  * @property {{ left: Array<import("../../lib/site-config.mjs").Connection>, right: Array<import("../../lib/site-config.mjs").Connection> } | null} [connectionsBySide]
  * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]
  * @property {import("./modal.mjs").WidgetModal | null} [connectionsModal]
