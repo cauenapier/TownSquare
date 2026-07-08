@@ -1493,7 +1493,7 @@
 .townsquare-avatar--preview.townsquare-avatar--walking { filter: none; }
 .townsquare-avatar--preview svg * { stroke-width: 1.4; }
 
-.townsquare-avatar svg :is(g.figure-core, g.joint, g.book) {
+.townsquare-avatar svg :is(g.figure-core, g.joint, g.book, g.umbrella, g.umbrella-canopy) {
   transform-box: view-box;
 }
 
@@ -1507,6 +1507,11 @@
 .townsquare-avatar svg g.knee-l { transform-origin: 7.1px 34px; }
 .townsquare-avatar svg g.knee-r { transform-origin: 12.9px 34px; }
 .townsquare-avatar svg g.book { transform-origin: 12.15px 18.7px; }
+/* Umbrella pivots: the whole umbrella about the grip point on the shaft, the
+   canopy about the point where it meets the shaft, so the pop-open unfurls
+   outward and upward from the shaft rather than from the figure's centre. */
+.townsquare-avatar svg g.umbrella { transform-origin: 8.5px 21px; }
+.townsquare-avatar svg g.umbrella-canopy { transform-origin: 8.5px 0.2px; }
 
 .townsquare-avatar.townsquare-avatar--walking svg :is(g.figure-core, g.joint) {
   animation-duration: var(--walk-cycle);
@@ -1837,6 +1842,59 @@
 .townsquare-avatar svg g.book { opacity: 0; transition: opacity 140ms ease, transform 140ms ease; }
 /* Tilted toward the head/to the side rather than held flat-on. */
 .townsquare-avatar--book svg g.book { opacity: 1; transform: rotate(-10deg); }
+
+/* umbrella: every figure opens one while the thunderstorm plays. Driven purely
+   by the weather class on the widget root (weather.mjs), so self and peers all
+   raise umbrellas together with no per-avatar state or protocol traffic.
+
+   The umbrella (g.umbrella, figure.mjs) is a shaft at x=8.5 with a filled
+   canopy dome closed over the head — the canopy extends above the viewBox top
+   (negative y), which the figure svg's overflow:visible renders fine. The
+   left arm holds it: grip on the shaft at (8.5,21), and like the book pose
+   the shoulder/elbow angles are IK-solved for that grip (upper arm 6.85u,
+   forearm 6.16u; the elbow-out-to-the-side branch reads as "holding something
+   up" where the other branch crosses the chest). `animation: none` on the
+   holding arm keeps it from swinging while walking — the legs keep the walk
+   cycle — and its transition eases the arm up when the storm starts.
+
+   Book pose owns both arms and hides elbow-r, so a reading figure skips the
+   umbrella (they're off reading elsewhere anyway); away (zZz) figures skip it
+   too. Placed after the book rules to keep the pose-precedence story in one
+   spot, though the :not() guards are what actually resolve the conflict. */
+.townsquare--weather-storm .townsquare-avatar:not(.townsquare-avatar--book, .townsquare-avatar--reading-away) svg g.arm-l {
+  transform: rotate(31deg);
+  animation: none !important;
+  transition: transform 400ms ease;
+}
+
+.townsquare--weather-storm .townsquare-avatar:not(.townsquare-avatar--book, .townsquare-avatar--reading-away) svg g.elbow-l {
+  transform: rotate(-99deg);
+  animation: none !important;
+  transition: transform 400ms ease;
+}
+
+.townsquare-avatar svg g.umbrella { opacity: 0; transition: opacity 300ms ease; }
+.townsquare-avatar svg g.umbrella-canopy path { fill: currentColor; }
+
+.townsquare--weather-storm .townsquare-avatar:not(.townsquare-avatar--book, .townsquare-avatar--reading-away) svg g.umbrella {
+  opacity: 1;
+}
+
+/* The open: the canopy unfurls out of the shaft with a slight overshoot each
+   time the storm class lands (including for visitors arriving mid-storm). */
+.townsquare--weather-storm .townsquare-avatar:not(.townsquare-avatar--book, .townsquare-avatar--reading-away) svg g.umbrella-canopy {
+  animation: presence-umbrella-open 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes presence-umbrella-open {
+  from { transform: scale(0.2, 0.35); }
+  62% { transform: scale(1.1, 1.05); }
+  to { transform: scale(1, 1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .townsquare--weather-storm .townsquare-avatar svg g.umbrella-canopy { animation: none; }
+}
 
 /* ── Ghost stack: history lives in the scene as fading bubbles above the figure ── */
 .townsquare-avatar__above {

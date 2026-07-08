@@ -54,6 +54,13 @@ export function figureMarkup(svgAttributes = "") {
           <line x1="12.2" y1="22.6" x2="15.3" y2="21.8"></line>
           <line x1="15.3" y1="14.8" x2="15.3" y2="21.8"></line>
         </g>
+        <g class="umbrella">
+          <line x1="8.5" y1="21.8" x2="8.5" y2="-0.2"></line>
+          <g class="umbrella-canopy">
+            <path d="M1.8 0.2 C 2.8 -7.3 14.2 -7.3 15.2 0.2 Z"></path>
+            <line x1="8.5" y1="-7.6" x2="8.5" y2="-5.8"></line>
+          </g>
+        </g>
       </g>
     </svg>
   `;
