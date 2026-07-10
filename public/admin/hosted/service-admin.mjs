@@ -18,6 +18,7 @@ import {
   formatTime,
   postJson,
 } from "./hosted-common.mjs";
+import { buildVisitorActivityView } from "./visitor-activity-view.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -68,6 +69,11 @@ const notificationMessageEl = document.getElementById("notification-message");
 const sendNotificationBtn = document.getElementById("send-notification-btn");
 const sendNotificationStatus = document.getElementById("send-notification-status");
 const recentNotificationsListEl = document.getElementById("recent-notifications-list");
+const trafficDialogEl = document.getElementById("service-traffic-dialog");
+const trafficDialogTitleEl = document.getElementById("service-traffic-title");
+const trafficDialogMetaEl = document.getElementById("service-traffic-meta");
+const trafficDialogChartEl = document.getElementById("service-traffic-chart");
+const trafficDialogCloseButton = document.getElementById("service-traffic-close");
 
 const STORAGE_KEY = "townsquare-service-admin-password";
 const TABLE_PREFS_KEY = "townsquare-service-admin-table";
@@ -154,6 +160,7 @@ let mapEditorSaving = false;
 let mapEditorMessage = "";
 let mapBrushSize = Number(mapBrushSizeEl.value);
 let mapTreeDensity = Number(mapDensityEl.value);
+let trafficRequestId = 0;
 
 const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
 const setStatus = createStatusSetter(statusEl);
@@ -763,6 +770,107 @@ function createActionMenu(site) {
   return menu;
 }
 
+function formatVisitorAverage(value) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function hourLabel(hour) {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+function renderVisitorTraffic(activity) {
+  const view = buildVisitorActivityView(activity);
+  trafficDialogChartEl.replaceChildren();
+  trafficDialogMetaEl.textContent = `Up to the last ${view.windowDays} days · ${view.timeZone}. Bar height is relative to this site's busiest average hour.`;
+
+  if (view.peakAverage === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note service-traffic-dialog__empty";
+    empty.textContent = "No hourly visitor activity has been recorded yet.";
+    trafficDialogChartEl.append(empty);
+    return;
+  }
+
+  const peak = view.rows
+    .flatMap((row) => row.hours.map((slot) => ({ ...slot, day: row.name })))
+    .find((slot) => slot.average === view.peakAverage);
+  const summary = document.createElement("p");
+  summary.className = "service-traffic-dialog__summary";
+  summary.textContent = `Busiest: ${peak.day} at ${hourLabel(peak.hour)} ${view.timeZone} · ${formatVisitorAverage(peak.average)} average visitor${peak.average === 1 ? "" : "s"}.`;
+
+  const table = document.createElement("table");
+  table.className = "service-traffic-chart";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const dayHeading = document.createElement("th");
+  dayHeading.scope = "col";
+  dayHeading.textContent = "Day";
+  headRow.append(dayHeading);
+  for (let hour = 0; hour < 24; hour += 1) {
+    const heading = document.createElement("th");
+    heading.scope = "col";
+    heading.textContent = String(hour).padStart(2, "0");
+    heading.title = hourLabel(hour);
+    headRow.append(heading);
+  }
+  head.append(headRow);
+
+  const body = document.createElement("tbody");
+  for (const row of view.rows) {
+    const tableRow = document.createElement("tr");
+    const day = document.createElement("th");
+    day.scope = "row";
+    day.textContent = row.name.slice(0, 3);
+    day.title = `${row.name} · ${row.sampleDays} sampled day${row.sampleDays === 1 ? "" : "s"}`;
+    tableRow.append(day);
+
+    for (const slot of row.hours) {
+      const cell = document.createElement("td");
+      const average = formatVisitorAverage(slot.average);
+      const percentage = Math.round(slot.percentage);
+      cell.title = `${row.name} ${hourLabel(slot.hour)} ${view.timeZone}: ${average} average visitor${slot.average === 1 ? "" : "s"} (${percentage}% of peak)`;
+      cell.setAttribute("aria-label", cell.title);
+
+      const track = document.createElement("span");
+      track.className = "service-traffic-chart__track";
+      track.setAttribute("aria-hidden", "true");
+      const bar = document.createElement("span");
+      bar.className = "service-traffic-chart__bar";
+      bar.style.height = `${slot.percentage}%`;
+      if (slot.average > 0) track.append(bar);
+      cell.append(track);
+      tableRow.append(cell);
+    }
+    body.append(tableRow);
+  }
+  table.append(head, body);
+  trafficDialogChartEl.append(summary, table);
+}
+
+async function showVisitorTraffic(site) {
+  const requestId = ++trafficRequestId;
+  closeRowMenus();
+  trafficDialogTitleEl.textContent = `${site.name || site.origin || site.siteKey} traffic`;
+  trafficDialogMetaEl.textContent = "Loading hourly activity...";
+  trafficDialogChartEl.replaceChildren();
+  if (!trafficDialogEl.open) trafficDialogEl.showModal();
+
+  const result = await api("/api/service-admin/traffic", { siteKey: site.siteKey });
+  if (requestId !== trafficRequestId) return;
+  if (result.status === 403) {
+    trafficDialogEl.close();
+    credentialStore.clear();
+    password = "";
+    showLogin(result.body.error || "Could not open service admin.", true);
+    return;
+  }
+  if (!result.ok) {
+    trafficDialogMetaEl.textContent = result.body.error || "Could not load visitor traffic.";
+    return;
+  }
+  renderVisitorTraffic(result.body.activity);
+}
+
 function renderCell(site, column) {
   const cell = document.createElement("td");
   const value = column.render ? column.render(site) : String(site[column.key] ?? "");
@@ -834,7 +942,16 @@ function renderSitesTableBody() {
 
     const actionsCell = document.createElement("td");
     actionsCell.className = "service-table-actions-cell";
-    actionsCell.append(createActionMenu(site));
+    const actions = document.createElement("div");
+    actions.className = "service-table-actions";
+    const traffic = document.createElement("button");
+    traffic.type = "button";
+    traffic.className = "service-row-action-button";
+    traffic.textContent = "Traffic";
+    traffic.setAttribute("aria-label", `View hourly traffic for ${site.name || site.siteKey}`);
+    traffic.addEventListener("click", () => void showVisitorTraffic(site));
+    actions.append(createActionMenu(site), traffic);
+    actionsCell.append(actions);
     row.append(actionsCell);
 
     siteTableBodyEl.append(row);
@@ -1452,7 +1569,13 @@ signOutButton.addEventListener("click", () => {
   if (mapEditorRenderFrame !== null) cancelAnimationFrame(mapEditorRenderFrame);
   mapEditorRenderFrame = null;
   mapEditorCanvasEl.hidden = true;
+  if (trafficDialogEl.open) trafficDialogEl.close();
   showLogin("Signed out. The service admin password was forgotten on this device.");
+});
+
+trafficDialogCloseButton.addEventListener("click", () => trafficDialogEl.close());
+trafficDialogEl.addEventListener("click", (event) => {
+  if (event.target === trafficDialogEl) trafficDialogEl.close();
 });
 
 bindCopy(copyTokenButton, { text: () => newAdminTokenEl.value, source: newAdminTokenEl });

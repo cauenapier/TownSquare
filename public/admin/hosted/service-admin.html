@@ -250,6 +250,25 @@
       </section>
     </main>
 
+    <dialog class="service-traffic-dialog" id="service-traffic-dialog" aria-labelledby="service-traffic-title">
+      <div class="service-traffic-dialog__panel">
+        <div class="service-traffic-dialog__head">
+          <div>
+            <p class="eyebrow">Average visitor traffic</p>
+            <h2 id="service-traffic-title">Traffic by weekday and hour</h2>
+          </div>
+          <button
+            type="button"
+            class="service-traffic-dialog__close"
+            id="service-traffic-close"
+            aria-label="Close traffic chart"
+          >×</button>
+        </div>
+        <p class="hosted-note" id="service-traffic-meta"></p>
+        <div class="service-traffic-chart-wrap" id="service-traffic-chart" aria-live="polite"></div>
+      </div>
+    </dialog>
+
     <script type="module" src="/admin/hosted/service-admin.mjs"></script>
   </body>
 </html>
