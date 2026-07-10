@@ -21,8 +21,7 @@ import {
 import {
   buildStackedVisitorActivityView,
   buildVisitorActivityView,
-  filterVisitorActivitySites,
-} from "./visitor-activity-view.mjs?v=traffic-activity-v5";
+} from "./visitor-activity-view.mjs?v=traffic-activity-v3";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -77,7 +76,6 @@ const recentNotificationsListEl = document.getElementById("recent-notifications-
 const trafficDialogEl = document.getElementById("service-traffic-dialog");
 const trafficDialogTitleEl = document.getElementById("service-traffic-title");
 const trafficDialogMetaEl = document.getElementById("service-traffic-meta");
-const trafficDialogFiltersEl = document.getElementById("service-traffic-filters");
 const trafficDialogChartEl = document.getElementById("service-traffic-chart");
 const trafficDialogCloseButton = document.getElementById("service-traffic-close");
 
@@ -167,8 +165,6 @@ let mapEditorMessage = "";
 let mapBrushSize = Number(mapBrushSizeEl.value);
 let mapTreeDensity = Number(mapDensityEl.value);
 let trafficRequestId = 0;
-let aggregateTrafficSites = [];
-let includedTrafficSiteKeys = new Set();
 
 const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
 const setStatus = createStatusSetter(statusEl);
@@ -790,7 +786,7 @@ function trafficToneClass(tone) {
   return `service-traffic-tone--${tone}`;
 }
 
-function renderVisitorTraffic(view, { aggregate = false, emptyText = "" } = {}) {
+function renderVisitorTraffic(view, { aggregate = false } = {}) {
   trafficDialogChartEl.replaceChildren();
   trafficDialogMetaEl.textContent = aggregate
     ? `Up to the last ${view.windowDays} days · ${view.timeZone}. Each stack sums the sites' own weekday averages.`
@@ -799,7 +795,7 @@ function renderVisitorTraffic(view, { aggregate = false, emptyText = "" } = {}) 
   if (view.peakAverage === 0) {
     const empty = document.createElement("p");
     empty.className = "hosted-note service-traffic-dialog__empty";
-    empty.textContent = emptyText || "No hourly visitor activity has been recorded yet.";
+    empty.textContent = "No hourly visitor activity has been recorded yet.";
     trafficDialogChartEl.append(empty);
     return;
   }
@@ -888,109 +884,11 @@ function renderVisitorTraffic(view, { aggregate = false, emptyText = "" } = {}) 
   trafficDialogChartEl.append(summary, ...(legend.childElementCount > 0 ? [legend] : []), table);
 }
 
-function trafficSiteLabel(site) {
-  return site.name || site.origin || site.siteKey;
-}
-
-function updateTrafficFilterControls() {
-  const total = aggregateTrafficSites.length;
-  const included = aggregateTrafficSites.reduce(
-    (count, site) => count + Number(includedTrafficSiteKeys.has(site.siteKey)),
-    0,
-  );
-  const status = trafficDialogFiltersEl.querySelector("[data-traffic-filter-status]");
-  const includeAll = trafficDialogFiltersEl.querySelector("[data-traffic-include-all]");
-  const excludeAll = trafficDialogFiltersEl.querySelector("[data-traffic-exclude-all]");
-  if (status) status.textContent = `${included} of ${total} included`;
-  if (includeAll) includeAll.disabled = included === total;
-  if (excludeAll) excludeAll.disabled = included === 0;
-  for (const input of trafficDialogFiltersEl.querySelectorAll("[data-traffic-site-key]")) {
-    input.checked = includedTrafficSiteKeys.has(input.dataset.trafficSiteKey);
-  }
-}
-
-function renderAllTrafficChart() {
-  const includedSites = filterVisitorActivitySites(aggregateTrafficSites, includedTrafficSiteKeys);
-  const view = buildStackedVisitorActivityView(includedSites);
-  renderVisitorTraffic(view, {
-    aggregate: true,
-    emptyText: includedSites.length === 0
-      ? "No websites are included. Select one or more websites above."
-      : "The included websites have no hourly visitor activity yet.",
-  });
-  if (includedSites.length === 0) {
-    trafficDialogMetaEl.textContent = "No websites included. Use the filters below to build a traffic view.";
-  }
-}
-
-function renderTrafficFilters() {
-  trafficDialogFiltersEl.replaceChildren();
-  trafficDialogFiltersEl.hidden = false;
-
-  const fieldset = document.createElement("fieldset");
-  const legend = document.createElement("legend");
-  legend.textContent = "Websites";
-  const head = document.createElement("div");
-  head.className = "service-traffic-filters__head";
-  const status = document.createElement("span");
-  status.dataset.trafficFilterStatus = "";
-  status.setAttribute("aria-live", "polite");
-  const actions = document.createElement("div");
-  actions.className = "service-traffic-filters__actions";
-
-  const includeAll = document.createElement("button");
-  includeAll.type = "button";
-  includeAll.dataset.trafficIncludeAll = "";
-  includeAll.textContent = "Include all";
-  includeAll.addEventListener("click", () => {
-    includedTrafficSiteKeys = new Set(aggregateTrafficSites.map((site) => site.siteKey));
-    updateTrafficFilterControls();
-    renderAllTrafficChart();
-  });
-
-  const excludeAll = document.createElement("button");
-  excludeAll.type = "button";
-  excludeAll.dataset.trafficExcludeAll = "";
-  excludeAll.textContent = "Exclude all";
-  excludeAll.addEventListener("click", () => {
-    includedTrafficSiteKeys.clear();
-    updateTrafficFilterControls();
-    renderAllTrafficChart();
-  });
-  actions.append(includeAll, excludeAll);
-  head.append(status, actions);
-
-  const list = document.createElement("div");
-  list.className = "service-traffic-filters__list";
-  for (const site of aggregateTrafficSites) {
-    const label = document.createElement("label");
-    label.title = site.origin || site.siteKey;
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.dataset.trafficSiteKey = site.siteKey;
-    input.checked = includedTrafficSiteKeys.has(site.siteKey);
-    input.addEventListener("change", () => {
-      if (input.checked) includedTrafficSiteKeys.add(site.siteKey);
-      else includedTrafficSiteKeys.delete(site.siteKey);
-      updateTrafficFilterControls();
-      renderAllTrafficChart();
-    });
-    label.append(input, trafficSiteLabel(site));
-    list.append(label);
-  }
-
-  fieldset.append(legend, head, list);
-  trafficDialogFiltersEl.append(fieldset);
-  updateTrafficFilterControls();
-}
-
 async function openVisitorTraffic(title, payload, render) {
   const requestId = ++trafficRequestId;
   closeRowMenus();
   trafficDialogTitleEl.textContent = title;
   trafficDialogMetaEl.textContent = "Loading hourly activity...";
-  trafficDialogFiltersEl.hidden = true;
-  trafficDialogFiltersEl.replaceChildren();
   trafficDialogChartEl.replaceChildren();
   if (!trafficDialogEl.open) trafficDialogEl.showModal();
 
@@ -1022,13 +920,7 @@ function showAllVisitorTraffic() {
   return openVisitorTraffic(
     "All websites traffic",
     {},
-    (body) => {
-      aggregateTrafficSites = [...body.sites]
-        .sort((left, right) => trafficSiteLabel(left).localeCompare(trafficSiteLabel(right)));
-      includedTrafficSiteKeys = new Set(aggregateTrafficSites.map((site) => site.siteKey));
-      renderTrafficFilters();
-      renderAllTrafficChart();
-    },
+    (body) => renderVisitorTraffic(buildStackedVisitorActivityView(body.sites), { aggregate: true }),
   );
 }
 

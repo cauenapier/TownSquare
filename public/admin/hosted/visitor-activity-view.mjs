@@ -7,11 +7,6 @@ function safeCount(value) {
   return Number.isFinite(count) && count > 0 ? count : 0;
 }
 
-export function filterVisitorActivitySites(sites, includedSiteKeys) {
-  const included = new Set(includedSiteKeys || []);
-  return (Array.isArray(sites) ? sites : []).filter((site) => included.has(site?.siteKey));
-}
-
 /** Convert raw visitor-hour totals into comparable weekday averages. */
 export function buildVisitorActivityView(activity) {
   const sourceRows = Array.isArray(activity?.weekdays) ? activity.weekdays : [];
@@ -42,7 +37,7 @@ export function buildVisitorActivityView(activity) {
 
 /** Build an aggregate chart with the busiest sites stacked and the rest grouped. */
 export function buildStackedVisitorActivityView(sites, maxSites = MAX_STACKED_SITES) {
-  const normalizedSites = (Array.isArray(sites) ? sites : [])
+  const siteViews = (Array.isArray(sites) ? sites : [])
     .map((site) => {
       const view = buildVisitorActivityView(site?.activity);
       const score = view.rows.reduce(
@@ -56,9 +51,7 @@ export function buildStackedVisitorActivityView(sites, maxSites = MAX_STACKED_SI
         view,
       };
     })
-    .filter((site) => site.key);
-  const siteViews = normalizedSites
-    .filter((site) => site.score > 0)
+    .filter((site) => site.key && site.score > 0)
     .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label));
 
   const visibleSites = siteViews.slice(0, Math.max(1, maxSites));
@@ -108,8 +101,8 @@ export function buildStackedVisitorActivityView(sites, maxSites = MAX_STACKED_SI
   }
 
   return {
-    timeZone: normalizedSites[0]?.view.timeZone || "UTC",
-    windowDays: Math.max(0, ...normalizedSites.map((site) => site.view.windowDays)),
+    timeZone: siteViews[0]?.view.timeZone || "UTC",
+    windowDays: Math.max(0, ...siteViews.map((site) => site.view.windowDays)),
     peakAverage,
     rows,
     legend: contributors.map(({ key, label, tone }) => ({ key, label, tone })),

@@ -63,13 +63,3 @@ test("stacked activity groups sites beyond the visible color limit", async () =>
   assert.equal(view.legend[6].label, "Other (2)");
   assert.equal(view.rows[0].hours[0].segments[6].average, 3);
 });
-
-test("activity site filtering supports one, many, all, and none", async () => {
-  const { filterVisitorActivitySites } = await import("../public/admin/hosted/visitor-activity-view.mjs");
-  const sites = ["one", "two", "three"].map((siteKey) => ({ siteKey }));
-
-  assert.deepEqual(filterVisitorActivitySites(sites, ["two"]).map((site) => site.siteKey), ["two"]);
-  assert.deepEqual(filterVisitorActivitySites(sites, ["one", "three"]).map((site) => site.siteKey), ["one", "three"]);
-  assert.equal(filterVisitorActivitySites(sites, sites.map((site) => site.siteKey)).length, 3);
-  assert.equal(filterVisitorActivitySites(sites, []).length, 0);
-});

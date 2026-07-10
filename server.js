@@ -2018,14 +2018,18 @@ function handleServiceAdminTraffic(req, res) {
 
     const siteKey = String(body.siteKey || "");
     if (!siteKey) {
-      sendJson(res, 200, {
-        sites: Array.from(sitesByKey.values()).map((site) => ({
+      const sites = [];
+      for (const site of sitesByKey.values()) {
+        const activity = visitorStats.getActivityByWeekdayAndHour(site.siteKey);
+        if (!activity.weekdays.some((weekday) => weekday.hours.some((count) => count > 0))) continue;
+        sites.push({
           siteKey: site.siteKey,
           name: site.name,
           origin: site.origin,
-          activity: visitorStats.getActivityByWeekdayAndHour(site.siteKey),
-        })),
-      });
+          activity,
+        });
+      }
+      sendJson(res, 200, { sites });
       return;
     }
 
