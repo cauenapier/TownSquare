@@ -2051,6 +2051,109 @@ body {
   margin: 0;
 }
 
+.service-traffic-filters {
+  margin-top: 16px;
+}
+
+.service-traffic-filters fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+}
+
+.service-traffic-filters legend {
+  padding: 0 5px;
+  color: var(--ink);
+  font: 600 0.86rem var(--font-display);
+}
+
+.service-traffic-filters__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.service-traffic-filters__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.service-traffic-filters__actions button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 700 0.78rem var(--font);
+  cursor: pointer;
+}
+
+.service-traffic-filters__actions button:hover:not(:disabled) {
+  background: var(--cream-deep);
+}
+
+.service-traffic-filters__actions button:focus-visible {
+  outline: 2px solid var(--you-deep);
+  outline-offset: 2px;
+}
+
+.service-traffic-filters__actions button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.service-traffic-filters__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  max-height: 128px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.service-traffic-filters__list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--hair-2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.service-traffic-filters__list label:has(input:checked) {
+  border-color: color-mix(in oklab, var(--you) 55%, var(--hair-2));
+  background: var(--you-tint);
+  color: var(--ink);
+}
+
+.service-traffic-filters__list label:has(input:focus-visible) {
+  outline: 2px solid var(--you-deep);
+  outline-offset: 2px;
+}
+
+.service-traffic-filters__list input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--you-deep);
+}
+
 .service-traffic-legend {
   display: flex;
   flex-wrap: wrap;

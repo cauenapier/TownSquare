@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TownSquare service admin</title>
-    <link rel="stylesheet" href="/page.css?v=traffic-activity-v3" />
+    <link rel="stylesheet" href="/page.css?v=traffic-activity-v5" />
   </head>
   <body>
     <main class="hosted-shell hosted-shell--wide">
@@ -266,10 +266,11 @@
           >×</button>
         </div>
         <p class="hosted-note" id="service-traffic-meta"></p>
+        <div class="service-traffic-filters" id="service-traffic-filters" hidden></div>
         <div class="service-traffic-chart-wrap" id="service-traffic-chart" aria-live="polite"></div>
       </div>
     </dialog>
 
-    <script type="module" src="/admin/hosted/service-admin.mjs?v=traffic-activity-v3"></script>
+    <script type="module" src="/admin/hosted/service-admin.mjs?v=traffic-activity-v5"></script>
   </body>
 </html>
