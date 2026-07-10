@@ -2017,6 +2017,22 @@ function handleServiceAdminTraffic(req, res) {
     if (!isServiceAdminAuthorized(req, body, res)) return;
 
     const siteKey = String(body.siteKey || "");
+    if (!siteKey) {
+      const sites = [];
+      for (const site of sitesByKey.values()) {
+        const activity = visitorStats.getActivityByWeekdayAndHour(site.siteKey);
+        if (!activity.weekdays.some((weekday) => weekday.hours.some((count) => count > 0))) continue;
+        sites.push({
+          siteKey: site.siteKey,
+          name: site.name,
+          origin: site.origin,
+          activity,
+        });
+      }
+      sendJson(res, 200, { sites });
+      return;
+    }
+
     const site = sitesByKey.get(siteKey);
     if (!site) {
       sendJson(res, 404, { error: "Site not found." });

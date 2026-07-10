@@ -18,7 +18,10 @@ import {
   formatTime,
   postJson,
 } from "./hosted-common.mjs";
-import { buildVisitorActivityView } from "./visitor-activity-view.mjs";
+import {
+  buildStackedVisitorActivityView,
+  buildVisitorActivityView,
+} from "./visitor-activity-view.mjs?v=traffic-activity-v3";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -31,6 +34,7 @@ const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const siteFilterEl = document.getElementById("site-filter");
 const siteFilterMetaEl = document.getElementById("site-filter-meta");
+const allSiteTrafficButton = document.getElementById("all-site-traffic");
 const siteColumnPickerPanelEl = document.getElementById("site-column-picker-panel");
 const siteTableWrapEl = document.getElementById("site-table-wrap");
 const siteTableHeadEl = document.getElementById("site-table-head");
@@ -778,10 +782,15 @@ function hourLabel(hour) {
   return `${String(hour).padStart(2, "0")}:00`;
 }
 
-function renderVisitorTraffic(activity) {
-  const view = buildVisitorActivityView(activity);
+function trafficToneClass(tone) {
+  return `service-traffic-tone--${tone}`;
+}
+
+function renderVisitorTraffic(view, { aggregate = false } = {}) {
   trafficDialogChartEl.replaceChildren();
-  trafficDialogMetaEl.textContent = `Up to the last ${view.windowDays} days · ${view.timeZone}. Bar height is relative to this site's busiest average hour.`;
+  trafficDialogMetaEl.textContent = aggregate
+    ? `Up to the last ${view.windowDays} days · ${view.timeZone}. Each stack sums the sites' own weekday averages.`
+    : `Up to the last ${view.windowDays} days · ${view.timeZone}. Bar height is relative to this site's busiest average hour.`;
 
   if (view.peakAverage === 0) {
     const empty = document.createElement("p");
@@ -796,7 +805,19 @@ function renderVisitorTraffic(activity) {
     .find((slot) => slot.average === view.peakAverage);
   const summary = document.createElement("p");
   summary.className = "service-traffic-dialog__summary";
-  summary.textContent = `Busiest: ${peak.day} at ${hourLabel(peak.hour)} ${view.timeZone} · ${formatVisitorAverage(peak.average)} average visitor${peak.average === 1 ? "" : "s"}.`;
+  const scope = aggregate ? ` across ${view.siteCount} site${view.siteCount === 1 ? "" : "s"} with recorded traffic` : "";
+  summary.textContent = `Busiest: ${peak.day} at ${hourLabel(peak.hour)} ${view.timeZone} · ${formatVisitorAverage(peak.average)} average visitor${peak.average === 1 ? "" : "s"}${scope}.`;
+
+  const legend = document.createElement("ul");
+  legend.className = "service-traffic-legend";
+  for (const contributor of view.legend || []) {
+    const item = document.createElement("li");
+    const swatch = document.createElement("span");
+    swatch.className = `service-traffic-legend__swatch ${trafficToneClass(contributor.tone)}`;
+    swatch.setAttribute("aria-hidden", "true");
+    item.append(swatch, contributor.label);
+    legend.append(item);
+  }
 
   const table = document.createElement("table");
   table.className = "service-traffic-chart";
@@ -821,41 +842,57 @@ function renderVisitorTraffic(activity) {
     const day = document.createElement("th");
     day.scope = "row";
     day.textContent = row.name.slice(0, 3);
-    day.title = `${row.name} · ${row.sampleDays} sampled day${row.sampleDays === 1 ? "" : "s"}`;
+    day.title = aggregate
+      ? row.name
+      : `${row.name} · ${row.sampleDays} sampled day${row.sampleDays === 1 ? "" : "s"}`;
     tableRow.append(day);
 
     for (const slot of row.hours) {
       const cell = document.createElement("td");
       const average = formatVisitorAverage(slot.average);
       const percentage = Math.round(slot.percentage);
-      cell.title = `${row.name} ${hourLabel(slot.hour)} ${view.timeZone}: ${average} average visitor${slot.average === 1 ? "" : "s"} (${percentage}% of peak)`;
+      const breakdown = (slot.segments || [])
+        .filter((segment) => segment.average > 0)
+        .map((segment) => `${segment.label}: ${formatVisitorAverage(segment.average)}`)
+        .join("; ");
+      cell.title = `${row.name} ${hourLabel(slot.hour)} ${view.timeZone}: ${average} average visitor${slot.average === 1 ? "" : "s"} (${percentage}% of peak)${breakdown ? `. ${breakdown}` : ""}`;
       cell.setAttribute("aria-label", cell.title);
 
       const track = document.createElement("span");
-      track.className = "service-traffic-chart__track";
+      track.className = `service-traffic-chart__track${aggregate ? " service-traffic-chart__track--stacked" : ""}`;
       track.setAttribute("aria-hidden", "true");
-      const bar = document.createElement("span");
-      bar.className = "service-traffic-chart__bar";
-      bar.style.height = `${slot.percentage}%`;
-      if (slot.average > 0) track.append(bar);
+      if (aggregate) {
+        for (const segment of slot.segments) {
+          if (segment.average <= 0) continue;
+          const bar = document.createElement("span");
+          bar.className = `service-traffic-chart__bar ${trafficToneClass(segment.tone)}`;
+          bar.style.height = `${segment.percentage}%`;
+          track.append(bar);
+        }
+      } else if (slot.average > 0) {
+        const bar = document.createElement("span");
+        bar.className = "service-traffic-chart__bar";
+        bar.style.height = `${slot.percentage}%`;
+        track.append(bar);
+      }
       cell.append(track);
       tableRow.append(cell);
     }
     body.append(tableRow);
   }
   table.append(head, body);
-  trafficDialogChartEl.append(summary, table);
+  trafficDialogChartEl.append(summary, ...(legend.childElementCount > 0 ? [legend] : []), table);
 }
 
-async function showVisitorTraffic(site) {
+async function openVisitorTraffic(title, payload, render) {
   const requestId = ++trafficRequestId;
   closeRowMenus();
-  trafficDialogTitleEl.textContent = `${site.name || site.origin || site.siteKey} traffic`;
+  trafficDialogTitleEl.textContent = title;
   trafficDialogMetaEl.textContent = "Loading hourly activity...";
   trafficDialogChartEl.replaceChildren();
   if (!trafficDialogEl.open) trafficDialogEl.showModal();
 
-  const result = await api("/api/service-admin/traffic", { siteKey: site.siteKey });
+  const result = await api("/api/service-admin/traffic", payload);
   if (requestId !== trafficRequestId) return;
   if (result.status === 403) {
     trafficDialogEl.close();
@@ -868,7 +905,23 @@ async function showVisitorTraffic(site) {
     trafficDialogMetaEl.textContent = result.body.error || "Could not load visitor traffic.";
     return;
   }
-  renderVisitorTraffic(result.body.activity);
+  render(result.body);
+}
+
+function showVisitorTraffic(site) {
+  return openVisitorTraffic(
+    `${site.name || site.origin || site.siteKey} traffic`,
+    { siteKey: site.siteKey },
+    (body) => renderVisitorTraffic(buildVisitorActivityView(body.activity)),
+  );
+}
+
+function showAllVisitorTraffic() {
+  return openVisitorTraffic(
+    "All websites traffic",
+    {},
+    (body) => renderVisitorTraffic(buildStackedVisitorActivityView(body.sites), { aggregate: true }),
+  );
 }
 
 function renderCell(site, column) {
@@ -1364,6 +1417,7 @@ function renderStatistics(sites, platform = null) {
 
 function renderSites(sites, platform = null) {
   allSites = sites;
+  allSiteTrafficButton.disabled = sites.length === 0;
   renderSitesTable();
   renderStatistics(sites, platform);
   renderTrafficFlows(sites);
@@ -1467,6 +1521,8 @@ siteFilterEl.addEventListener("input", () => {
   filterQuery = siteFilterEl.value;
   renderSitesTableBody();
 });
+
+allSiteTrafficButton.addEventListener("click", () => void showAllVisitorTraffic());
 
 for (const button of mapToolButtons) {
   button.addEventListener("click", () => {

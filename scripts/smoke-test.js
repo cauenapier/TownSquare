@@ -1004,6 +1004,17 @@ async function assertServiceAdminCanManageSites(hostedA, hostedB) {
   );
   assert(!JSON.stringify(traffic).includes("browserId"), "service admin traffic leaked visitor identities");
 
+  const allTraffic = await serviceAdminApi("/api/service-admin/traffic");
+  assert(
+    allTraffic.sites.some((site) => site.siteKey === hostedA.site.siteKey),
+    "service admin aggregate traffic omitted hosted site A",
+  );
+  assert(
+    allTraffic.sites.every((site) => site.activity.weekdays.length === 7),
+    "service admin aggregate traffic did not include weekday activity",
+  );
+  assert(!JSON.stringify(allTraffic).includes("browserId"), "aggregate traffic leaked visitor identities");
+
   const reset = await serviceAdminApi("/api/service-admin/action", {
     action: "resetAdminToken",
     siteKey: hostedB.site.siteKey,

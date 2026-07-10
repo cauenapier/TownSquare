@@ -29,3 +29,37 @@ test("visitor activity view safely handles an empty dataset", async () => {
   assert.equal(view.rows.length, 7);
   assert.equal(view.rows.flatMap((row) => row.hours).every((slot) => slot.percentage === 0), true);
 });
+
+test("stacked activity sums each site's normalized average", async () => {
+  const { buildStackedVisitorActivityView } = await import("../public/admin/hosted/visitor-activity-view.mjs");
+  const view = buildStackedVisitorActivityView([
+    {
+      siteKey: "one",
+      name: "One",
+      activity: { weekdays: [{ weekday: 0, sampleDays: 5, hours: [10] }] },
+    },
+    {
+      siteKey: "two",
+      name: "Two",
+      activity: { weekdays: [{ weekday: 0, sampleDays: 4, hours: [4] }] },
+    },
+  ]);
+
+  assert.equal(view.rows[0].hours[0].average, 3);
+  assert.deepEqual(view.rows[0].hours[0].segments.map((segment) => segment.average), [2, 1]);
+  assert.equal(view.rows[0].hours[0].percentage, 100);
+});
+
+test("stacked activity groups sites beyond the visible color limit", async () => {
+  const { buildStackedVisitorActivityView } = await import("../public/admin/hosted/visitor-activity-view.mjs");
+  const sites = Array.from({ length: 8 }, (_, index) => ({
+    siteKey: `site-${index}`,
+    name: `Site ${index}`,
+    activity: { weekdays: [{ weekday: 0, sampleDays: 1, hours: [8 - index] }] },
+  }));
+  const view = buildStackedVisitorActivityView(sites);
+
+  assert.equal(view.legend.length, 7);
+  assert.equal(view.legend[6].label, "Other (2)");
+  assert.equal(view.rows[0].hours[0].segments[6].average, 3);
+});
