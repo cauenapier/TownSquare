@@ -2294,6 +2294,21 @@ body {
 .service-traffic-tone--6 { background: color-mix(in oklab, var(--ink) 55%, var(--cream)); }
 .service-traffic-tone--other { background: var(--ink-mute); }
 
+.service-traffic-tooltip {
+  position: fixed;
+  z-index: 60;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--cream);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: none;
+  box-shadow: var(--tray-shadow);
+}
+
 .service-stats-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));

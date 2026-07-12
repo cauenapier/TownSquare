@@ -121,6 +121,10 @@
                 spellcheck="false"
               />
             </label>
+            <label class="hosted-toggle">
+              <input type="checkbox" id="site-verified-filter" checked />
+              <span>Verified only</span>
+            </label>
             <button type="button" class="service-toolbar-button" id="all-site-traffic">All-site traffic</button>
             <details class="service-column-picker" id="site-column-picker">
               <summary>Columns</summary>
@@ -268,6 +272,7 @@
         <p class="hosted-note" id="service-traffic-meta"></p>
         <div class="service-traffic-chart-wrap" id="service-traffic-chart" aria-live="polite"></div>
       </div>
+      <div class="service-traffic-tooltip" id="service-traffic-tooltip" role="tooltip" hidden></div>
     </dialog>
 
     <script type="module" src="/admin/hosted/service-admin.mjs?v=traffic-activity-v3"></script>

@@ -38,6 +38,7 @@ const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const siteFilterEl = document.getElementById("site-filter");
+const siteVerifiedFilterEl = document.getElementById("site-verified-filter");
 const siteFilterMetaEl = document.getElementById("site-filter-meta");
 const allSiteTrafficButton = document.getElementById("all-site-traffic");
 const siteColumnPickerPanelEl = document.getElementById("site-column-picker-panel");
@@ -83,6 +84,7 @@ const trafficDialogTitleEl = document.getElementById("service-traffic-title");
 const trafficDialogMetaEl = document.getElementById("service-traffic-meta");
 const trafficDialogChartEl = document.getElementById("service-traffic-chart");
 const trafficDialogCloseButton = document.getElementById("service-traffic-close");
+const trafficTooltipEl = document.getElementById("service-traffic-tooltip");
 
 const STORAGE_KEY = "townsquare-service-admin-password";
 const TABLE_PREFS_KEY = "townsquare-service-admin-table";
@@ -131,6 +133,7 @@ function loadTablePrefs() {
 function saveTablePrefs() {
   localStorage.setItem(TABLE_PREFS_KEY, JSON.stringify({
     visibleColumns: [...visibleColumnKeys],
+    verifiedOnly,
   }));
 }
 
@@ -141,6 +144,8 @@ let visibleColumnKeys = new Set(
     ? tablePrefs.visibleColumns.filter((key) => TABLE_COLUMNS.some((column) => column.key === key))
     : defaultVisibleColumnKeys,
 );
+let verifiedOnly = typeof tablePrefs?.verifiedOnly === "boolean" ? tablePrefs.verifiedOnly : true;
+siteVerifiedFilterEl.checked = verifiedOnly;
 
 const credentialStore = createCredentialStore(STORAGE_KEY);
 
@@ -150,8 +155,8 @@ let rememberMe = stored?.remembered ?? false;
 
 let allSites = [];
 let filterQuery = "";
-let sortKey = "name";
-let sortAsc = true;
+let sortKey = "verifiedAt";
+let sortAsc = false;
 let columnPickerReady = false;
 let tableHeadSignature = "";
 let savedMapWorld = null;
@@ -607,6 +612,7 @@ function siteMatchesFilter(site, query) {
 function visibleSites() {
   const query = filterQuery.trim().toLowerCase();
   return allSites
+    .filter((site) => !verifiedOnly || Boolean(site.verifiedAt))
     .filter((site) => siteMatchesFilter(site, query))
     .sort((left, right) => {
       const order = compareSites(left, right, sortKey);
@@ -809,6 +815,33 @@ function trafficToneClass(tone) {
   return `service-traffic-tone--${tone}`;
 }
 
+function positionTrafficTooltip(x, y) {
+  const offset = 14;
+  const rect = trafficTooltipEl.getBoundingClientRect();
+  let left = x + offset;
+  let top = y + offset;
+  if (left + rect.width > window.innerWidth) left = x - rect.width - offset;
+  if (top + rect.height > window.innerHeight) top = y - rect.height - offset;
+  trafficTooltipEl.style.left = `${Math.max(0, left)}px`;
+  trafficTooltipEl.style.top = `${Math.max(0, top)}px`;
+}
+
+function showTrafficTooltip(text, x, y) {
+  trafficTooltipEl.textContent = text;
+  trafficTooltipEl.hidden = false;
+  positionTrafficTooltip(x, y);
+}
+
+function hideTrafficTooltip() {
+  trafficTooltipEl.hidden = true;
+}
+
+function attachTrafficTooltip(el, text) {
+  el.addEventListener("mouseenter", (event) => showTrafficTooltip(text, event.clientX, event.clientY));
+  el.addEventListener("mousemove", (event) => positionTrafficTooltip(event.clientX, event.clientY));
+  el.addEventListener("mouseleave", hideTrafficTooltip);
+}
+
 function renderVisitorTraffic(view, { aggregate = false } = {}) {
   trafficDialogChartEl.replaceChildren();
   trafficDialogMetaEl.textContent = aggregate
@@ -878,8 +911,9 @@ function renderVisitorTraffic(view, { aggregate = false } = {}) {
         .filter((segment) => segment.average > 0)
         .map((segment) => `${segment.label}: ${formatVisitorAverage(segment.average)}`)
         .join("; ");
-      cell.title = `${row.name} ${hourLabel(slot.hour)} ${view.timeZone}: ${average} average visitor${slot.average === 1 ? "" : "s"} (${percentage}% of peak)${breakdown ? `. ${breakdown}` : ""}`;
-      cell.setAttribute("aria-label", cell.title);
+      const tooltipText = `${row.name} ${hourLabel(slot.hour)} ${view.timeZone}: ${average} average visitor${slot.average === 1 ? "" : "s"} (${percentage}% of peak)${breakdown ? `. ${breakdown}` : ""}`;
+      cell.setAttribute("aria-label", tooltipText);
+      attachTrafficTooltip(cell, tooltipText);
 
       const track = document.createElement("span");
       track.className = `service-traffic-chart__track${aggregate ? " service-traffic-chart__track--stacked" : ""}`;
@@ -913,6 +947,7 @@ async function openVisitorTraffic(title, payload, render) {
   trafficDialogTitleEl.textContent = title;
   trafficDialogMetaEl.textContent = "Loading hourly activity...";
   trafficDialogChartEl.replaceChildren();
+  hideTrafficTooltip();
   if (!trafficDialogEl.open) trafficDialogEl.showModal();
 
   const result = await api("/api/service-admin/traffic", payload);
@@ -993,7 +1028,7 @@ function renderCell(site, column) {
 
 function renderSitesTableBody() {
   const sites = visibleSites();
-  const filtered = Boolean(filterQuery.trim());
+  const filtered = Boolean(filterQuery.trim()) || verifiedOnly;
 
   siteEmptyEl.hidden = allSites.length > 0;
   siteNoMatchesEl.hidden = allSites.length === 0 || sites.length > 0;
@@ -1545,6 +1580,12 @@ siteFilterEl.addEventListener("input", () => {
   renderSitesTableBody();
 });
 
+siteVerifiedFilterEl.addEventListener("change", () => {
+  verifiedOnly = siteVerifiedFilterEl.checked;
+  saveTablePrefs();
+  renderSitesTableBody();
+});
+
 allSiteTrafficButton.addEventListener("click", () => void showAllVisitorTraffic());
 
 for (const button of mapToolButtons) {
@@ -1656,6 +1697,7 @@ trafficDialogCloseButton.addEventListener("click", () => trafficDialogEl.close()
 trafficDialogEl.addEventListener("click", (event) => {
   if (event.target === trafficDialogEl) trafficDialogEl.close();
 });
+trafficDialogEl.addEventListener("close", hideTrafficTooltip);
 
 bindCopy(copyTokenButton, { text: () => newAdminTokenEl.value, source: newAdminTokenEl });
 
