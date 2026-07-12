@@ -2,6 +2,7 @@ import { bindCopy, createSvgElement } from "../../lib/ui-common.mjs";
 import { buildMapEdges } from "../../map/map-connections.mjs";
 import { layoutMapSites } from "../../map/map-layout.mjs";
 import { createCityMarker, renderMapEdge } from "../../map/map-render.mjs";
+import { routeMapRoads } from "../../map/map-roads.mjs";
 import { renderSceneryLayer } from "../../map/map-scenery.mjs";
 import {
   cloneMapWorld,
@@ -229,8 +230,10 @@ function renderMapEditor() {
   const visibleSites = allSites.filter((site) => site.verifiedAt && !site.disabled);
   const positions = layoutMapSites(visibleSites, draftMapWorld.width, draftMapWorld.height);
   const edges = createSvgElement("g", { class: "map-edges", "aria-hidden": "true" });
-  for (const edge of buildMapEdges(visibleSites)) {
-    const path = renderMapEdge(edge, positions);
+  const mapEdges = buildMapEdges(visibleSites);
+  const roadRoutes = routeMapRoads(mapEdges, visibleSites, positions, draftMapWorld);
+  for (const edge of mapEdges) {
+    const path = renderMapEdge(edge, positions, "", roadRoutes);
     if (path) edges.appendChild(path);
   }
   svg.appendChild(edges);

@@ -2461,31 +2461,58 @@ body {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  --road-edge-width: 6;
+  --road-surface-width: 3.5;
+  --road-mark-width: 0.8;
 }
 
-.map-link--asphalt {
-  stroke: color-mix(in oklab, #3a3835 78%, var(--ink) 22%);
-  stroke-width: 5.5;
+.map-link--major {
+  --road-edge-width: 9;
+  --road-surface-width: 6;
+  --road-mark-width: 1.1;
+}
+
+.map-link--local {
+  --road-edge-width: 7.5;
+  --road-surface-width: 4.5;
+}
+
+.map-link--trail {
+  --road-edge-width: 4;
+  --road-surface-width: 2.2;
+  --road-mark-width: 0;
+}
+
+.map-link__edge {
+  stroke: color-mix(in oklab, var(--ink) 58%, transparent);
+  stroke-width: var(--road-edge-width);
+  opacity: 0.48;
+}
+
+.map-link__surface {
+  stroke: color-mix(in oklab, var(--page) 78%, #d8bd86 22%);
+  stroke-width: var(--road-surface-width);
+}
+
+.map-link__marking {
+  stroke: color-mix(in oklab, var(--ink-soft) 58%, #b8a47d 42%);
+  stroke-width: var(--road-mark-width);
+  stroke-dasharray: 3 5;
+  opacity: 0.72;
+}
+
+.map-link--trail .map-link__surface {
+  stroke: color-mix(in oklab, #9a7f5c 72%, var(--page) 28%);
+  stroke-dasharray: 5 8;
+}
+
+.map-link.is-active .map-link__edge {
+  stroke: color-mix(in oklab, var(--you-deep) 62%, var(--ink) 38%);
   opacity: 0.82;
 }
 
-.map-link--dirt {
-  stroke: color-mix(in oklab, #9a7f5c 72%, var(--ink-soft) 28%);
-  stroke-width: 3.5;
-  stroke-dasharray: 7 11;
-  opacity: 0.62;
-}
-
-.map-link--asphalt.is-active {
-  stroke: color-mix(in oklab, var(--you-deep) 68%, #3a3835 32%);
-  stroke-width: 6.5;
-  opacity: 1;
-}
-
-.map-link--dirt.is-active {
-  stroke: color-mix(in oklab, var(--you-deep) 52%, #9a7f5c 48%);
-  stroke-width: 4.5;
-  opacity: 0.92;
+.map-link.is-active .map-link__surface {
+  stroke: color-mix(in oklab, var(--you-tint) 72%, var(--page) 28%);
 }
 
 .map-node {
