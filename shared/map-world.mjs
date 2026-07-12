@@ -9,7 +9,7 @@ export const MAP_WORLD_WIDTH = MAP_WORLD_MIN_WIDTH;
 /** @deprecated Use MAP_WORLD_MIN_HEIGHT */
 export const MAP_WORLD_HEIGHT = MAP_WORLD_MIN_HEIGHT;
 
-export const MAX_MAP_PROPS = 1000;
+export const MAX_MAP_PROPS = 2000;
 export const MAX_WATER_STROKES = 200;
 export const MAX_WATER_POINTS = 5000;
 
@@ -116,37 +116,59 @@ export function validateMapWorld(value) {
 
   const sourceWater = value.water === undefined ? [] : value.water;
   if (!Array.isArray(sourceWater)) return { ok: false, error: "Map water must be an array." };
-  if (sourceWater.length + migratedWater.length > MAX_WATER_STROKES) {
-    return { ok: false, error: `Map cannot contain more than ${MAX_WATER_STROKES} water strokes.` };
-  }
-
-  const water = [...migratedWater];
+  const water = migratedWater.map(({ width: pathWidth, points }) => ({
+    type: "water",
+    paths: [{ width: pathWidth, points, order: 0 }],
+    cutouts: [],
+  }));
   let pointCount = migratedWater.length;
-  for (const stroke of sourceWater) {
-    if (!stroke || typeof stroke !== "object" || !Object.hasOwn(MAP_WATER_TYPES, stroke.type)) {
+  let pathCount = migratedWater.length;
+  for (const area of sourceWater) {
+    if (!area || typeof area !== "object" || !Object.hasOwn(MAP_WATER_TYPES, area.type)) {
       return { ok: false, error: "Map contains an unknown water type." };
     }
-    if (!Number.isFinite(stroke.width) || stroke.width < 8 || stroke.width > 300) {
-      return { ok: false, error: "Water width must be between 8 and 300." };
+    const sourcePaths = Array.isArray(area.paths) ? area.paths : [area];
+    if (sourcePaths.length === 0) return { ok: false, error: "Water areas must contain paths." };
+    const paths = [];
+    for (const sourcePath of sourcePaths) {
+      if (!Number.isFinite(sourcePath.width) || sourcePath.width < 8 || sourcePath.width > 300) {
+        return { ok: false, error: "Water width must be between 8 and 300." };
+      }
+      if (!Array.isArray(sourcePath.points) || sourcePath.points.length === 0) {
+        return { ok: false, error: "Water paths must contain points." };
+      }
+      const points = [];
+      for (const sourcePoint of sourcePath.points) {
+        const point = normalizePoint(sourcePoint, width, height);
+        if (!point) return { ok: false, error: "Water coordinates are outside the world." };
+        points.push(point);
+      }
+      if (sourcePath.order !== undefined && (!Number.isSafeInteger(sourcePath.order) || sourcePath.order < 0)) {
+        return { ok: false, error: "Water path order is invalid." };
+      }
+      pointCount += points.length;
+      paths.push({ width: Math.round(sourcePath.width * 100) / 100, points, order: sourcePath.order ?? 0 });
     }
-    if (!Array.isArray(stroke.points) || stroke.points.length === 0) {
-      return { ok: false, error: "Water strokes must contain points." };
+    pathCount += paths.length;
+    if (pathCount > MAX_WATER_STROKES) {
+      return { ok: false, error: `Map cannot contain more than ${MAX_WATER_STROKES} water paths.` };
     }
-    const points = [];
-    for (const sourcePoint of stroke.points) {
-      const point = normalizePoint(sourcePoint, width, height);
-      if (!point) return { ok: false, error: "Water coordinates are outside the world." };
-      points.push(point);
+    const cutouts = [];
+    for (const sourceCutout of Array.isArray(area.cutouts) ? area.cutouts : []) {
+      const point = normalizePoint(sourceCutout, width, height);
+      if (!point || !Number.isFinite(sourceCutout.radius) || sourceCutout.radius <= 0 || sourceCutout.radius > 150) {
+        return { ok: false, error: "Water cutouts are invalid." };
+      }
+      if (sourceCutout.order !== undefined && (!Number.isSafeInteger(sourceCutout.order) || sourceCutout.order < 0)) {
+        return { ok: false, error: "Water cutout order is invalid." };
+      }
+      cutouts.push({ ...point, radius: Math.round(sourceCutout.radius * 100) / 100, order: sourceCutout.order ?? 1 });
+      pointCount += 1;
     }
-    pointCount += points.length;
     if (pointCount > MAX_WATER_POINTS) {
       return { ok: false, error: `Map cannot contain more than ${MAX_WATER_POINTS} water points.` };
     }
-    water.push({
-      type: normalizeWaterType(stroke.type),
-      width: Math.round(stroke.width * 100) / 100,
-      points,
-    });
+    water.push({ type: normalizeWaterType(area.type), paths, cutouts });
   }
 
   return { ok: true, world: { width, height, props, water } };
@@ -157,9 +179,10 @@ export function cloneMapWorld(world) {
     width: world.width,
     height: world.height,
     props: world.props.map((prop) => ({ ...prop })),
-    water: world.water.map((stroke) => ({
-      ...stroke,
-      points: stroke.points.map((point) => ({ ...point })),
+    water: world.water.map((area) => ({
+      ...area,
+      paths: area.paths.map((path) => ({ ...path, points: path.points.map((point) => ({ ...point })) })),
+      cutouts: area.cutouts.map((cutout) => ({ ...cutout })),
     })),
   };
 }

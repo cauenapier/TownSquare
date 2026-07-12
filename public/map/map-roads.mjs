@@ -1,5 +1,6 @@
 import { cityTier } from "./map-layout.mjs";
 import { mapEdgePath } from "./map-connections.mjs";
+import { measureMapOperation } from "./map-performance.mjs";
 
 const CELL_SIZE = 36;
 const LAND_COST = 1;
@@ -77,14 +78,25 @@ function createGrid(world, sites, positions) {
     }
   }
 
-  for (const stroke of world.water) {
-    const radius = stroke.width / 2 + CELL_SIZE * 0.35;
-    if (stroke.points.length === 1) paintCircle(stroke.points[0], radius, 30);
-    for (let index = 1; index < stroke.points.length; index += 1) {
-      paintSegment(stroke.points[index - 1], stroke.points[index], radius, 30);
-    }
-    if (stroke.width <= 40 && stroke.points.length > 1) {
-      for (const ratio of [0.25, 0.5, 0.75]) paintCircle(pointAlong(stroke.points, ratio), CELL_SIZE * 0.72, LAND_COST, true);
+  for (const area of world.water) {
+    const operations = [
+      ...area.paths.map((path) => ({ type: "paint", order: path.order, path })),
+      ...area.cutouts.map((cutout) => ({ type: "erase", order: cutout.order, cutout })),
+    ].sort((first, second) => first.order - second.order);
+    for (const operation of operations) {
+      if (operation.type === "erase") {
+        paintCircle(operation.cutout, operation.cutout.radius, LAND_COST, true);
+        continue;
+      }
+      const { path } = operation;
+      const radius = path.width / 2 + CELL_SIZE * 0.35;
+      if (path.points.length === 1) paintCircle(path.points[0], radius, 30);
+      for (let index = 1; index < path.points.length; index += 1) {
+        paintSegment(path.points[index - 1], path.points[index], radius, 30);
+      }
+      if (path.width <= 40 && path.points.length > 1) {
+        for (const ratio of [0.25, 0.5, 0.75]) paintCircle(pointAlong(path.points, ratio), CELL_SIZE * 0.72, LAND_COST, true);
+      }
     }
   }
   for (const site of sites) {
@@ -227,20 +239,22 @@ function smoothRoute(points) {
 }
 
 export function routeMapRoads(edges, sites, positions, world) {
-  const grid = createGrid(world, sites, positions);
-  const siteByKey = new Map(sites.map((site) => [site.siteKey, site]));
-  const routes = new Map();
-  for (const edge of edges) {
-    const from = positions.get(edge.fromKey);
-    const to = positions.get(edge.toKey);
-    if (!from || !to) continue;
-    const fromRadius = cityTier(siteByKey.get(edge.fromKey)?.messageCount).radius;
-    const toRadius = cityTier(siteByKey.get(edge.toKey)?.messageCount).radius;
-    const points = findRoute(grid, from, to);
-    const key = `${edge.fromKey}|${edge.toKey}`;
-    routes.set(key, points
-      ? smoothRoute(simplifyRoute(trimRoute(points, fromRadius + 3, toRadius + 3)))
-      : mapEdgePath(from, to, Math.max(fromRadius, toRadius) + 3, key));
-  }
-  return routes;
+  return measureMapOperation("road-routing", () => {
+    const grid = createGrid(world, sites, positions);
+    const siteByKey = new Map(sites.map((site) => [site.siteKey, site]));
+    const routes = new Map();
+    for (const edge of edges) {
+      const from = positions.get(edge.fromKey);
+      const to = positions.get(edge.toKey);
+      if (!from || !to) continue;
+      const fromRadius = cityTier(siteByKey.get(edge.fromKey)?.messageCount).radius;
+      const toRadius = cityTier(siteByKey.get(edge.toKey)?.messageCount).radius;
+      const points = findRoute(grid, from, to);
+      const key = `${edge.fromKey}|${edge.toKey}`;
+      routes.set(key, points
+        ? smoothRoute(simplifyRoute(trimRoute(points, fromRadius + 3, toRadius + 3)))
+        : mapEdgePath(from, to, Math.max(fromRadius, toRadius) + 3, key));
+    }
+    return routes;
+  });
 }
