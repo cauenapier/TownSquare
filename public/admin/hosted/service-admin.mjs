@@ -102,6 +102,7 @@ const TABLE_COLUMNS = [
   { key: "chatDisabled", label: "Chat", render: (site) => (site.chatDisabled ? "Disabled" : "Enabled") },
   { key: "supporter", label: "Supporter", render: (site) => (site.supporter ? "Yes" : "No") },
   { key: "plus", label: "Plus", render: (site) => (site.plus ? "Yes" : "No") },
+  { key: "overlayLastAt", label: "Overlay used", render: (site) => site.overlayUseCount ? `${site.overlayUseCount} · ${formatTime(site.overlayLastAt)}` : "Never" },
   { key: "verifiedAt", label: "Verified", render: (site) => formatTime(site.verifiedAt) },
   { key: "lastSeenAt", label: "Last seen", render: (site) => formatTime(site.lastSeenAt) },
   { key: "lastSeenUrl", label: "Last URL", link: true, render: (site) => site.lastSeenUrl || "" },
@@ -139,11 +140,15 @@ function saveTablePrefs() {
 
 const tablePrefs = loadTablePrefs();
 const defaultVisibleColumnKeys = TABLE_COLUMNS.map((column) => column.key);
+const storedVisibleColumnKeys = Array.isArray(tablePrefs?.visibleColumns)
+  ? tablePrefs.visibleColumns.filter((key) => TABLE_COLUMNS.some((column) => column.key === key))
+  : null;
 let visibleColumnKeys = new Set(
-  Array.isArray(tablePrefs?.visibleColumns) && tablePrefs.visibleColumns.length > 0
-    ? tablePrefs.visibleColumns.filter((key) => TABLE_COLUMNS.some((column) => column.key === key))
-    : defaultVisibleColumnKeys,
+  storedVisibleColumnKeys?.length > 0 ? storedVisibleColumnKeys : defaultVisibleColumnKeys,
 );
+if (storedVisibleColumnKeys?.length > 0 && !visibleColumnKeys.has("overlayLastAt")) {
+  visibleColumnKeys.add("overlayLastAt");
+}
 let verifiedOnly = typeof tablePrefs?.verifiedOnly === "boolean" ? tablePrefs.verifiedOnly : true;
 siteVerifiedFilterEl.checked = verifiedOnly;
 
@@ -563,6 +568,7 @@ function siteSortValue(site, key) {
     case "lastSeenAt":
     case "lastMessageAt":
     case "adminAccessLastAt":
+    case "overlayLastAt":
       return Number(site[key] || 0);
     case "messageCount":
     case "activeVisitors":

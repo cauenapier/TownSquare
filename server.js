@@ -1922,6 +1922,7 @@ function serviceAdminSite(site) {
   const connectionClicks = isPlainObject(site.connectionClicks) ? site.connectionClicks : {};
   const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
   const adminAccess = isPlainObject(site.adminAccess) ? site.adminAccess : {};
+  const overlayUsage = isPlainObject(site.overlayUsage) ? site.overlayUsage : {};
 
   return {
     ...publicSite(site),
@@ -1938,6 +1939,8 @@ function serviceAdminSite(site) {
     mapClickLastAt: Number(mapClicks.lastAt || 0),
     adminAccessCount: Number(adminAccess.count || 0),
     adminAccessLastAt: Number(adminAccess.lastAt || 0),
+    overlayUseCount: Number(overlayUsage.count || 0),
+    overlayLastAt: Number(overlayUsage.lastAt || 0),
   };
 }
 
@@ -2661,6 +2664,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       lastMessageAt: null,
       connectionClicks: {},
       mapClicks: { count: 0, lastAt: 0 },
+      overlayUsage: { count: 0, lastAt: 0 },
       adminAccess: { count: 0, lastAt: 0 },
       createdAt: now,
       updatedAt: now,
@@ -2815,6 +2819,16 @@ function flushSites() {
 function touchSite(site) {
   site.updatedAt = Date.now();
   scheduleSitesSave();
+}
+
+function recordOverlayUse(site) {
+  if (!site) return;
+  const overlayUsage = isPlainObject(site.overlayUsage) ? site.overlayUsage : {};
+  site.overlayUsage = {
+    count: Number(overlayUsage.count || 0) + 1,
+    lastAt: Date.now(),
+  };
+  touchSite(site);
 }
 
 // Notifications are stored separately from sites to avoid losing on restart
@@ -3438,6 +3452,7 @@ function handleInit(client, message) {
     if (client.initialized) return;
     if (!allowSpectatorInit(client)) return;
     client.initialized = true;
+    recordOverlayUse(client.site);
     sendSpectatorHello(client);
     return;
   }
