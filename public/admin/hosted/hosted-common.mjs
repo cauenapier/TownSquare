@@ -156,22 +156,6 @@ export function createAutoRefresh(callback, intervalMs) {
   };
 }
 
-/**
- * Set the text/error state of a `.hosted-status` element in one call.
- *
- * @param {HTMLElement} element
- * @param {string} message
- * @param {boolean} [isError]
- * @param {{ hideWhenEmpty?: boolean }} [options]
- */
-export function setStatus(element, message, isError = false, { hideWhenEmpty = false } = {}) {
-  element.textContent = message;
-  element.classList.toggle("hosted-status--error", isError);
-  if (hideWhenEmpty) {
-    element.hidden = !message;
-  }
-}
-
 const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**

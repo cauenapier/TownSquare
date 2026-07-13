@@ -55,6 +55,25 @@ test("buildSiteCss emits palette tokens only, never repaints the stage", async (
   assert.doesNotMatch(css, /--ts-ground-offset/, "the pasted snippet must not depend on --ts-ground-offset");
 });
 
+test("buildSiteCss scopes distinct light and dark palettes with derived tokens", async () => {
+  const { buildSiteCss } = await import(
+    pathToFileURL(path.join(__dirname, "..", "public", "lib", "site-config-core.mjs")).href
+  );
+  const css = buildSiteCss({
+    light: { sky: "transparent", accent: "#123456" },
+    dark: { sky: "#101820", accent: "#abcdef" },
+  });
+
+  assert.match(css, /#townsquare-root#townsquare-root\s*{/);
+  assert.match(css, /--scene: transparent/);
+  assert.match(css, /--you: #123456/);
+  assert.match(css, /\[data-townsquare-theme="dark"\]/);
+  assert.match(css, /--scene: #101820/);
+  assert.match(css, /--you: #abcdef/);
+  assert.match(css, /--text: var\(--ink\)/);
+  assert.match(css, /@media \(prefers-color-scheme: dark\)/);
+});
+
 test("widget.css paints the sky/ground as flat colors", async () => {
   const widgetCss = fs.readFileSync(
     path.join(__dirname, "..", "public", "widget.css"),

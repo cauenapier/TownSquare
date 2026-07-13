@@ -45,7 +45,7 @@ export function resetPropSettle(ctx) {
 }
 
 /**
- * @param {import("../lib/scene-props.mjs").SceneProp} prop
+ * @param {import("../lib/site-config-core.mjs").SceneProp} prop
  * @param {number} requestedX
  * @returns {number}
  */
@@ -60,7 +60,7 @@ function findNearestSeatX(prop, requestedX) {
 
 /**
  * @param {WidgetContext} ctx
- * @param {import("../lib/scene-props.mjs").SceneProp} prop
+ * @param {import("../lib/site-config-core.mjs").SceneProp} prop
  */
 function applyLocalPropSettle(ctx, prop) {
   const { self } = ctx;

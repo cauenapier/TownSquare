@@ -74,9 +74,9 @@
  * @property {string} browserId
  * @property {Map<string, PeerState>} peers
  * @property {import("./chat.mjs").ChatScope} chat Per-mount chat state shared by all avatars.
- * @property {Array<import("../lib/scene-props.mjs").SceneProp>} sceneProps
- * @property {Map<string, import("../lib/scene-props.mjs").SceneProp>} propsById
- * @property {Map<string, import("../lib/bird-perches.mjs").BirdPerch>} birdPerchesById
+ * @property {Array<import("../lib/site-config-core.mjs").SceneProp>} sceneProps
+ * @property {Map<string, import("../lib/site-config-core.mjs").SceneProp>} propsById
+ * @property {Map<string, import("../lib/site-config-core.mjs").BirdPerch>} birdPerchesById
  * @property {number} chatThrottleMs Slow-mode cooldown from the server.
  * @property {ReturnType<import("./plugins.mjs").createWidgetPluginRuntime>} widgetPlugins
  * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
@@ -111,11 +111,11 @@
  * @property {string | null} [weatherOverride] Pinned weather (mount option or dev override); null follows the shared hourly schedule.
  * @property {Record<string, number> | null} [weatherDistribution] Scheduled weather percentages.
  * @property {ReturnType<typeof setInterval> | null} [weatherTimer]
- * @property {{ left: Array<import("../lib/site-config.mjs").Connection>, right: Array<import("../lib/site-config.mjs").Connection> } | null} [connectionsBySide]
+ * @property {{ left: Array<import("../lib/site-config-core.mjs").Connection>, right: Array<import("../lib/site-config-core.mjs").Connection> } | null} [connectionsBySide]
  * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]
  * @property {import("./modal.mjs").WidgetModal | null} [connectionsModal]
  * @property {"left"|"right"|null} [nearSide] Edge whose signpost the avatar can currently activate.
- * @property {{ board: import("../lib/site-config.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: import("./modal.mjs").WidgetModal | null } | null} [messageBoard]
+ * @property {{ board: import("../lib/site-config-core.mjs").MessageBoard, signature: string, button: HTMLButtonElement, modal: import("./modal.mjs").WidgetModal | null } | null} [messageBoard]
  * @property {{ scene: boolean, style: boolean, connections: boolean, messageBoard: boolean }} [inlineConfig] Which config fields the host pinned inline (power-user overrides that live updates must not touch).
  * @property {(config?: { scene?: unknown, styleConfig?: Record<string, unknown>, connections?: unknown, messageBoard?: unknown }) => void} [applyLiveConfig] Apply server-pushed config, honouring inline overrides.
  */

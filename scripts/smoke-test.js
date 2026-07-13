@@ -248,6 +248,14 @@ async function assertCustomizationPersists() {
   // delivered live over the socket (see the hello payload), not baked here.
   assert(body.embedSnippet.includes(body.site.siteKey), "embed snippet did not include the site key");
   assert(!body.embedSnippet.includes("scene:"), "embed snippet should no longer bake the scene config");
+  const styleUrl = `${HTTP_ORIGIN}/api/sites/${body.site.siteKey}/style.css`;
+  assert(body.embedSnippet.includes(styleUrl), "embed snippet did not include the site stylesheet");
+  const styleResponse = await fetch(styleUrl);
+  const siteCss = await styleResponse.text();
+  assert(styleResponse.ok, "site stylesheet endpoint failed");
+  assert(styleResponse.headers.get("content-type")?.startsWith("text/css"), "site stylesheet returned the wrong content type");
+  assert(styleResponse.headers.get("cache-control")?.includes("max-age=300"), "site stylesheet cache policy changed unexpectedly");
+  assert(siteCss.includes("#9d5c2f") && siteCss.includes("#ffcc00"), "site stylesheet omitted a saved palette");
   // Palette tokens only (current names plus their legacy aliases), never a
   // stage repaint — the paint lives in widget.css (see server/site-config-css.test.js).
   assert(

@@ -40,12 +40,12 @@ import { setStatusMessage, updateStatus } from "./widget/presence.mjs";
 import { sendToServer, wireSocket } from "./widget/protocol.mjs";
 import { setQuiet } from "./widget/quiet.mjs";
 import {
-  applySiteStyle,
   buildBirdPerches,
   buildSceneProps,
   DEFAULT_SCENE_CONFIG,
   sanitizeSceneConfig,
-} from "./lib/site-config.mjs";
+} from "./lib/site-config-core.mjs";
+import { applySiteStyle } from "./lib/site-style.mjs";
 import {
   applyWidgetTheme,
   buildSocketUrl,

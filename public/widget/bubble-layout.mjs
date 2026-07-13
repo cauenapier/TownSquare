@@ -393,25 +393,6 @@ function applyBubbleColumns(measured, selfX, cfg, stageWidth) {
 }
 
 /**
- * Resolve overlap and proximity prominence for every visible bubble column.
- *
- * Run once per animation frame. Both the live widget loop and the dev scene
- * call this with whatever presences they track; anything shaped
- * `{ x, avatar }` works.
- *
- * @param {HTMLElement} stage
- * @param {Iterable<{ x: number, avatar: AvatarView }>} presences
- * @param {number} selfX Your figure's position, normalized — the focus point.
- * @param {Partial<LayoutConfig>} [config] Tuning overrides; defaults fill the rest.
- */
-export function layoutBubbleColumns(stage, presences, selfX, config) {
-  const cfg = config ? { ...DEFAULT_LAYOUT_CONFIG, ...config } : DEFAULT_LAYOUT_CONFIG;
-  const stageWidth = stage.clientWidth;
-  if (!stageWidth) return;
-  applyBubbleColumns(measurePresences(presences, stageWidth), selfX, cfg, stageWidth);
-}
-
-/**
  * Push the resolved name-tag shift to the DOM, skipping sub-pixel-noise writes.
  *
  * @param {AvatarView} avatar
@@ -447,7 +428,7 @@ function setLabelFade(avatar, fade) {
  * unavoidable overlap of far tags recedes instead of fighting for attention. On
  * wide stages the floor stays high, so there's effectively no fade.
  *
- * Run once per animation frame alongside layoutBubbleColumns.
+ * Invoked by layoutStage after its shared measurement pass.
  *
  * @param {Array<MeasuredPresence>} measured
  * @param {number} selfX
@@ -482,23 +463,6 @@ function applyNameLabels(measured, selfX, cfg, stageWidth) {
     gap: LABEL_GAP,
     apply: (column, shift) => setLabelShift(column.avatar, shift),
   });
-}
-
-/**
- * De-conflict the always-visible name tags so none — including your own —
- * covers another. See {@link applyNameLabels}; this is the standalone
- * measure-then-write entry point.
- *
- * @param {HTMLElement} stage
- * @param {Iterable<{ x: number, avatar: AvatarView }>} presences
- * @param {number} selfX Your figure's position, normalized — the focus point.
- * @param {Partial<LayoutConfig>} [config] Tuning overrides; defaults fill the rest.
- */
-export function layoutNameLabels(stage, presences, selfX, config) {
-  const cfg = config ? { ...DEFAULT_LAYOUT_CONFIG, ...config } : DEFAULT_LAYOUT_CONFIG;
-  const stageWidth = stage.clientWidth;
-  if (!stageWidth) return;
-  applyNameLabels(measurePresences(presences, stageWidth), selfX, cfg, stageWidth);
 }
 
 /**

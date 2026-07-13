@@ -1,10 +1,8 @@
 /**
  * Hosted/site-level scene + style configuration — browser form/render layer.
  *
- * Pure, Node-safe logic (constants, defaults, sanitizers, prop/CSS builders)
- * lives in site-config-core.mjs and is re-exported here, so existing importers
- * keep their imports unchanged. The DOM-coupled form binding and rendering
- * helpers below stay browser-only.
+ * Pure, Node-safe logic lives in site-config-core.mjs. This module exposes only
+ * the DOM-coupled form binding and rendering helpers used by hosted admin pages.
  */
 
 import {
@@ -13,13 +11,11 @@ import {
   STYLE_FIELDS,
   STYLE_MODES,
   STYLE_TRANSPARENT,
-  paletteVarEntries,
   styleInputName,
   DEFAULT_SITE_STYLE_LIGHT,
   DEFAULT_SITE_STYLE_DARK,
   getScenePositionInputName,
   sanitizeSceneConfig,
-  sanitizeStylePalette,
   isTransparentStyleValue,
   isPlainObject,
   clampInt,
@@ -31,8 +27,6 @@ import {
   POSITION_INPUT_MAX,
   POSITION_INPUT_STEP,
 } from "./site-config-core.mjs";
-
-export * from "./site-config-core.mjs";
 
 // Every count-bearing scene field, birds included. Positioned fields carry a
 // `positionsKey`; birds are a bare count, so the position logic is guarded on
@@ -118,7 +112,7 @@ export function applyConfigToForm(form, config = {}) {
   syncStyleColorFields(form);
 }
 
-export function syncSceneCountProse(form) {
+function syncSceneCountProse(form) {
   if (!(form instanceof HTMLFormElement)) return;
 
   for (const field of SCENE_COUNT_FIELDS) {
@@ -274,7 +268,7 @@ function syncStyleColorControlUI({ control, valueInput, picker, clearButton }) {
   control.classList.toggle("hosted-color-control--transparent", transparent);
 }
 
-export function syncStyleColorFields(form) {
+function syncStyleColorFields(form) {
   forEachStyleControl(form, ({ fieldDefault, valueInput, control, picker, clearButton }) => {
     syncStyleColorControlUI({ control, valueInput, picker, clearButton, fieldDefault });
   });
@@ -374,7 +368,7 @@ export function renderStyleOverrideFields(container) {
   }
 }
 
-export function getScenePositionGroups(sceneConfig = {}) {
+function getScenePositionGroups(sceneConfig = {}) {
   const scene = sanitizeSceneConfig(sceneConfig);
   return SCENE_FIELDS.map((field) => ({
     key: field.key,
@@ -491,22 +485,4 @@ export function renderScenePositionFields(container, sceneConfig = {}) {
     prose.appendChild(run);
     container.appendChild(prose);
   }
-}
-
-/**
- * Apply one flat palette to a root element as inline CSS variables. Used by the
- * registration/admin live preview. Sets `data-townsquare-surface` so the shared
- * widget paints the stage; hosted embeds rely on pasted CSS from buildSiteCss.
- *
- * @param {HTMLElement} root
- * @param {Record<string, string>} [palette=DEFAULT_SITE_STYLE_LIGHT]
- */
-export function applySiteStyle(root, palette = DEFAULT_SITE_STYLE_LIGHT) {
-  const next = sanitizeStylePalette(palette, DEFAULT_SITE_STYLE_LIGHT);
-  // Base tokens, their legacy alias names, and the derived tokens — the same
-  // entries buildSiteCss emits, so the two writers can't drift.
-  for (const [cssVar, value] of paletteVarEntries(next)) {
-    root.style.setProperty(cssVar, value);
-  }
-  root.dataset.townsquareSurface = "";
 }

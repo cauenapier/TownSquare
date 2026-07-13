@@ -2,8 +2,8 @@
  * Pure, Node-safe scene + style configuration core.
  *
  * Extracted from site-config.mjs so the server (and any Node consumer) imports
- * only DOM-free logic. The browser-only form/render helpers live in
- * site-config.mjs, which re-exports everything here.
+ * only DOM-free logic. Browser-only form/render helpers live separately in
+ * site-config.mjs.
  */
 
 const SAFE_COLOR_RE = /^[#(),.%\sA-Za-z0-9-]+$/;
@@ -130,11 +130,10 @@ export const STYLE_FIELDS = Object.freeze([
 ]);
 
 const SCENE_FIELD_BY_KEY = new Map(SCENE_FIELDS.map((field) => [field.key, field]));
-export const STYLE_VAR_MAP = new Map(STYLE_FIELDS.map((field) => [field.key, field.cssVar]));
 
 // Tokens derived from the base palette above (not owner-editable). Declared once
-// so the two writers of a site palette — the pasted CSS from buildSiteCss
-// (paletteDeclarations) and the inline live preview (applySiteStyle) — stay in
+// so the two writers of a site palette — stylesheet CSS from buildSiteCss and
+// the inline live preview from site-style.mjs — stay in
 // lockstep and can't drift. Values reference the base tokens via var(), so they
 // resolve the same whether emitted as a stylesheet rule or set inline right
 // after the base tokens.
@@ -617,6 +616,19 @@ export function buildSceneProps(config = DEFAULT_SCENE_CONFIG) {
   return props.sort((a, b) => a.x - b.x);
 }
 
+/**
+ * @typedef {Object} BirdPerch
+ * @property {string} id
+ * @property {string} propId
+ * @property {number} offsetX
+ * @property {number} liftPx
+ * @property {number} x
+ */
+
+/**
+ * @param {Array<SceneProp>} props
+ * @returns {Array<BirdPerch>}
+ */
 export function buildBirdPerches(props = []) {
   const perches = [];
   for (const prop of props) {
@@ -646,8 +658,8 @@ export function buildBirdPerches(props = []) {
  * Flatten one sanitized flat palette into `[cssVar, value]` pairs: the base
  * tokens, their legacy alias names (pre-rename tokens like `--page`, kept so
  * pasted CSS and widget builds from before a rename keep painting), and the
- * derived tokens. The single source for both palette writers — the pasted
- * snippet (buildSiteCss) and the inline live preview (applySiteStyle) — so the
+ * derived tokens. The single source for both palette writers — buildSiteCss
+ * and the inline live preview in site-style.mjs — so the
  * two can't drift.
  *
  * @param {Record<string, string>} palette One sanitized flat palette (see sanitizeStylePalette).

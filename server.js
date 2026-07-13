@@ -224,9 +224,9 @@ function parseHttpOrigin(value) {
   }
 }
 
-/** @type {Map<string, import("./public/lib/scene-props.mjs").SceneProp>} */
+/** @type {Map<string, import("./public/lib/site-config-core.mjs").SceneProp>} */
 let PROPS_BY_ID = new Map();
-/** @type {Array<import("./public/lib/bird-perches.mjs").BirdPerch>} */
+/** @type {Array<import("./public/lib/site-config-core.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
 // Shared realtime protocol vocabulary, assigned from protocol.mjs in
 // loadSharedModules() before the server starts listening.
@@ -3959,10 +3959,8 @@ async function startServer() {
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
+  const [siteConfig, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
     import("./public/lib/site-config-core.mjs"),
-    import("./public/lib/scene-props.mjs"),
-    import("./public/lib/bird-perches.mjs"),
     import("./public/lib/scene-prop-geometry.mjs"),
     import("./public/lib/map-world.mjs"),
     import("./public/lib/url.mjs"),
@@ -3999,8 +3997,9 @@ async function loadSharedModules() {
   mapWorld = loadMapWorld();
   ensureMapWorldGrown();
 
-  PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
-  BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;
+  const defaultProps = buildSceneProps(DEFAULT_SITE_SCENE_CONFIG);
+  PROPS_BY_ID = new Map(defaultProps.map((prop) => [prop.id, prop]));
+  BIRD_PERCHES = buildBirdPerches(defaultProps);
 }
 
 // Last-resort guards: log and keep running rather than letting an unexpected

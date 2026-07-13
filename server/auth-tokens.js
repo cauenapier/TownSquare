@@ -27,19 +27,14 @@ function tokensMatch(expected, provided) {
   return crypto.timingSafeEqual(a, b);
 }
 
-// Verify a presented admin token against a site record. Prefers the salted
-// hash; falls back to a legacy plaintext `adminToken` for un-migrated records.
+// Verify a presented admin token against a normalized, hash-only site record.
 function adminTokenMatches(site, adminToken) {
   const token = typeof adminToken === "string" ? adminToken.trim() : "";
-  if (!site || !token) return false;
+  if (!site?.adminTokenHash || !token) return false;
 
-  if (site.adminTokenHash) {
-    const [algorithm, salt] = String(site.adminTokenHash).split(":");
-    if (algorithm !== "sha256" || !salt) return false;
-    return tokensMatch(site.adminTokenHash, hashAdminToken(token, salt));
-  }
-
-  return tokensMatch(site.adminToken, token);
+  const [algorithm, salt] = String(site.adminTokenHash).split(":");
+  if (algorithm !== "sha256" || !salt) return false;
+  return tokensMatch(site.adminTokenHash, hashAdminToken(token, salt));
 }
 
 module.exports = { createToken, hashAdminToken, tokensMatch, adminTokenMatches };
