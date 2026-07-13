@@ -7,7 +7,6 @@ const modulePromise = Promise.all([
   import("../public/map/map-scenery.mjs"),
   import("../public/lib/map-world.mjs"),
   import("../public/map/map-water.mjs"),
-  import("../shared/map-world.mjs"),
 ]);
 
 test("overlapping water paths merge into one area", async () => {
@@ -21,7 +20,7 @@ test("overlapping water paths merge into one area", async () => {
 });
 
 test("water validation migrates strokes and preserves local cutouts", async () => {
-  const [, , , { validateMapWorld }, , { validateMapWorld: validateSharedMapWorld }] = await modulePromise;
+  const [, , , { validateMapWorld }] = await modulePromise;
   const world = {
     width: 1800,
     height: 1200,
@@ -36,10 +35,7 @@ test("water validation migrates strokes and preserves local cutouts", async () =
     ],
   };
   const result = validateMapWorld(world);
-  const sharedResult = validateSharedMapWorld(world);
-
   assert.equal(result.ok, true);
-  assert.deepEqual(sharedResult, result);
   assert.deepEqual(result.world.water[0], {
     type: "water",
     paths: [{ width: 40, points: [{ x: 100, y: 100 }], order: 0 }],

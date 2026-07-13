@@ -1,9 +1,7 @@
 const fs = require("fs");
-const os = require("os");
-const net = require("net");
 const path = require("path");
-const { spawn } = require("child_process");
 const WebSocket = require("ws");
+const { startManagedServer: createManagedServer } = require("./lib/managed-server");
 const { handleSmokeSocketMessage, waitForClose, withTimeout } = require("./smoke-ws-helpers");
 
 // These are `let` so the self-contained harness (startManagedServer) can point
@@ -21,52 +19,15 @@ function authFailuresPerHour() {
   return Number(process.env.AUTH_FAILURES_PER_HOUR || 30);
 }
 
-// Ask the OS for an unused TCP port so concurrent runs don't collide (and so we
-// never accidentally talk to an unrelated server bound to a fixed port).
-function findFreePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.unref();
-    srv.on("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-async function waitForHealth(origin, timeoutMs = 8000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${origin}/healthz`);
-      if (res.ok) return;
-    } catch {
-      // server not up yet
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("managed server did not become healthy in time");
-}
-
 // Spawn our own server on a free port with an isolated data dir, point the
 // module globals at it, and return a cleanup function. This makes
 // `node scripts/smoke-test.js` self-contained and CI-runnable.
 async function startManagedServer() {
-  const port = await findFreePort();
-  const host = "127.0.0.1";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "townsquare-smoke-"));
   const password = SERVICE_ADMIN_PASSWORD || "smoke-service-admin";
-  const httpOrigin = `http://${host}:${port}`;
-
-  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+  const managed = await createManagedServer({
+    dataPrefix: "townsquare-smoke-",
     env: {
-      ...process.env,
-      HOST: host,
-      PORT: String(port),
-      DATA_DIR: dataDir,
       SERVICE_ADMIN_PASSWORD: password,
-      ALLOWED_ORIGINS: httpOrigin,
       // The functional chat assertions send a message moments after joining;
       // disable the anti-bot "typed too fast after joining" guard so it doesn't
       // drop them (its behavior has dedicated TEST_IP_* coverage instead).
@@ -78,31 +39,15 @@ async function startManagedServer() {
       MAP_CLICKS_PER_HOUR: process.env.MAP_CLICKS_PER_HOUR || "2",
       SITE_PRESENCE_READS_PER_HOUR: process.env.SITE_PRESENCE_READS_PER_HOUR || "4",
     },
-    stdio: ["ignore", "inherit", "inherit"],
   });
 
-  SERVER_URL = `ws://${host}:${port}/live`;
-  HTTP_ORIGIN = httpOrigin;
-  DATA_DIR = dataDir;
-  SITES_FILE = path.join(dataDir, "sites.json");
-  MAP_WORLD_FILE = path.join(dataDir, "map-world.json");
+  SERVER_URL = `${managed.wsOrigin}/live`;
+  HTTP_ORIGIN = managed.httpOrigin;
+  DATA_DIR = managed.dataDir;
+  SITES_FILE = path.join(DATA_DIR, "sites.json");
+  MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
   SERVICE_ADMIN_PASSWORD = password;
-
-  try {
-    await waitForHealth(httpOrigin);
-  } catch (error) {
-    child.kill("SIGKILL");
-    throw error;
-  }
-
-  return () => {
-    child.kill("SIGTERM");
-    try {
-      fs.rmSync(dataDir, { recursive: true, force: true });
-    } catch {
-      // best-effort cleanup
-    }
-  };
+  return managed.cleanup;
 }
 
 function siteSocketUrl(siteKey, { watch = false } = {}) {
@@ -1044,7 +989,7 @@ async function assertMapWorldSizingPolicy() {
     computeMapWorldDimensions,
     resolveMapWorld,
     validateMapWorld,
-  } = await import("../shared/map-world.mjs");
+  } = await import("../public/lib/map-world.mjs");
 
   const min = computeMapWorldDimensions(0);
   assert(
@@ -1104,7 +1049,7 @@ async function assertMapWorldSizingPolicy() {
 async function assertServiceAdminCanEditMap() {
   if (!SERVICE_ADMIN_PASSWORD) return;
 
-  const { computeMapWorldDimensions, MAP_WORLD_MIN_WIDTH } = await import("../shared/map-world.mjs");
+  const { computeMapWorldDimensions, MAP_WORLD_MIN_WIDTH } = await import("../public/lib/map-world.mjs");
   const publicBefore = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
   const expected = computeMapWorldDimensions(publicBefore.sites.length);
   assert(publicBefore.world?.width >= MAP_WORLD_MIN_WIDTH, "public map did not include the world");
@@ -1137,8 +1082,16 @@ async function assertServiceAdminCanEditMap() {
     ...original,
     water: [
       ...original.water.slice(0, 198),
-      { type: "water", width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }] },
-      { type: "water", width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }] },
+      {
+        type: "water",
+        paths: [{ width: 90, points: [{ x: 900, y: 600 }, { x: 940, y: 620 }], order: 0 }],
+        cutouts: [],
+      },
+      {
+        type: "water",
+        paths: [{ width: 24, points: [{ x: 300, y: 200 }, { x: 500, y: 260 }, { x: 700, y: 210 }], order: 0 }],
+        cutouts: [],
+      },
     ],
   };
 
@@ -1146,11 +1099,11 @@ async function assertServiceAdminCanEditMap() {
     const saved = await serviceAdminApi("/api/service-admin/map/save", { world: edited });
     assert(saved.world.water.some((stroke) => stroke.type === "water"), "service admin did not save water");
     assert(
-      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 90),
+      saved.world.water.some((area) => area.paths.some((path) => path.width === 90)),
       "service admin did not save a wide water stroke",
     );
     assert(
-      saved.world.water.some((stroke) => stroke.type === "water" && stroke.width === 24),
+      saved.world.water.some((area) => area.paths.some((path) => path.width === 24)),
       "service admin did not save a narrow water stroke",
     );
     const persisted = JSON.parse(fs.readFileSync(MAP_WORLD_FILE, "utf8"));
@@ -1162,7 +1115,7 @@ async function assertServiceAdminCanEditMap() {
     for (const world of [
       { ...edited, props: [{ type: "castle", x: 10, y: 10 }] },
       { ...edited, props: [{ type: "tree", x: -1, y: 10 }] },
-      { ...edited, props: Array.from({ length: 1001 }, () => ({ type: "tree", x: 10, y: 10 })) },
+      { ...edited, props: Array.from({ length: 2001 }, () => ({ type: "tree", x: 10, y: 10 })) },
       { ...edited, water: [{ type: "ocean", width: 50, points: [{ x: 10, y: 10 }] }] },
     ]) {
       const invalid = await postJson("/api/service-admin/map/save", {
@@ -1909,7 +1862,7 @@ async function run() {
   try {
     await main();
   } finally {
-    cleanup?.();
+    await cleanup?.();
   }
 }
 

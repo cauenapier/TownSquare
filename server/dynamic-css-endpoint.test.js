@@ -2,20 +2,8 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
-
-// Test utilities
-function normalize(css) {
-  return css.replace(/\s+/g, " ").trim();
-}
-
-function extractCssVar(css, varName) {
-  const match = css.match(new RegExp(`${varName}\\s*:\\s*([^;]+);`));
-  return match ? normalize(match[1]) : null;
-}
 
 // Load the modules we need to test
 const { buildSiteCss } = require(path.join(__dirname, "..", "public", "lib", "site-config-core.mjs"));
@@ -285,8 +273,8 @@ test("admin UI clearly distinguishes between automatic and custom CSS paths", as
   // Should mention "optional" for the advanced path
   assert.match(adminHtml, /optional/i);
 
-  // Should mention that automatic updates are live
-  assert.match(adminHtml, /live.*moment.*Publish/i);
+  // Should distinguish immediate scene updates from linked stylesheet updates.
+  assert.match(adminHtml, /Scene changes.*immediately.*colors update.*stylesheet/i);
 });
 
 test("admin UI explains when to use custom CSS", async () => {

@@ -8,9 +8,6 @@ node_modules/
 .env.deploy.local
 .env.deploy.staging
 
-# Local hosted-site registry
-.data/
-
 # Logs
 npm-debug.log*
 

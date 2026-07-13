@@ -4,9 +4,6 @@ export const MAP_WORLD_MAX_WIDTH = 5400;
 export const MAP_WORLD_MAX_HEIGHT = 3600;
 export const MAP_WORLD_GROWTH_REF_SITES = 25;
 
-export const MAP_WORLD_WIDTH = MAP_WORLD_MIN_WIDTH;
-export const MAP_WORLD_HEIGHT = MAP_WORLD_MIN_HEIGHT;
-
 export const MAX_MAP_PROPS = 2000;
 export const MAX_WATER_STROKES = 200;
 export const MAX_WATER_POINTS = 5000;

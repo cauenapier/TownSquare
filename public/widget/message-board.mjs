@@ -9,7 +9,7 @@
  * reloads but reappears whenever the owner edits the text.
  */
 
-import { createMessageBoardProp, sanitizeMessageBoard } from "../../lib/site-config.mjs";
+import { createMessageBoardProp, sanitizeMessageBoard } from "../lib/site-config.mjs";
 import {
   getMessageBoardRead,
   messageBoardSignature,

@@ -1,13 +1,7 @@
 const assert = require("assert");
 const crypto = require("crypto");
-const fs = require("fs/promises");
-const os = require("os");
-const path = require("path");
-const { spawn } = require("child_process");
 const WebSocket = require("ws");
-
-const ROOT = path.join(__dirname, "..");
-const SERVER_ENTRY = path.join(ROOT, "server.js");
+const { startManagedServer } = require("./lib/managed-server");
 
 const EXPECT_POW = process.env.EXPECT_POW === "1";
 const EXPECT_FRESH_CHAT_BLOCK = process.env.EXPECT_FRESH_CHAT_BLOCK === "1";
@@ -15,21 +9,8 @@ const EXPECT_PUBLIC_NAME_GATE = process.env.EXPECT_PUBLIC_NAME_GATE === "1";
 
 const CHALLENGE_TIMEOUT_MS = Number(process.env.BOT_REPLAY_TIMEOUT_MS || 8000);
 
-function randomPort() {
-  return 10000 + Math.floor(Math.random() * 40000);
-}
-
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, message, timeoutMs = 5000, intervalMs = 50) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    if (await predicate()) return;
-    await delay(intervalMs);
-  }
-  throw new Error(message);
 }
 
 function leadingZeroBits(buffer) {
@@ -53,63 +34,27 @@ function solveChallenge({ salt, difficulty }) {
 }
 
 async function startServer() {
-  const port = Number(process.env.TOWNSQUARE_BOT_REPLAY_PORT || randomPort());
-  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "townsquare-bot-replay-"));
-  const publicOrigin = `http://127.0.0.1:${port}`;
-  const wsOrigin = `ws://127.0.0.1:${port}`;
-
-  const child = spawn(process.execPath, [SERVER_ENTRY], {
-    cwd: ROOT,
-    env: {
-      ...process.env,
-      PORT: String(port),
-      HOST: "127.0.0.1",
-      DATA_DIR: dataDir,
-      PUBLIC_ORIGIN: publicOrigin,
+  const managed = await startManagedServer({
+    dataPrefix: "townsquare-bot-replay-",
+    captureOutput: true,
+    env: ({ httpOrigin }) => ({
+      PUBLIC_ORIGIN: httpOrigin,
       SERVICE_ADMIN_PASSWORD: process.env.SERVICE_ADMIN_PASSWORD || "bot-replay-pass",
       IP_MAX_IDENTITIES: process.env.IP_MAX_IDENTITIES || "2",
       IP_JOIN_LIMIT: process.env.IP_JOIN_LIMIT || "30",
       IP_STATE_EVENT_LIMIT: process.env.IP_STATE_EVENT_LIMIT || "120",
       IP_CHAT_EVENT_LIMIT: process.env.IP_CHAT_EVENT_LIMIT || "10",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
+    }),
   });
-
-  let stdout = "";
-  let stderr = "";
-  child.stdout.on("data", (chunk) => { stdout += String(chunk); });
-  child.stderr.on("data", (chunk) => { stderr += String(chunk); });
-
-  try {
-    await waitFor(async () => {
-      try {
-        const response = await fetch(`${publicOrigin}/`);
-        return response.status > 0;
-      } catch {
-        return false;
-      }
-    }, `server did not start on ${publicOrigin}`);
-  } catch (error) {
-    child.kill("SIGTERM");
-    throw new Error(`${error.message}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
-
   return {
-    child,
-    dataDir,
-    port,
-    publicOrigin,
-    wsOrigin,
-    stdout: () => stdout,
-    stderr: () => stderr,
+    ...managed,
+    publicOrigin: managed.httpOrigin,
   };
 }
 
 async function stopServer(server) {
   if (!server) return;
-  server.child.kill("SIGTERM");
-  await new Promise((resolve) => server.child.once("exit", resolve));
-  await fs.rm(server.dataDir, { recursive: true, force: true });
+  await server.cleanup();
 }
 
 async function postJson(baseUrl, pathname, body) {

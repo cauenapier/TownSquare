@@ -45,7 +45,7 @@ import {
   buildSceneProps,
   DEFAULT_SCENE_CONFIG,
   sanitizeSceneConfig,
-} from "../lib/site-config.mjs";
+} from "./lib/site-config.mjs";
 import {
   applyWidgetTheme,
   buildSocketUrl,

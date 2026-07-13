@@ -440,7 +440,7 @@ async function saveCustomization() {
   customizationBusy = false;
   if (ok) {
     customizationTouched = false;
-    customizationSavedMessage = "Published — scene and board are live. Re-copy the Customization CSS below if you changed colors.";
+    customizationSavedMessage = "Published — changes update automatically without a new snippet.";
   }
   updateCustomizationButtons();
   updateCustomizationStatus();

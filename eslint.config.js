@@ -18,14 +18,14 @@ module.exports = [
     },
   },
 
-  // Browser ES modules: widget, hosted pages, shared (also imported in Node,
-  // but the shared modules only use cross-environment globals).
+  // Browser ES modules, including cross-runtime modules under public/lib. URL
+  // is available in both environments but is not in ESLint's browser globals.
   {
     files: ["public/**/*.mjs"],
     languageOptions: {
       sourceType: "module",
       ecmaVersion: 2023,
-      globals: { ...globals.browser },
+      globals: { ...globals.browser, URL: "readonly" },
     },
   },
 

@@ -6,20 +6,6 @@
  */
 
 /**
- * Escape a string for safe interpolation into innerHTML.
- *
- * @param {unknown} value
- * @returns {string}
- */
-export function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-/**
  * Build a DOM element. Untrusted values go through `text`/string children
  * (which become text nodes) or DOM properties — never string-interpolated HTML
  * — so there is no escaping to remember and no markup-injection surface.

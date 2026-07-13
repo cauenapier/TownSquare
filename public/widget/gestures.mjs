@@ -6,7 +6,7 @@ import { HIGH_FIVE_MS, JUMP_MS, POSE_STAND_MS, RAISED_HAND_MS } from "./constant
 
 /**
  * @param {HTMLElement} container
- * @param {Array<import("../../lib/scene-props.mjs").SceneProp>} props
+ * @param {Array<import("../lib/scene-props.mjs").SceneProp>} props
  */
 export function renderProps(container, props = []) {
   for (const prop of props) {
@@ -125,7 +125,7 @@ export function needsStandUp(presence) {
 
 /**
  * @param {{ pose: string | null, propId: string | null, avatar: AvatarView, x: number }} presence
- * @param {Array<import("../../lib/scene-props.mjs").SceneProp>} sceneProps
+ * @param {Array<import("../lib/scene-props.mjs").SceneProp>} sceneProps
  */
 export function clearPresencePose(presence, sceneProps) {
   presence.pose = null;
@@ -170,7 +170,7 @@ export function updatePose(avatar, pose) {
  * @param {AvatarView} avatar
  * @param {number} x
  * @param {string | null} propId
- * @param {Array<import("../../lib/scene-props.mjs").SceneProp>} props
+ * @param {Array<import("../lib/scene-props.mjs").SceneProp>} props
  */
 export function updatePropEffects(avatar, x, propId, props = []) {
   const activeProp = props.find((prop) => prop.id === propId);

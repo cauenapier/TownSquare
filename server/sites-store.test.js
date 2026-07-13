@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { createSitesWriter } = require("./sites-store");
+const { SITE_REGISTRY_VERSION, createSitesWriter } = require("./sites-store");
 
 function tmpStore(sites, opts = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sites-store-"));
@@ -23,7 +23,7 @@ test("saveNow writes the snapshot atomically (no leftover temp file)", () => {
   const sites = [{ siteKey: "a" }, { siteKey: "b" }];
   const { dir, file, writer } = tmpStore(sites);
   writer.saveNow();
-  assert.deepEqual(read(file).sites, sites);
+  assert.deepEqual(read(file), { version: SITE_REGISTRY_VERSION, sites });
   if (process.platform !== "win32") {
     assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   }
