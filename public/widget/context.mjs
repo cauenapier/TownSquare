@@ -109,6 +109,7 @@
  * @property {HTMLElement} [weatherLayer]
  * @property {string} [weather] Active ambient weather kind ("clear" | "rain" | "storm" | "snow").
  * @property {string | null} [weatherOverride] Pinned weather (mount option or dev override); null follows the shared hourly schedule.
+ * @property {Record<string, number> | null} [weatherDistribution] Scheduled weather percentages.
  * @property {ReturnType<typeof setInterval> | null} [weatherTimer]
  * @property {{ left: Array<import("../../lib/site-config.mjs").Connection>, right: Array<import("../../lib/site-config.mjs").Connection> } | null} [connectionsBySide]
  * @property {{ left: HTMLButtonElement | null, right: HTMLButtonElement | null } | null} [signposts]

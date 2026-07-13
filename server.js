@@ -1785,6 +1785,7 @@ const ADMIN_ACTIONS = {
     site.pluginsEnabled[name] = Boolean(body.enabled);
     logModeration(site, body.enabled ? "plugin-on" : "plugin-off", name);
     touchSite(site);
+    broadcastWeatherConfig(site, scene);
   },
   disableSite(site, scene, body) {
     site.disabled = Boolean(body.disabled);
@@ -1858,6 +1859,7 @@ function handleAdminAction(req, res) {
       }
       if (changed) {
         touchSite(site);
+        broadcastWeatherConfig(site, scene);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
           broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
@@ -3078,6 +3080,11 @@ function pluginContext(site, values = {}) {
   });
 }
 
+function broadcastWeatherConfig(site, scene) {
+  const config = plugins.extend("extendWidgetConfig", {}, pluginContext(site));
+  broadcast(scene, { type: MSG.WEATHER, weatherConfig: config.weatherConfig });
+}
+
 function getScene(sceneKey, site = null) {
   const existing = scenes.get(sceneKey);
   if (existing) {
@@ -3486,7 +3493,7 @@ function handleInit(client, message) {
   const self = serializeIdentity(identity, { reading: true, owner: true, messages: true, badge: true });
   const { id, ...selfFields } = self;
 
-  send(client.ws, {
+  const hello = {
     type: MSG.HELLO,
     id,
     browserSecret: identity.browserSecret,
@@ -3498,7 +3505,11 @@ function handleInit(client, message) {
     // Hosted sites carry scene, connections, and the message board over the socket
     // so admin edits apply live without re-pasting the embed snippet.
     ...(site ? { scene: getSceneConfig(site), connections: getConnections(site), messageBoard: getMessageBoard(site) } : {}),
-  });
+  };
+  const extendedHello = site
+    ? plugins.extend("extendWidgetConfig", hello, pluginContext(site))
+    : hello;
+  send(client.ws, isPlainObject(extendedHello) ? extendedHello : hello);
 
   if (identity.joined) {
     if (

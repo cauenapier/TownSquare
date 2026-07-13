@@ -642,6 +642,12 @@ body {
   gap: 12px;
 }
 
+/* `.hosted-grid` supplies a display value, so make the native hidden state
+   explicit for the weather add-on's conditional distribution controls. */
+.weather-config__distribution[hidden] {
+  display: none;
+}
+
 .hosted-grid--compact {
   gap: 12px;
 }

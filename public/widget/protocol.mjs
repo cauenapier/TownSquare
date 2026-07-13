@@ -137,14 +137,18 @@ function handleHello(ctx, _socket, message) {
   // socket so admin edits apply live without re-pasting the snippet. Apply
   // before birds so their perches exist. Inline overrides are respected inside
   // applyLiveConfig.
-  ctx.applyLiveConfig?.({
+  const liveConfig = {
     scene: message.scene,
     // Overlays receive the site appearance (plus any overlay-only overrides)
     // over the socket; on-page embeds theme via their pasted snippet and omit this.
     styleConfig: message.styleConfig,
     connections: message.connections,
     messageBoard: message.messageBoard,
-  });
+  };
+  // A host can still pin weather inline; only the hosted add-on is allowed to
+  // replace that choice when the server actually supplies weather configuration.
+  if (Object.hasOwn(message, "weatherConfig")) liveConfig.weatherConfig = message.weatherConfig;
+  ctx.applyLiveConfig?.(liveConfig);
   syncBirdsFromHello(ctx, message.birds);
   updateStatus(ctx);
 }
@@ -163,6 +167,10 @@ function handleConnections(ctx, _socket, message) {
 
 function handleMessageBoard(ctx, _socket, message) {
   ctx.applyLiveConfig?.({ messageBoard: message.messageBoard });
+}
+
+function handleWeather(ctx, _socket, message) {
+  ctx.applyLiveConfig?.({ weatherConfig: message.weatherConfig });
 }
 
 function handleBird(ctx, _socket, message) {
@@ -261,6 +269,7 @@ const MESSAGE_HANDLERS = {
   [MSG.SCENE]: handleScene,
   [MSG.CONNECTIONS]: handleConnections,
   [MSG.MESSAGE_BOARD]: handleMessageBoard,
+  [MSG.WEATHER]: handleWeather,
   [MSG.BIRD]: handleBird,
   [MSG.JOIN]: handleJoin,
   [MSG.LEAVE]: handleLeave,

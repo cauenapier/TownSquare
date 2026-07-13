@@ -77,12 +77,15 @@ function hashHour(hourIndex) {
  * @param {number} [now]
  * @returns {string}
  */
-export function scheduledWeather(now = Date.now()) {
+export function scheduledWeather(now = Date.now(), distribution = null) {
   const r = hashHour(Math.floor(now / HOUR_MS));
-  if (r < 0.58) return "clear";
-  if (r < 0.75) return "rain";
-  if (r < 0.92) return "snow";
-  return "storm";
+  const weights = distribution || { clear: 58, rain: 17, snow: 17, storm: 8 };
+  let total = 0;
+  for (const kind of ["clear", "rain", "snow", "storm"]) {
+    total += Number(weights[kind]) || 0;
+    if (r < total / 100) return kind;
+  }
+  return "clear";
 }
 
 function normalizeWeather(kind) {
@@ -195,7 +198,7 @@ function applyWeather(ctx, kind) {
  * @param {WeatherContext} ctx
  */
 function currentWeather(ctx) {
-  return ctx.weatherOverride || scheduledWeather();
+  return ctx.weatherOverride || scheduledWeather(Date.now(), ctx.weatherDistribution);
 }
 
 /**
@@ -214,6 +217,7 @@ export function setWeatherOverride(ctx, kind) {
  * @param {WeatherContext} ctx
  */
 export function initWeather(ctx) {
+  if (ctx.weatherLayer) destroyWeather(ctx);
   const layer = document.createElement("div");
   layer.className = "townsquare__weather";
   layer.setAttribute("aria-hidden", "true");
@@ -221,10 +225,22 @@ export function initWeather(ctx) {
   ctx.weatherLayer = layer;
   ctx.weather = "";
   ctx.weatherOverride = normalizeWeather(ctx.options.weather);
+  ctx.weatherDistribution = ctx.options.weatherConfig?.distribution || null;
   applyWeather(ctx, currentWeather(ctx));
   // Follow the schedule across hour rollovers; a pinned override just keeps
   // winning inside currentWeather, so the timer stays armed either way.
   ctx.weatherTimer = setInterval(() => applyWeather(ctx, currentWeather(ctx)), SCHEDULE_CHECK_MS);
+}
+
+/** Apply a hosted weather configuration, or remove weather when the add-on is off. */
+export function setWeatherConfig(ctx, config) {
+  if (!config) {
+    destroyWeather(ctx);
+    return;
+  }
+  ctx.options.weather = config.mode === "permanent" ? config.weather : undefined;
+  ctx.options.weatherConfig = config;
+  initWeather(ctx);
 }
 
 /**
@@ -240,4 +256,5 @@ export function destroyWeather(ctx) {
   ctx.weatherLayer = undefined;
   ctx.weather = undefined;
   ctx.weatherOverride = undefined;
+  ctx.weatherDistribution = undefined;
 }

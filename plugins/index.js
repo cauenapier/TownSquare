@@ -2,6 +2,7 @@
 
 const { registerPlugin } = require("../server/plugins");
 const { createTelegramNotificationsPlugin } = require("./telegram-notifications");
+const { createWeatherPlugin } = require("./weather");
 
 function readLimit(name, fallback, env = process.env) {
   const value = Number(env[name]);
@@ -19,6 +20,7 @@ function registerPublicPlugins(env = process.env, logger = console) {
       chatId: env.TELEGRAM_CHAT_ID,
       maxPerMinute: readLimit("TELEGRAM_MAX_NOTIFICATIONS_PER_MIN", 20, env),
     }),
+    () => createWeatherPlugin(),
   ];
 
   for (const factory of factories) {
