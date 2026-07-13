@@ -1423,7 +1423,10 @@ function sendAdminSite(req, res, site, adminToken, setCookie = null) {
 
 function extendAdminPanel(panel, site) {
   const sitePlugins = describeSitePlugins(site);
-  const withPlugins = sitePlugins.length > 0 ? { ...panel, plugins: sitePlugins } : panel;
+  // `plugins` is reserved for plugin-owned admin data supplied by
+  // `extendAdminPanel`. Keep the add-on catalogue separate so activating an
+  // add-on cannot replace the owner's list of free and Pro choices.
+  const withPlugins = sitePlugins.length > 0 ? { ...panel, addons: sitePlugins } : panel;
   const pluginModules = plugins.browserModules("admin", pluginContext(site));
   const corePanel = pluginModules.length > 0 ? { ...withPlugins, pluginModules } : withPlugins;
   const extended = plugins.extend("extendAdminPanel", corePanel, pluginContext(site));
@@ -3065,7 +3068,7 @@ function isPluginEnabledForSite(site, pluginName) {
 }
 
 function describeSitePlugins(site) {
-  return plugins.toggleable(pluginContext(site)).map((plugin) => ({
+  return plugins.toggleable(pluginContext(site), { includeUnavailable: true }).map((plugin) => ({
     ...plugin,
     enabled: isPluginEnabledForSite(site, plugin.name),
   }));

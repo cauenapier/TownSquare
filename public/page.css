@@ -1332,6 +1332,109 @@ body {
   border-top: 1px solid var(--hair-2);
 }
 
+.addon-group {
+  margin-top: 18px;
+}
+
+.addon-group h3 {
+  margin: 0 0 10px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.addon-card {
+  padding: 10px 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.addon-group + .addon-group {
+  margin-top: 22px;
+}
+
+.addon-group .addon-card + .addon-card {
+  margin-top: 10px;
+}
+
+.addon-group__plus-note {
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.addon-group__plus-cta {
+  color: var(--you-deep);
+  font-weight: 700;
+}
+
+.addon-card__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.addon-card__toggle input {
+  flex: none;
+  appearance: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border: 1px solid var(--hair-1, var(--hair-2));
+  border-radius: 999px;
+  background: var(--surface);
+  transition: background-color 140ms ease, border-color 140ms ease;
+  cursor: pointer;
+}
+
+.addon-card__toggle input::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.addon-card__toggle input:checked {
+  border-color: var(--you);
+  background: var(--you);
+}
+
+.addon-card__toggle input:checked::before {
+  transform: translateX(16px);
+  background: var(--surface);
+}
+
+.addon-card__toggle input:focus-visible {
+  outline: 2px solid var(--you-deep);
+  outline-offset: 2px;
+}
+
+.addon-card__toggle input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.addon-card > .hosted-note {
+  margin: 6px 0 0;
+}
+
+.addon-card__config > .hosted-section {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
 .hosted-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2578,6 +2681,11 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .addon-card__toggle input,
+  .addon-card__toggle input::before {
+    transition: none;
+  }
+
   .map-node__activity-dot {
     animation: none;
   }

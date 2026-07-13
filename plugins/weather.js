@@ -31,6 +31,7 @@ function createWeatherPlugin() {
   return {
     name: "weather",
     label: "Weather",
+    tier: "free",
     description: "Add shared ambient weather to your square.",
     adminModule: "/plugins/weather/admin.mjs",
     adminActions: {

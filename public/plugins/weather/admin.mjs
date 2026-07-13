@@ -30,7 +30,7 @@ export function mountAdminPlugin({ container, action }) {
   const form = document.createElement("form");
   form.className = "hosted-form";
   const mode = document.createElement("select");
-  mode.innerHTML = '<option value="automatic">Automatic schedule</option><option value="permanent">Permanent weather</option>';
+  mode.innerHTML = '<option value="automatic">Probabilistic Weather</option><option value="permanent">Permanent weather</option>';
   const permanent = document.createElement("select");
   for (const kind of WEATHER_KINDS) {
     const option = document.createElement("option");
