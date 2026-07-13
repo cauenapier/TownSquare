@@ -143,3 +143,81 @@ test("aggregate daily series sums per-site daily uniques", () => {
   assert.equal(series.length, 3);
   assert.deepEqual(series.map((entry) => entry.count), [0, 0, 3]);
 });
+
+test("tracks each visitor once per UTC hour and aggregates by weekday", () => {
+  const stats = createVisitorStats();
+
+  // DAY0 is Thursday, so day 3 is Sunday and day 4 is Monday.
+  assert.equal(stats.recordActivity("site", "a", day(3, 9)), true);
+  assert.equal(stats.recordActivity("site", "a", day(3, 9)), false);
+  assert.equal(stats.recordActivity("site", "a", day(3, 10)), true);
+  stats.recordActivity("site", "b", day(3, 9));
+  stats.recordActivity("site", "c", day(4, 9));
+
+  const activity = stats.getActivityByWeekdayAndHour("site", 2, day(4, 23));
+  assert.equal(activity.timeZone, "UTC");
+  assert.equal(activity.windowDays, 2);
+  assert.deepEqual(activity.weekdays.map((entry) => entry.sampleDays), [1, 1, 0, 0, 0, 0, 0]);
+  assert.equal(activity.weekdays[0].hours[9], 2, "Sunday 09:00");
+  assert.equal(activity.weekdays[0].hours[10], 1, "Sunday 10:00");
+  assert.equal(activity.weekdays[1].hours[9], 1, "Monday 09:00");
+});
+
+test("bounds activity windows and excludes days before hourly tracking began", () => {
+  const stats = createVisitorStats();
+  const activity = stats.getActivityByWeekdayAndHour("missing", RETENTION_DAYS + 10, day(29));
+
+  assert.equal(activity.windowDays, RETENTION_DAYS);
+  assert.equal(activity.weekdays.reduce((sum, entry) => sum + entry.sampleDays, 0), 0);
+  assert.equal(activity.weekdays.flatMap((entry) => entry.hours).every((count) => count === 0), true);
+
+  stats.recordActivity("site", "visitor", day(27, 9));
+  const tracked = stats.getActivityByWeekdayAndHour("site", RETENTION_DAYS, day(29));
+  assert.equal(tracked.weekdays.reduce((sum, entry) => sum + entry.sampleDays, 0), 3);
+});
+
+test("persists hourly activity and migrates older visitor snapshots", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ts-visitor-"));
+  const filePath = path.join(dir, "visitor-stats.json");
+  const now = () => day(10, 23);
+
+  try {
+    const first = createVisitorStats({ filePath, now });
+    first.recordActivity("site", "active", day(10, 8));
+    first.recordActivity("site", "active", day(10, 17));
+    first.flush();
+
+    const persisted = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    assert.equal(persisted.version, 3);
+
+    const second = createVisitorStats({ filePath, now });
+    second.load();
+    const weekday = second.getActivityByWeekdayAndHour("site", 1, now()).weekdays[0];
+    assert.equal(weekday.hours[8], 1);
+    assert.equal(weekday.hours[17], 1);
+
+    const dayNumber = Math.floor(day(10) / DAY_MS);
+    fs.writeFileSync(filePath, JSON.stringify({
+      version: 2,
+      sites: { hourly: { [dayNumber]: [["visitor", 2 ** 8]] } },
+    }));
+    const versionTwo = createVisitorStats({ filePath, now });
+    versionTwo.load();
+    const migrated = versionTwo.getActivityByWeekdayAndHour("hourly", 1, now()).weekdays[0];
+    assert.equal(migrated.sampleDays, 1);
+    assert.equal(migrated.hours[8], 1);
+
+    fs.writeFileSync(filePath, JSON.stringify({ version: 1, sites: { legacy: { [dayNumber]: ["visitor"] } } }));
+    const legacy = createVisitorStats({ filePath, now });
+    legacy.load();
+    assert.equal(legacy.getStats("legacy", now()).daily, 1);
+    assert.equal(
+      legacy.getActivityByWeekdayAndHour("legacy", 1, now()).weekdays
+        .flatMap((entry) => entry.hours)
+        .every((count) => count === 0),
+      true,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

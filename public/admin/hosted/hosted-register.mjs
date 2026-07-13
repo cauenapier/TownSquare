@@ -26,7 +26,6 @@ const submitButton = document.getElementById("register-submit");
 const statusEl = document.getElementById("register-status");
 const successSiteEl = document.getElementById("success-site");
 const snippetEl = document.getElementById("embed-snippet");
-const styleSnippetEl = document.getElementById("style-snippet");
 const adminTokenEl = document.getElementById("admin-token");
 const adminLink = document.getElementById("admin-link");
 const previewRoot = document.getElementById("townsquare-root");
@@ -58,7 +57,6 @@ function showSuccess(body) {
   successSiteEl.textContent = `${body.site.name} — ${body.site.origin}${aliasText}`;
   adminTokenEl.value = body.adminToken;
   snippetEl.value = body.embedSnippet;
-  styleSnippetEl.value = body.styleSnippet;
   adminLink.href = body.adminUrl;
 
   preview.destroy();
@@ -129,7 +127,6 @@ form.addEventListener("submit", async (event) => {
 
 bindCopy("copy-token", { text: () => adminTokenEl.value, source: adminTokenEl });
 bindCopy("copy-snippet", { text: () => snippetEl.value, source: snippetEl });
-bindCopy("copy-style", { text: () => styleSnippetEl.value, source: styleSnippetEl });
 renderStyleOverrideFields(styleOverrideFields);
 bindStyleColorFields(form);
 bindSceneCountProse(form);

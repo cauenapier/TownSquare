@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TownSquare service admin</title>
-    <link rel="stylesheet" href="/page.css" />
+    <link rel="stylesheet" href="/page.css?v=traffic-activity-v3" />
   </head>
   <body>
     <main class="hosted-shell hosted-shell--wide">
@@ -121,6 +121,7 @@
                 spellcheck="false"
               />
             </label>
+            <button type="button" class="service-toolbar-button" id="all-site-traffic">All-site traffic</button>
             <details class="service-column-picker" id="site-column-picker">
               <summary>Columns</summary>
               <div class="service-column-picker-panel" id="site-column-picker-panel"></div>
@@ -250,6 +251,25 @@
       </section>
     </main>
 
-    <script type="module" src="/admin/hosted/service-admin.mjs"></script>
+    <dialog class="service-traffic-dialog" id="service-traffic-dialog" aria-labelledby="service-traffic-title">
+      <div class="service-traffic-dialog__panel">
+        <div class="service-traffic-dialog__head">
+          <div>
+            <p class="eyebrow">Average visitor traffic</p>
+            <h2 id="service-traffic-title">Traffic by weekday and hour</h2>
+          </div>
+          <button
+            type="button"
+            class="service-traffic-dialog__close"
+            id="service-traffic-close"
+            aria-label="Close traffic chart"
+          >×</button>
+        </div>
+        <p class="hosted-note" id="service-traffic-meta"></p>
+        <div class="service-traffic-chart-wrap" id="service-traffic-chart" aria-live="polite"></div>
+      </div>
+    </dialog>
+
+    <script type="module" src="/admin/hosted/service-admin.mjs?v=traffic-activity-v3"></script>
   </body>
 </html>

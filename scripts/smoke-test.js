@@ -992,6 +992,29 @@ async function assertServiceAdminCanManageSites(hostedA, hostedB) {
     "service admin did not list hosted site B",
   );
 
+  const traffic = await serviceAdminApi("/api/service-admin/traffic", {
+    siteKey: hostedA.site.siteKey,
+  });
+  assert(traffic.site.siteKey === hostedA.site.siteKey, "service admin traffic returned the wrong site");
+  assert(traffic.activity.timeZone === "UTC", "service admin traffic did not identify its timezone");
+  assert(traffic.activity.weekdays.length === 7, "service admin traffic did not return every weekday");
+  assert(
+    traffic.activity.weekdays.every((weekday) => weekday.hours.length === 24),
+    "service admin traffic did not return every hour",
+  );
+  assert(!JSON.stringify(traffic).includes("browserId"), "service admin traffic leaked visitor identities");
+
+  const allTraffic = await serviceAdminApi("/api/service-admin/traffic");
+  assert(
+    allTraffic.sites.some((site) => site.siteKey === hostedA.site.siteKey),
+    "service admin aggregate traffic omitted hosted site A",
+  );
+  assert(
+    allTraffic.sites.every((site) => site.activity.weekdays.length === 7),
+    "service admin aggregate traffic did not include weekday activity",
+  );
+  assert(!JSON.stringify(allTraffic).includes("browserId"), "aggregate traffic leaked visitor identities");
+
   const reset = await serviceAdminApi("/api/service-admin/action", {
     action: "resetAdminToken",
     siteKey: hostedB.site.siteKey,

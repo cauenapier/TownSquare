@@ -2012,6 +2012,44 @@ function handleServiceAdminSites(req, res) {
   });
 }
 
+function handleServiceAdminTraffic(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    const siteKey = String(body.siteKey || "");
+    if (!siteKey) {
+      const sites = [];
+      for (const site of sitesByKey.values()) {
+        const activity = visitorStats.getActivityByWeekdayAndHour(site.siteKey);
+        if (!activity.weekdays.some((weekday) => weekday.hours.some((count) => count > 0))) continue;
+        sites.push({
+          siteKey: site.siteKey,
+          name: site.name,
+          origin: site.origin,
+          activity,
+        });
+      }
+      sendJson(res, 200, { sites });
+      return;
+    }
+
+    const site = sitesByKey.get(siteKey);
+    if (!site) {
+      sendJson(res, 404, { error: "Site not found." });
+      return;
+    }
+
+    sendJson(res, 200, {
+      site: {
+        siteKey: site.siteKey,
+        name: site.name,
+        origin: site.origin,
+      },
+      activity: visitorStats.getActivityByWeekdayAndHour(site.siteKey),
+    });
+  });
+}
+
 function handleServiceAdminMap(req, res) {
   readJsonBody(req, res, (body) => {
     if (!isServiceAdminAuthorized(req, body, res)) return;
@@ -2234,6 +2272,8 @@ function refreshIdentityWidgetVisible(identity) {
 
 function touchIdentityActivity(identity, now = Date.now()) {
   identity.lastActivityAt = now;
+  const siteKey = identity.scene?.site?.siteKey;
+  if (siteKey) visitorStats.recordActivity(siteKey, identity.browserId, now);
 }
 
 function syncIdentityAwayState(identity, now = Date.now()) {
@@ -3250,6 +3290,11 @@ function handleHttpRequest(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/service-admin/traffic") {
+    handleServiceAdminTraffic(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/service-admin/map") {
     handleServiceAdminMap(req, res);
     return;
@@ -3819,6 +3864,13 @@ const heartbeatTimer = setInterval(() => {
       if (!client.ws.isAlive) {
         client.ws.terminate();
         continue;
+      }
+
+      // Count presence, not socket noise: one stable visitor per UTC hour while
+      // at least one of their tabs is actively reading. recordActivity dedupes
+      // multiple tabs and the 30-second heartbeat cadence in constant time.
+      if (client.site && client.joined && client.identity?.readingActive) {
+        visitorStats.recordActivity(client.site.siteKey, client.identity.browserId, now);
       }
 
       client.ws.isAlive = false;

@@ -32,15 +32,22 @@ export function createCityMarker(site) {
   };
 }
 
-export function renderMapEdge(edge, positions, selectedSiteKey = "") {
+export function renderMapEdge(edge, positions, selectedSiteKey = "", routes = new Map()) {
   const from = positions.get(edge.fromKey);
   const to = positions.get(edge.toKey);
   if (!from || !to) return null;
   const active = selectedSiteKey && (edge.fromKey === selectedSiteKey || edge.toKey === selectedSiteKey);
-  return createSvgElement("path", {
-    class: `map-link map-link--${edge.bidirectional ? "asphalt" : "dirt"}${active ? " is-active" : ""}`,
-    d: mapEdgePath(from, to),
+  const key = `${edge.fromKey}|${edge.toKey}`;
+  const road = createSvgElement("g", {
+    class: `map-link map-link--${edge.kind || (edge.bidirectional ? "minor" : "trail")}${active ? " is-active" : ""}`,
     "data-from-key": edge.fromKey,
     "data-to-key": edge.toKey,
   });
+  const path = routes.get(key) || mapEdgePath(from, to, 28, key);
+  road.append(
+    createSvgElement("path", { class: "map-link__edge", d: path }),
+    createSvgElement("path", { class: "map-link__surface", d: path }),
+    createSvgElement("path", { class: "map-link__marking", d: path }),
+  );
+  return road;
 }

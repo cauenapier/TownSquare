@@ -1758,6 +1758,7 @@ body {
   flex: none;
 }
 
+.service-toolbar-button,
 .service-column-picker > summary {
   list-style: none;
   min-height: 40px;
@@ -1768,6 +1769,20 @@ body {
   color: var(--ink);
   font: 600 0.9rem var(--font);
   cursor: pointer;
+}
+
+.service-toolbar-button:hover {
+  background: var(--surface-2);
+}
+
+.service-toolbar-button:focus-visible {
+  outline: 2px solid var(--you-deep);
+  outline-offset: 2px;
+}
+
+.service-toolbar-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .service-column-picker > summary::-webkit-details-marker {
@@ -1923,11 +1938,18 @@ body {
   white-space: nowrap;
 }
 
+.service-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .service-row-menu {
   position: relative;
 }
 
-.service-row-menu > summary {
+.service-row-menu > summary,
+.service-row-action-button {
   display: inline-flex;
   align-items: center;
   list-style: none;
@@ -1940,6 +1962,21 @@ body {
   font: 700 0.86rem var(--font);
   cursor: pointer;
   user-select: none;
+}
+
+.service-row-action-button {
+  border: 0;
+}
+
+.service-row-menu > summary:hover,
+.service-row-action-button:hover {
+  background: color-mix(in oklab, var(--surface-2) 78%, var(--you-tint));
+}
+
+.service-row-menu > summary:focus-visible,
+.service-row-action-button:focus-visible {
+  outline: 2px solid var(--you-deep);
+  outline-offset: 2px;
 }
 
 .service-row-menu > summary::-webkit-details-marker {
@@ -1982,6 +2019,171 @@ body {
 .service-row-menu-panel .service-danger {
   color: #a8431f;
 }
+
+.service-traffic-dialog {
+  width: min(1080px, calc(100% - 32px));
+  max-height: min(88dvh, 760px);
+  padding: 0;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--tray-shadow);
+}
+
+.service-traffic-dialog::backdrop {
+  background: color-mix(in oklab, var(--ink) 38%, transparent);
+}
+
+.service-traffic-dialog__panel {
+  padding: 24px;
+}
+
+.service-traffic-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.service-traffic-dialog__head h2,
+.service-traffic-dialog__summary {
+  margin: 0;
+}
+
+.service-traffic-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin: 12px 0 0;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  list-style: none;
+}
+
+.service-traffic-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.service-traffic-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.service-traffic-dialog__close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 600 1.4rem/1 var(--font);
+  cursor: pointer;
+}
+
+.service-traffic-dialog__close:hover {
+  background: var(--cream-deep);
+}
+
+.service-traffic-dialog__close:focus-visible {
+  outline: 2px solid var(--you-deep);
+  outline-offset: 2px;
+}
+
+.service-traffic-dialog__summary {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.service-traffic-dialog__empty {
+  margin-top: 18px;
+  padding: 28px;
+  border: 1px dashed var(--hair-2);
+  border-radius: var(--r-control);
+  text-align: center;
+}
+
+.service-traffic-chart-wrap {
+  margin-top: 18px;
+  overflow: auto;
+}
+
+.service-traffic-chart {
+  width: 100%;
+  min-width: 860px;
+  margin-top: 14px;
+  border-spacing: 4px;
+  table-layout: fixed;
+}
+
+.service-traffic-chart th {
+  color: var(--ink-mute);
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.service-traffic-chart th:first-child {
+  width: 48px;
+  text-align: left;
+}
+
+.service-traffic-chart tbody th {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.service-traffic-chart td {
+  height: 54px;
+  padding: 0;
+  vertical-align: bottom;
+}
+
+.service-traffic-chart__track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 5px 5px 2px 2px;
+  background: var(--surface-2);
+}
+
+.service-traffic-chart__bar {
+  display: block;
+  width: 100%;
+  min-height: 1px;
+  border-radius: 4px 4px 1px 1px;
+  background: var(--you-deep);
+}
+
+.service-traffic-chart__track--stacked {
+  flex-direction: column-reverse;
+}
+
+.service-traffic-chart__track--stacked .service-traffic-chart__bar {
+  flex: none;
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--surface) 72%, transparent);
+}
+
+.service-traffic-tone--1 { background: var(--accent-deep); }
+.service-traffic-tone--2 { background: var(--ink); }
+.service-traffic-tone--3 { background: color-mix(in oklab, var(--accent) 48%, var(--cream)); }
+.service-traffic-tone--4 { background: var(--ink-soft); }
+.service-traffic-tone--5 { background: var(--accent); }
+.service-traffic-tone--6 { background: color-mix(in oklab, var(--ink) 55%, var(--cream)); }
+.service-traffic-tone--other { background: var(--ink-mute); }
 
 .service-stats-cards {
   display: grid;
@@ -2259,31 +2461,58 @@ body {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  --road-edge-width: 6;
+  --road-surface-width: 3.5;
+  --road-mark-width: 0.8;
 }
 
-.map-link--asphalt {
-  stroke: color-mix(in oklab, #3a3835 78%, var(--ink) 22%);
-  stroke-width: 5.5;
+.map-link--major {
+  --road-edge-width: 9;
+  --road-surface-width: 6;
+  --road-mark-width: 1.1;
+}
+
+.map-link--local {
+  --road-edge-width: 7.5;
+  --road-surface-width: 4.5;
+}
+
+.map-link--trail {
+  --road-edge-width: 4;
+  --road-surface-width: 2.2;
+  --road-mark-width: 0;
+}
+
+.map-link__edge {
+  stroke: color-mix(in oklab, var(--ink) 58%, transparent);
+  stroke-width: var(--road-edge-width);
+  opacity: 0.48;
+}
+
+.map-link__surface {
+  stroke: color-mix(in oklab, var(--page) 78%, #d8bd86 22%);
+  stroke-width: var(--road-surface-width);
+}
+
+.map-link__marking {
+  stroke: color-mix(in oklab, var(--ink-soft) 58%, #b8a47d 42%);
+  stroke-width: var(--road-mark-width);
+  stroke-dasharray: 3 5;
+  opacity: 0.72;
+}
+
+.map-link--trail .map-link__surface {
+  stroke: color-mix(in oklab, #9a7f5c 72%, var(--page) 28%);
+  stroke-dasharray: 5 8;
+}
+
+.map-link.is-active .map-link__edge {
+  stroke: color-mix(in oklab, var(--you-deep) 62%, var(--ink) 38%);
   opacity: 0.82;
 }
 
-.map-link--dirt {
-  stroke: color-mix(in oklab, #9a7f5c 72%, var(--ink-soft) 28%);
-  stroke-width: 3.5;
-  stroke-dasharray: 7 11;
-  opacity: 0.62;
-}
-
-.map-link--asphalt.is-active {
-  stroke: color-mix(in oklab, var(--you-deep) 68%, #3a3835 32%);
-  stroke-width: 6.5;
-  opacity: 1;
-}
-
-.map-link--dirt.is-active {
-  stroke: color-mix(in oklab, var(--you-deep) 52%, #9a7f5c 48%);
-  stroke-width: 4.5;
-  opacity: 0.92;
+.map-link.is-active .map-link__surface {
+  stroke: color-mix(in oklab, var(--you-tint) 72%, var(--page) 28%);
 }
 
 .map-node {
@@ -2541,6 +2770,13 @@ body {
   }
   .service-stats-columns {
     grid-template-columns: 1fr;
+  }
+  .service-traffic-dialog {
+    width: calc(100% - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .service-traffic-dialog__panel {
+    padding: 18px 14px;
   }
   .townsquare-host { margin-top: 32px; }
   .dev-toolbar {

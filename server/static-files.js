@@ -27,6 +27,7 @@ const ALIASES = new Map([
   ["/admin/chat", "/admin/hosted/chat.html"],
   ["/service-admin", "/admin/hosted/service-admin.html"],
   ["/map", "/map/map.html"],
+  ["/map-staging", "/map/map.html"],
   ["/overlay", "/overlay.html"],
   ["/dev", "/dev/dev.html"],
   ["/walk-sandbox", "/dev/walk-sandbox.html"],
@@ -160,7 +161,7 @@ function isDevToolsRequest(pathname) {
 }
 
 function isStagingPageRequest(pathname) {
-  return pathname === "/staging" || pathname === "/staging.html";
+  return pathname === "/staging" || pathname === "/staging.html" || pathname === "/map-staging";
 }
 
 /**
