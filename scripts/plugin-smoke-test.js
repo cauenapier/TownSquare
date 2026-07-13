@@ -165,6 +165,10 @@ async function main() {
     before.body.pluginModules?.some((entry) => entry.name === "test-feature"),
     "admin response did not include the admin module",
   );
+  assert(
+    before.body.addons?.some((entry) => entry.name === "test-labelled" && entry.enabled === false),
+    "admin response did not include the disabled add-on catalogue",
+  );
   const labelledBeforeToggle = await post("/api/admin/action", {
     siteKey,
     adminToken,
@@ -194,6 +198,10 @@ async function main() {
   assert(
     labelledAfterToggle.body.plugins?.["test-labelled"]?.value === "after-toggle",
     "labelled plugin action data was not returned after toggle",
+  );
+  assert(
+    labelledAfterToggle.body.addons?.some((entry) => entry.name === "test-labelled" && entry.enabled === true),
+    "enabled add-on disappeared from the catalogue",
   );
 
   const updated = await post("/api/admin/action", {

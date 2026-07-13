@@ -93,8 +93,7 @@ const chatThrottleSelect = document.getElementById("chat-throttle");
 const saveModerationButton = document.getElementById("save-moderation");
 const moderationStatusEl = document.getElementById("moderation-status");
 const moderationLog = document.getElementById("moderation-log");
-const pluginPanels = document.getElementById("plugin-panels");
-const pluginToggles = document.getElementById("plugin-toggles");
+const pluginAddons = document.getElementById("plugin-addons");
 const notificationsBanner = document.getElementById("notifications-banner");
 const notificationsClose = document.getElementById("notifications-close");
 const notificationsCount = document.getElementById("notifications-count");
@@ -214,8 +213,9 @@ const setConnectionsStatus = createStatusSetter(connectionsStatusEl, { toggleHid
 const setModerationStatus = createStatusSetter(moderationStatusEl, { toggleHidden: true });
 
 const adminPlugins = createAdminPluginRuntime({
-  container: pluginPanels,
+  container: pluginAddons,
   action: (plugin, name, input) => session.pluginAction(plugin, name, input),
+  setEnabled: (name, enabled) => session.action("setPluginEnabled", { name, enabled }),
 });
 
 const session = createAdminSession({
@@ -844,35 +844,6 @@ function renderOwners(owners) {
   owners.forEach((owner, index) => ownerList.appendChild(buildOwnerRow(owner, index)));
 }
 
-function renderPluginToggles(list) {
-  pluginToggles.replaceChildren();
-  const items = Array.isArray(list) ? list : [];
-  if (items.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "hosted-note";
-    empty.textContent = "No plugins are available for your site yet.";
-    pluginToggles.appendChild(empty);
-    return;
-  }
-
-  for (const plugin of items) {
-    const row = document.createElement("div");
-    row.className = "hosted-section";
-
-    const input = el("input", { type: "checkbox" });
-    input.checked = Boolean(plugin.enabled);
-    row.append(el("label", { class: "hosted-toggle" }, [input, el("span", { text: plugin.label })]));
-    if (plugin.description) {
-      row.append(el("p", { class: "hosted-note", text: plugin.description }));
-    }
-
-    input.addEventListener("change", () => {
-      session.action("setPluginEnabled", { name: plugin.name, enabled: input.checked });
-    });
-    pluginToggles.appendChild(row);
-  }
-}
-
 function render(data, { background = false } = {}) {
   currentSite = data.site;
   const scene = data.scene;
@@ -924,7 +895,6 @@ function render(data, { background = false } = {}) {
   syncConnectionsFromServer();
   syncModerationFromServer();
   renderModerationLog(currentSite.moderationLog);
-  renderPluginToggles(data.plugins);
   adminPlugins.render(data, { background });
 
   visitorList.replaceChildren();

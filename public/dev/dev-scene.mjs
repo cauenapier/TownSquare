@@ -15,6 +15,7 @@ import { setWalking } from "../widget/dom.mjs";
 import { clamp } from "../widget/math.mjs";
 import { applyPeerState, removePeer, setStatusMessage, updateStatus } from "../widget/presence.mjs";
 import { syncBirdsFromHello } from "../widget/birds.mjs";
+import { setWeatherOverride } from "../widget/weather.mjs";
 import { bindCopy } from "../lib/ui-common.mjs";
 
 const DEFAULT_CHARACTER_COUNT = 12;
@@ -266,6 +267,19 @@ if (throttleInput instanceof HTMLInputElement) {
   throttleInput.value = String(ctx.chatThrottleMs);
   syncThrottle();
   throttleInput.addEventListener("input", syncThrottle);
+}
+
+// Weather picker: pin one of the ambient weathers on the running widget, or
+// "Auto" to rejoin the shared hourly schedule production visitors see.
+const weatherButtons = /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll("[data-weather]")));
+for (const button of weatherButtons) {
+  button.addEventListener("click", () => {
+    const kind = button.dataset.weather;
+    setWeatherOverride(ctx, kind === "auto" ? null : kind);
+    for (const candidate of weatherButtons) {
+      candidate.setAttribute("aria-pressed", String(candidate === button));
+    }
+  });
 }
 
 // --- Live tuning panel: proximity dials, talk rate, mobile frame -----------

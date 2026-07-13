@@ -87,7 +87,7 @@ test("labelled plugins stay off until a site enables them", () => {
   });
 
   assert.deepEqual(manager.toggleable(), [
-    { name: "telegram", label: "Telegram notifications", description: "Forward chat messages to Telegram." },
+    { name: "telegram", label: "Telegram notifications", description: "Forward chat messages to Telegram.", tier: "free" },
   ]);
 
   // Off by default and whenever the site has not opted in.
@@ -118,6 +118,9 @@ test("toggleable plugins are filtered to entitled sites", () => {
   // entitlement, even if its toggle is on.
   assert.deepEqual(manager.toggleable().map((plugin) => plugin.name), ["owner-figure"]);
   assert.deepEqual(manager.toggleable(() => ({ site: { plus: false }, enabled: true })), []);
+  assert.deepEqual(manager.toggleable(() => ({ site: { plus: false } }), { includeUnavailable: true }), [
+    { name: "owner-figure", label: "Owner figure", description: "", tier: "free", available: false },
+  ]);
   assert.deepEqual(
     manager.toggleable(() => ({ site: { plus: true } })).map((plugin) => plugin.name),
     ["owner-figure"],
@@ -135,6 +138,7 @@ test("plugin metadata must be non-empty strings", () => {
   const manager = new PluginManager();
   assert.throws(() => manager.register({ name: "a", label: "" }), /label must be a non-empty string/);
   assert.throws(() => manager.register({ name: "b", description: 5 }), /description must be a non-empty string/);
+  assert.throws(() => manager.register({ name: "c", tier: "premium" }), /tier must be free or pro/);
 });
 
 test("plugin admin actions receive only their scoped context", () => {

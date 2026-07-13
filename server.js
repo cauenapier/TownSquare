@@ -1423,7 +1423,10 @@ function sendAdminSite(req, res, site, adminToken, setCookie = null) {
 
 function extendAdminPanel(panel, site) {
   const sitePlugins = describeSitePlugins(site);
-  const withPlugins = sitePlugins.length > 0 ? { ...panel, plugins: sitePlugins } : panel;
+  // `plugins` is reserved for plugin-owned admin data supplied by
+  // `extendAdminPanel`. Keep the add-on catalogue separate so activating an
+  // add-on cannot replace the owner's list of free and Pro choices.
+  const withPlugins = sitePlugins.length > 0 ? { ...panel, addons: sitePlugins } : panel;
   const pluginModules = plugins.browserModules("admin", pluginContext(site));
   const corePanel = pluginModules.length > 0 ? { ...withPlugins, pluginModules } : withPlugins;
   const extended = plugins.extend("extendAdminPanel", corePanel, pluginContext(site));
@@ -1785,6 +1788,7 @@ const ADMIN_ACTIONS = {
     site.pluginsEnabled[name] = Boolean(body.enabled);
     logModeration(site, body.enabled ? "plugin-on" : "plugin-off", name);
     touchSite(site);
+    broadcastWeatherConfig(site, scene);
   },
   disableSite(site, scene, body) {
     site.disabled = Boolean(body.disabled);
@@ -1858,6 +1862,7 @@ function handleAdminAction(req, res) {
       }
       if (changed) {
         touchSite(site);
+        broadcastWeatherConfig(site, scene);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
           broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
@@ -3063,7 +3068,7 @@ function isPluginEnabledForSite(site, pluginName) {
 }
 
 function describeSitePlugins(site) {
-  return plugins.toggleable(pluginContext(site)).map((plugin) => ({
+  return plugins.toggleable(pluginContext(site), { includeUnavailable: true }).map((plugin) => ({
     ...plugin,
     enabled: isPluginEnabledForSite(site, plugin.name),
   }));
@@ -3076,6 +3081,11 @@ function pluginContext(site, values = {}) {
     data: getPluginData(site, pluginName),
     enabled: isPluginEnabledForSite(site, pluginName),
   });
+}
+
+function broadcastWeatherConfig(site, scene) {
+  const config = plugins.extend("extendWidgetConfig", {}, pluginContext(site));
+  broadcast(scene, { type: MSG.WEATHER, weatherConfig: config.weatherConfig });
 }
 
 function getScene(sceneKey, site = null) {
@@ -3486,7 +3496,7 @@ function handleInit(client, message) {
   const self = serializeIdentity(identity, { reading: true, owner: true, messages: true, badge: true });
   const { id, ...selfFields } = self;
 
-  send(client.ws, {
+  const hello = {
     type: MSG.HELLO,
     id,
     browserSecret: identity.browserSecret,
@@ -3498,7 +3508,11 @@ function handleInit(client, message) {
     // Hosted sites carry scene, connections, and the message board over the socket
     // so admin edits apply live without re-pasting the embed snippet.
     ...(site ? { scene: getSceneConfig(site), connections: getConnections(site), messageBoard: getMessageBoard(site) } : {}),
-  });
+  };
+  const extendedHello = site
+    ? plugins.extend("extendWidgetConfig", hello, pluginContext(site))
+    : hello;
+  send(client.ws, isPlainObject(extendedHello) ? extendedHello : hello);
 
   if (identity.joined) {
     if (
