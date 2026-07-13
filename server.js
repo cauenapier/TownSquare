@@ -1786,6 +1786,15 @@ const ADMIN_ACTIONS = {
     }
     if (!isPlainObject(site.pluginsEnabled)) site.pluginsEnabled = {};
     site.pluginsEnabled[name] = Boolean(body.enabled);
+    if (name === "weather") {
+      const usage = isPlainObject(site.weatherActivation)
+        ? site.weatherActivation
+        : (site.weatherActivation = { attempts: 0, firstAttemptAt: 0, lastAttemptAt: 0 });
+      const now = Date.now();
+      usage.attempts = (Number(usage.attempts) || 0) + 1;
+      usage.firstAttemptAt = Number(usage.firstAttemptAt) || now;
+      usage.lastAttemptAt = now;
+    }
     logModeration(site, body.enabled ? "plugin-on" : "plugin-off", name);
     touchSite(site);
     broadcastWeatherConfig(site, scene);
@@ -1923,6 +1932,7 @@ function serviceAdminSite(site) {
   const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
   const adminAccess = isPlainObject(site.adminAccess) ? site.adminAccess : {};
   const overlayUsage = isPlainObject(site.overlayUsage) ? site.overlayUsage : {};
+  const weatherActivation = isPlainObject(site.weatherActivation) ? site.weatherActivation : {};
 
   return {
     ...publicSite(site),
@@ -1941,6 +1951,10 @@ function serviceAdminSite(site) {
     adminAccessLastAt: Number(adminAccess.lastAt || 0),
     overlayUseCount: Number(overlayUsage.count || 0),
     overlayLastAt: Number(overlayUsage.lastAt || 0),
+    weatherActivationAttempts: Number(weatherActivation.attempts || 0),
+    weatherActivationFirstAt: Number(weatherActivation.firstAttemptAt || 0),
+    weatherActivationLastAt: Number(weatherActivation.lastAttemptAt || 0),
+    weatherActivated: isPluginEnabledForSite(site, "weather"),
   };
 }
 
@@ -1957,6 +1971,8 @@ function buildServiceAdminPlatformStats(sites) {
   let messagesToday = 0;
   let messagesWeekly = 0;
   let ownersInAdmin7d = 0;
+  let weatherTried = 0;
+  let weatherActive = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -1972,6 +1988,8 @@ function buildServiceAdminPlatformStats(sites) {
     messagesToday += site.messageStats?.daily ?? 0;
     messagesWeekly += site.messageStats?.weekly ?? 0;
     if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * dayMs) ownersInAdmin7d += 1;
+    if ((site.weatherActivationAttempts ?? 0) > 0) weatherTried += 1;
+    if (site.weatherActivated) weatherActive += 1;
   }
 
   return {
@@ -1985,6 +2003,8 @@ function buildServiceAdminPlatformStats(sites) {
     messagesToday,
     messagesWeekly,
     ownersInAdmin7d,
+    weatherTried,
+    weatherActive,
     dailySeries: visitorStats.getAggregateDailySeries(7),
     messageDailySeries: messageStats.getAggregateDailySeries(7),
   };
@@ -2680,6 +2700,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       moderationLog: [],
       plugins: {},
       pluginsEnabled: {},
+      weatherActivation: { attempts: 0, firstAttemptAt: 0, lastAttemptAt: 0 },
     },
   };
 }
@@ -2748,6 +2769,10 @@ function loadSites() {
       }
       if (!isPlainObject(site.pluginsEnabled)) {
         site.pluginsEnabled = {};
+      }
+      if (!isPlainObject(site.weatherActivation)) {
+        site.weatherActivation = { attempts: 0, firstAttemptAt: 0, lastAttemptAt: 0 };
+        sitesMigratedOnLoad = true;
       }
       const nextAllowedOrigins = getAllowedOrigins(site);
       if (JSON.stringify(nextAllowedOrigins) !== JSON.stringify(site.allowedOrigins || [])) {
