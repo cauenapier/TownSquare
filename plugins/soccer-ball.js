@@ -16,7 +16,7 @@
  */
 const BALL = {
   START_X: 0.5, // seeds at mid-square
-  KICK_RADIUS: 0.05, // run within this of the ball to kick it
+  KICK_RADIUS: 0.02, // get nearly on the ball before kicking it
   TRAP_RADIUS: 0.04, // a rolling ball this close to a figure stops at their feet
   KICK_BASE: 0.12, // horizontal nudge at a slow walk
   KICK_GAIN: 0.85, // extra horizontal per unit of figure speed
@@ -42,9 +42,9 @@ function frame(state) {
  * Kick the ball away from a figure that ran into it — harder and higher the
  * faster the figure was moving (capped). Returns true if it kicked.
  */
-function kick(state, playerX, speed) {
+function kick(state, playerX, direction, speed) {
   if (Math.abs(playerX - state.x) >= BALL.KICK_RADIUS) return false;
-  const dir = state.x < playerX ? -1 : 1;
+  const dir = direction || (state.x < playerX ? -1 : 1);
   state.vx = dir * Math.min(BALL.KICK_BASE + speed * BALL.KICK_GAIN, BALL.KICK_MAX);
   state.vy = Math.min(BALL.LOFT_BASE + speed * BALL.LOFT_GAIN, BALL.LOFT_MAX);
   return true;
@@ -111,9 +111,9 @@ function createSoccerBallPlugin() {
       },
     },
 
-    onSceneMove({ state, x, speed, emit }) {
+    onSceneMove({ state, x, direction, speed, emit }) {
       if (!state) return;
-      if (kick(state, x, speed)) emit(frame(state));
+      if (kick(state, x, direction, speed)) emit(frame(state));
     },
   };
 }

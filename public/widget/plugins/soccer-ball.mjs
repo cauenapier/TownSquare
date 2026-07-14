@@ -12,22 +12,23 @@
 
 // Pixels of lift per unit of ball height (y). Loft caps near 1.6 -> ~74px arc.
 const BALL_LIFT_PX = 46;
-
-// The scene ground line, matching the widget's figures/props.
-const GROUND_PX = 53;
+const BALL_DIAMETER_PX = 13;
+const BALL_CIRCUMFERENCE_PX = Math.PI * BALL_DIAMETER_PX;
 
 export function mountWidgetPlugin({ stage }) {
+  let previousX = null;
+  let rotation = 0;
   const el = document.createElement("div");
   el.setAttribute("aria-hidden", "true");
   el.style.cssText = `
     position: absolute;
     left: calc(var(--ball-x, 0.5) * 100%);
-    bottom: calc(${GROUND_PX}px + var(--ball-lift, 0px));
-    width: 13px;
-    height: 13px;
+    bottom: calc(var(--ts-ground-level) + var(--ball-lift, 0px));
+    width: ${BALL_DIAMETER_PX}px;
+    height: ${BALL_DIAMETER_PX}px;
     border-radius: 50%;
-    transform: translateX(-50%);
-    transition: left 55ms linear, bottom 55ms linear;
+    transform: translateX(-50%) rotate(var(--ball-rotation, 0deg));
+    transition: left 55ms linear, bottom 55ms linear, transform 55ms linear;
     z-index: 1;
     pointer-events: none;
     border: 1px solid color-mix(in oklab, var(--ball-ink, #1a1a1a) 70%, transparent);
@@ -45,6 +46,12 @@ export function mountWidgetPlugin({ stage }) {
     applyEntity(frame) {
       if (!frame || typeof frame.x !== "number") return;
       const lift = typeof frame.y === "number" ? Math.max(0, frame.y) * BALL_LIFT_PX : 0;
+      if (previousX !== null) {
+        const distancePx = (frame.x - previousX) * stage.clientWidth;
+        rotation += distancePx / BALL_CIRCUMFERENCE_PX * 360;
+        el.style.setProperty("--ball-rotation", `${rotation.toFixed(1)}deg`);
+      }
+      previousX = frame.x;
       el.style.setProperty("--ball-x", String(frame.x));
       el.style.setProperty("--ball-lift", `${lift.toFixed(1)}px`);
     },

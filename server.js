@@ -3639,6 +3639,7 @@ function handleMove(client, message) {
       visitor: pluginVisitor(client.identity),
       bounds: { minX: MIN_X, maxX: MAX_X },
       x: nextX,
+      direction: Math.sign(nextX - prevX),
       speed,
     });
     plugins.runSceneMove(scene.plugins, context, (name, frame) => {
