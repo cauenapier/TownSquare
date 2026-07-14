@@ -7,12 +7,6 @@
       "runtimeArgs": ["start"],
       "port": 8787,
       "autoPort": true
-    },
-    {
-      "name": "townsquare-balltest",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "DATA_DIR=/tmp/ball-test-data node server.js"],
-      "port": 8787
     }
   ]
 }

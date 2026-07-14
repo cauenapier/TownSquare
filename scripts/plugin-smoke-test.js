@@ -204,6 +204,53 @@ async function main() {
     "enabled add-on disappeared from the catalogue",
   );
 
+  const toggleEntity = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    action: "setPluginEnabled",
+    name: "test-scene-entity",
+    enabled: true,
+  });
+  assert(toggleEntity.response.ok, toggleEntity.body.error || "scene-entity toggle failed");
+  await waitForValue(
+    () => visitor.seen.find((message) => (
+      message.type === "plugins"
+      && message.pluginModules?.some((entry) => entry.name === "test-scene-entity")
+      && message.pluginEntities?.["test-scene-entity"]?.moves === 0
+    )),
+    Boolean,
+    "live toggle did not send the scene-entity module and snapshot",
+  );
+
+  visitor.ws.send(JSON.stringify({ type: "move", x: 0.6 }));
+  await waitForValue(
+    () => visitor.seen.find((message) => (
+      message.type === "plugin"
+      && message.plugin === "test-scene-entity"
+      && message.moves === 1
+    )),
+    Boolean,
+    "scene-entity move hook did not broadcast a frame",
+  );
+
+  const disableEntity = await post("/api/admin/action", {
+    siteKey,
+    adminToken,
+    action: "setPluginEnabled",
+    name: "test-scene-entity",
+    enabled: false,
+  });
+  assert(disableEntity.response.ok, disableEntity.body.error || "scene-entity disable failed");
+  await waitForValue(
+    () => visitor.seen.find((message) => (
+      message.type === "plugins"
+      && !message.pluginModules?.some((entry) => entry.name === "test-scene-entity")
+      && !Object.hasOwn(message.pluginEntities || {}, "test-scene-entity")
+    )),
+    Boolean,
+    "live toggle did not remove the scene-entity module and state",
+  );
+
   const updated = await post("/api/admin/action", {
     siteKey,
     adminToken,

@@ -3653,7 +3653,7 @@ function handleMove(client, message) {
       speed,
     });
     plugins.runSceneMove(scene.plugins, context, (name, frame) => {
-      broadcast(scene, { type: "plugin", plugin: name, ...frame });
+      broadcast(scene, { type: MSG.PLUGIN, plugin: name, ...frame });
     });
   }
 }
@@ -3987,7 +3987,7 @@ const entityTimer = setInterval(() => {
       dtMs: ENTITY_TICK_INTERVAL_MS,
     });
     plugins.tickSceneEntities(scene.plugins, context, (name, frame) => {
-      broadcast(scene, { type: "plugin", plugin: name, ...frame });
+      broadcast(scene, { type: MSG.PLUGIN, plugin: name, ...frame });
     });
   }
 }, ENTITY_TICK_INTERVAL_MS);

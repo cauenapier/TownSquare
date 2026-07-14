@@ -33,3 +33,22 @@ registerPlugin({
     return { ...panel, plugins: { ...panel.plugins, "test-labelled": data } };
   },
 });
+
+registerPlugin({
+  name: "test-scene-entity",
+  label: "Test scene entity",
+  description: "Exercises scene-entity plugins in the smoke test.",
+  widgetModule: "/plus/test-scene-entity/widget.mjs",
+  sceneEntity: {
+    create() {
+      return { moves: 0 };
+    },
+    snapshot({ state }) {
+      return { moves: state.moves };
+    },
+  },
+  onSceneMove({ state, emit }) {
+    state.moves += 1;
+    emit({ moves: state.moves });
+  },
+});
