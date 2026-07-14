@@ -79,9 +79,10 @@ per-site activation switch shown in the admin **Add-ons** tab:
 
 ```js
 module.exports = {
-  name: "telegram-notifications",
-  label: "Telegram notifications",
-  description: "Forward chat messages to a Telegram chat.",
+  name: "weather",
+  label: "Weather",
+  tier: "free",
+  description: "Add shared ambient weather to your square.",
   // ...hooks, adminModule, etc.
 };
 ```
@@ -97,15 +98,12 @@ ones are destroyed. A scene-entity plugin also receives its current snapshot;
 weather uses the same live update path to apply or remove its configuration.
 
 A plugin's own `isEnabled` layers on top of the owner's choice as an
-*entitlement* gate. The toggle is only offered to a site when its `isEnabled`
-passes, and the plugin runs only when both the entitlement holds **and** the
-owner has switched it on. For example, `telegram-notifications` keeps its own
-entitlement `isEnabled`, so its switch appears only on entitled sites and
-activates only once that owner turns it on. The same toggle framework covers
-core and Plus plugins alike — a Plus plugin opts in purely by adding a `label`;
-no toggle code lives in the Plus repo. A Plus plugin that omits `label` (like
-`owner-figure` and `scene-cat`) instead runs automatically on every site its
-`isEnabled` entitles.
+*entitlement* gate. The toggle is offered only where `isEnabled` passes, and the
+plugin runs only when both the entitlement and owner switch allow it. The same
+toggle framework covers core and private plugins; no plan-specific toggle code
+lives in the core. Unlabelled plugins, including the environment-configured
+Telegram notifier, have no owner switch and run wherever their own implementation
+allows.
 
 ### Core weather add-on
 

@@ -7,6 +7,12 @@ import {
   applySceneConfigToForm,
   bindSceneCountProse,
   bindStyleColorFields,
+  readSceneConfigFromForm,
+  readStyleConfigFromForm,
+  renderScenePositionFields,
+  renderStyleOverrideFields,
+} from "../../lib/site-config.mjs";
+import {
   CONNECTION_LABEL_MAX,
   CONNECTION_SIDES,
   CONNECTION_URL_MAX,
@@ -16,15 +22,11 @@ import {
   isSceneCountInputName,
   MAX_CONNECTIONS_PER_SIDE,
   MESSAGE_BOARD_VARIANTS,
-  readSceneConfigFromForm,
-  readStyleConfigFromForm,
-  renderScenePositionFields,
-  renderStyleOverrideFields,
   sanitizeConnections,
   sanitizeMessageBoard,
   sanitizeSceneConfig,
   sanitizeSiteStyle,
-} from "../../lib/site-config.mjs";
+} from "../../lib/site-config-core.mjs";
 import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
@@ -440,7 +442,7 @@ async function saveCustomization() {
   customizationBusy = false;
   if (ok) {
     customizationTouched = false;
-    customizationSavedMessage = "Published — scene and board are live. Re-copy the Customization CSS below if you changed colors.";
+    customizationSavedMessage = "Published — changes update automatically without a new snippet.";
   }
   updateCustomizationButtons();
   updateCustomizationStatus();

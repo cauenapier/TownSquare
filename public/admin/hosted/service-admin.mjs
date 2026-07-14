@@ -23,6 +23,7 @@ import {
   formatTime,
   postJson,
 } from "./hosted-common.mjs";
+import { createServiceAdminNotifications } from "./service-admin-notifications.mjs";
 import {
   buildStackedVisitorActivityView,
   buildVisitorActivityView,
@@ -74,11 +75,6 @@ const mapDensityValueEl = document.getElementById("map-density-value");
 const serviceAdminTabs = document.getElementById("service-admin-tabs");
 const tabButtons = serviceAdminTabs ? [...serviceAdminTabs.querySelectorAll("[data-tab]")] : [];
 const tabPanels = [...document.querySelectorAll(".hosted-tabpanel")];
-const sendNotificationForm = document.getElementById("send-notification-form");
-const notificationMessageEl = document.getElementById("notification-message");
-const sendNotificationBtn = document.getElementById("send-notification-btn");
-const sendNotificationStatus = document.getElementById("send-notification-status");
-const recentNotificationsListEl = document.getElementById("recent-notifications-list");
 const trafficDialogEl = document.getElementById("service-traffic-dialog");
 const trafficDialogTitleEl = document.getElementById("service-traffic-title");
 const trafficDialogMetaEl = document.getElementById("service-traffic-meta");
@@ -119,6 +115,8 @@ const TABLE_COLUMNS = [
   { key: "mapClickTotal", label: "Map clicks", render: (site) => String(site.mapClickTotal ?? 0) },
   { key: "adminAccessLastAt", label: "Owner in admin", render: (site) => formatTime(site.adminAccessLastAt) },
   { key: "adminAccessCount", label: "Admin visits", render: (site) => String(site.adminAccessCount ?? 0) },
+  { key: "weatherActivationAttempts", label: "Weather tried", render: (site) => site.weatherActivationAttempts ? `${site.weatherActivationAttempts} · ${formatTime(site.weatherActivationLastAt)}` : "Never" },
+  { key: "weatherActivated", label: "Weather active", render: (site) => (site.weatherActivated ? "Yes" : "No") },
   { key: "blockedCount", label: "Blocked", render: (site) => String(site.blockedCount ?? 0) },
 ];
 
@@ -157,6 +155,7 @@ const credentialStore = createCredentialStore(STORAGE_KEY);
 const stored = credentialStore.read();
 let password = typeof stored?.value === "string" ? stored.value : "";
 let rememberMe = stored?.remembered ?? false;
+const notifications = createServiceAdminNotifications(() => password);
 
 let allSites = [];
 let filterQuery = "";
@@ -1306,6 +1305,8 @@ function renderPlatformStats(platform) {
     { value: platform.messagesToday ?? 0, label: "Messages today" },
     { value: platform.messagesWeekly ?? 0, label: "Messages (7d)" },
     { value: platform.ownersInAdmin7d ?? 0, label: "Owners in admin (7d)" },
+    { value: platform.weatherTried ?? 0, label: "Tried weather" },
+    { value: platform.weatherActive ?? 0, label: "Weather active" },
   ];
 
   for (const card of cards) {
@@ -1677,6 +1678,7 @@ loginForm.addEventListener("submit", async (event) => {
   password = loginPasswordEl.value.trim();
   rememberMe = rememberMeEl.checked;
   await loadSites();
+  if (!adminView.hidden) void notifications.load();
 
   loginSubmitButton.disabled = false;
   if (!adminView.hidden) {
@@ -1709,94 +1711,9 @@ bindCopy(copyTokenButton, { text: () => newAdminTokenEl.value, source: newAdminT
 
 rememberMeEl.checked = rememberMe;
 
-// Notification management
-function createStatusSetter2(el, { toggleHidden = false } = {}) {
-  return function setStatus(message, isError = false) {
-    el.textContent = message;
-    el.className = isError ? "hosted-status--error" : "";
-    if (toggleHidden) {
-      el.hidden = !message;
-    }
-  };
-}
-
-const setSendNotificationStatus = createStatusSetter2(sendNotificationStatus, { toggleHidden: true });
-
-sendNotificationForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const message = notificationMessageEl.value.trim();
-  if (!message) {
-    setSendNotificationStatus("Message is required", true);
-    return;
-  }
-
-  sendNotificationBtn.disabled = true;
-  setSendNotificationStatus("Sending to all sites...");
-
-  try {
-    const response = await postJson("/api/service-admin/notifications/send", {
-      password,
-      message,
-    });
-
-    if (!response.ok) {
-      setSendNotificationStatus("Failed to send notifications", true);
-      return;
-    }
-
-    notificationMessageEl.value = "";
-    setSendNotificationStatus(`✓ Sent to ${response.body.sitesNotified} sites`);
-    setTimeout(() => setSendNotificationStatus(""), 3000);
-    await loadNotificationsStats();
-  } catch (error) {
-    setSendNotificationStatus("Error sending notifications", true);
-    console.error(error);
-  } finally {
-    sendNotificationBtn.disabled = false;
-  }
-});
-
-async function loadNotificationsStats() {
-  try {
-    const response = await postJson("/api/service-admin/notifications/stats", { password });
-    if (!response.ok) return;
-
-    const { recent } = response.body;
-
-    recentNotificationsListEl.replaceChildren();
-    if (recent.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "hosted-note";
-      empty.textContent = "No notifications sent yet.";
-      recentNotificationsListEl.appendChild(empty);
-      return;
-    }
-
-    for (const notif of recent) {
-      const row = document.createElement("div");
-      row.className = "notification-row";
-
-      const msgEl = document.createElement("div");
-      msgEl.className = "notification-row-message";
-      msgEl.textContent = notif.message;
-
-      const metaEl = document.createElement("div");
-      metaEl.className = "notification-row-meta";
-      const createdAt = new Date(notif.createdAt).toLocaleString();
-      metaEl.innerHTML = `<div>${createdAt}</div><div>${notif.read}/${notif.total} read</div>`;
-
-      row.appendChild(msgEl);
-      row.appendChild(metaEl);
-      recentNotificationsListEl.appendChild(row);
-    }
-  } catch (error) {
-    console.error("Error loading notification stats:", error);
-  }
-}
-
 if (password) {
   loadSites();
-  void loadNotificationsStats();
+  void notifications.load();
 } else {
   showLogin();
 }

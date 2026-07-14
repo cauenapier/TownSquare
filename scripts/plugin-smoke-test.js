@@ -1,11 +1,9 @@
 "use strict";
 
 const fs = require("fs");
-const os = require("os");
-const net = require("net");
 const path = require("path");
-const { spawn } = require("child_process");
 const WebSocket = require("ws");
+const { startManagedServer: createManagedServer } = require("./lib/managed-server");
 const { handleSmokeSocketMessage, withTimeout } = require("./smoke-ws-helpers");
 
 // `let` so the self-contained harness can repoint them at a spawned server.
@@ -14,74 +12,23 @@ let WS_URL = process.env.TOWNSQUARE_WS_URL || "ws://127.0.0.1:8787/live";
 let DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", ".data");
 const CONNECT_TIMEOUT_MS = Number(process.env.SMOKE_CONNECT_TIMEOUT_MS || 15000);
 
-function findFreePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.unref();
-    srv.on("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-async function waitForHealth(origin, timeoutMs = 8000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${origin}/healthz`);
-      if (res.ok) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("managed server did not become healthy in time");
-}
-
 // Spawn a server with the test-feature contract fixture injected via
 // TOWNSQUARE_EXTRA_PLUGINS, so the plugin contract is exercised end-to-end.
 async function startManagedServer() {
-  const port = await findFreePort();
-  const host = "127.0.0.1";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "townsquare-plugin-smoke-"));
-  const httpOrigin = `http://${host}:${port}`;
   const fixture = path.join(__dirname, "..", "server", "fixtures", "feature-plugin.js");
-
-  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+  const managed = await createManagedServer({
+    dataPrefix: "townsquare-plugin-smoke-",
     env: {
-      ...process.env,
-      HOST: host,
-      PORT: String(port),
-      DATA_DIR: dataDir,
-      ALLOWED_ORIGINS: httpOrigin,
       MIN_HUMAN_SAY_MS: "0",
       POW_DIFFICULTY_BITS: process.env.POW_DIFFICULTY_BITS || "1",
       TOWNSQUARE_EXTRA_PLUGINS: fixture,
     },
-    stdio: ["ignore", "inherit", "inherit"],
   });
 
-  HTTP_ORIGIN = httpOrigin;
-  WS_URL = `ws://${host}:${port}/live`;
-  DATA_DIR = dataDir;
-
-  try {
-    await waitForHealth(httpOrigin);
-  } catch (error) {
-    child.kill("SIGKILL");
-    throw error;
-  }
-
-  return () => {
-    child.kill("SIGTERM");
-    try {
-      fs.rmSync(dataDir, { recursive: true, force: true });
-    } catch {
-      // best-effort
-    }
-  };
+  HTTP_ORIGIN = managed.httpOrigin;
+  WS_URL = `${managed.wsOrigin}/live`;
+  DATA_DIR = managed.dataDir;
+  return managed.cleanup;
 }
 
 async function post(pathname, body) {
@@ -313,7 +260,7 @@ async function run() {
   try {
     await main();
   } finally {
-    cleanup?.();
+    await cleanup?.();
   }
 }
 

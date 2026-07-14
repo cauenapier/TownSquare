@@ -195,7 +195,7 @@ async function main() {
     console.log(`\nScene alignment test passed. Screenshots saved to ${OUT_DIR}`);
   } finally {
     await browser.close();
-    managed?.cleanup();
+    await managed?.cleanup();
   }
 }
 

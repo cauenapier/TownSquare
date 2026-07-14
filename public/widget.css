@@ -2108,11 +2108,11 @@
   position: absolute;
   left: 50%;
   top: calc(100% + 9px);
-  /* --label-shift de-conflicts overlapping name tags (see layoutNameLabels in
+  /* --label-shift de-conflicts overlapping name tags (see layoutStage in
      bubble-layout.mjs), so no tag — including your own — covers another. */
   transform: translateX(calc(-50% + var(--label-shift, 0px)));
   /* --label-fade recedes distant tags so crowded narrow stages stay legible;
-     near 1 on wide stages (see layoutNameLabels). */
+     near 1 on wide stages (see layoutStage). */
   opacity: var(--label-fade, 1);
   transition: opacity 140ms ease;
   display: flex;

@@ -8,11 +8,11 @@
 
 import { MAX_X, MIN_X } from "./constants.mjs";
 import { openWidgetModal } from "./modal.mjs";
-import { CONNECTION_SIDES, connectionsBySide, hostnameLabel } from "../../lib/site-config.mjs";
+import { CONNECTION_SIDES, connectionsBySide, hostnameLabel } from "../lib/site-config-core.mjs";
 
 /**
  * @typedef {import("./context.mjs").WidgetContext} WidgetContext
- * @typedef {import("../../lib/site-config.mjs").Connection} Connection
+ * @typedef {import("../lib/site-config-core.mjs").Connection} Connection
  */
 
 /** How close to an edge the avatar must be for the signpost to invite a visit. */

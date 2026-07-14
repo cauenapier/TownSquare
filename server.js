@@ -14,7 +14,7 @@ const { createAdminSessionStore, parseCookies } = require("./server/admin-sessio
 const { createPlausibleProxy } = require("./server/plausible");
 const { createStaticFiles } = require("./server/static-files");
 const { makeBucketStore } = require("./server/rate-limit");
-const { createSitesWriter } = require("./server/sites-store");
+const { SITE_REGISTRY_VERSION, createSitesWriter } = require("./server/sites-store");
 const {
   clampPosition,
   sanitizeBrowserId,
@@ -162,7 +162,7 @@ const BIRD_SPAWN_MAX_MS = Number(process.env.BIRD_SPAWN_MAX_MS || 22000);
 const BIRD_FIRST_SPAWN_MS = Number(process.env.BIRD_FIRST_SPAWN_MS || 500);
 
 // Wire-protocol limits and the character palette, shared with the widget.
-// Populated from public/shared/shared-constants.mjs in startServer (the server is
+// Populated from public/lib/shared-constants.mjs in startServer (the server is
 // CommonJS, so the shared ES module is loaded via dynamic import).
 let MIN_X;
 let MAX_X;
@@ -229,9 +229,9 @@ function parseHttpOrigin(value) {
   }
 }
 
-/** @type {Map<string, import("./shared/scene-props.mjs").SceneProp>} */
+/** @type {Map<string, import("./public/lib/site-config-core.mjs").SceneProp>} */
 let PROPS_BY_ID = new Map();
-/** @type {Array<import("./shared/bird-perches.mjs").BirdPerch>} */
+/** @type {Array<import("./public/lib/site-config-core.mjs").BirdPerch>} */
 let BIRD_PERCHES = [];
 // Shared realtime protocol vocabulary, assigned from protocol.mjs in
 // loadSharedModules() before the server starts listening.
@@ -251,7 +251,7 @@ let sanitizeSiteStyle;
 let buildSceneProps;
 let buildBirdPerches;
 let buildSiteCss;
-/** @type {(prop: import("./shared/site-config-core.mjs").SceneProp, x: number) => boolean} */
+/** @type {(prop: import("./public/lib/site-config-core.mjs").SceneProp, x: number) => boolean} */
 let isWithinPropSettleZone = () => false;
 let validateMapWorld;
 /** @type {(storedWorld: object, siteCount: number) => object} */
@@ -800,7 +800,7 @@ function buildEmbedSnippet(req, site) {
   // (see the `hello` payload), not baked here, so this snippet is install-once:
   // owners paste it a single time and manage everything else from the dashboard.
   // Power users can still pin any of those fields inline to take them off live
-  // management (see README → Customization).
+  // management; mountTownSquare documents the supported options.
   const coreConfig = {
     serverOrigin,
     siteKey: site.siteKey,
@@ -1534,37 +1534,6 @@ function handleGetAdminNotifications(req, res) {
   });
 }
 
-function handlePostAdminNotification(req, res) {
-  readJsonBody(req, res, (body) => {
-    const resolved = resolveAdminRequest(req, body);
-    if (!resolved) {
-      sendJson(res, 403, { error: "Unauthorized" });
-      return;
-    }
-
-    if (!body.message || typeof body.message !== "string") {
-      sendJson(res, 400, { error: "Message is required" });
-      return;
-    }
-
-    const notification = {
-      id: createToken("notif", 8),
-      message: body.message.trim().slice(0, 1000),
-      createdAt: Date.now(),
-      readAt: null,
-    };
-
-    if (!notificationsBySiteKey.has(resolved.site.siteKey)) {
-      notificationsBySiteKey.set(resolved.site.siteKey, []);
-    }
-
-    notificationsBySiteKey.get(resolved.site.siteKey).push(notification);
-    saveNotifications();
-
-    sendJson(res, 201, { notification });
-  });
-}
-
 function handleMarkAdminNotificationRead(req, res) {
   readJsonBody(req, res, (body) => {
     const resolved = resolveAdminRequest(req, body);
@@ -1628,8 +1597,8 @@ const ADMIN_ACTIONS = {
     }
 
     rebuildSceneProps(scene, site);
-    // Push the edited scene and board to everyone currently in the square so they
-    // update live, no snippet re-paste needed. Colours stay in the pasted CSS.
+    // Push the edited scene and board to everyone currently in the square. The
+    // linked site stylesheet picks up palette changes without a new snippet.
     broadcast(scene, { type: MSG.SCENE, scene: getSceneConfig(site) });
     broadcast(scene, { type: MSG.MESSAGE_BOARD, messageBoard: getMessageBoard(site) });
   },
@@ -1791,6 +1760,15 @@ const ADMIN_ACTIONS = {
     }
     if (!isPlainObject(site.pluginsEnabled)) site.pluginsEnabled = {};
     site.pluginsEnabled[name] = Boolean(body.enabled);
+    if (name === "weather") {
+      const usage = isPlainObject(site.weatherActivation)
+        ? site.weatherActivation
+        : (site.weatherActivation = { attempts: 0, firstAttemptAt: 0, lastAttemptAt: 0 });
+      const now = Date.now();
+      usage.attempts = (Number(usage.attempts) || 0) + 1;
+      usage.firstAttemptAt = Number(usage.firstAttemptAt) || now;
+      usage.lastAttemptAt = now;
+    }
     logModeration(site, body.enabled ? "plugin-on" : "plugin-off", name);
     touchSite(site);
 
@@ -1939,6 +1917,7 @@ function serviceAdminSite(site) {
   const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
   const adminAccess = isPlainObject(site.adminAccess) ? site.adminAccess : {};
   const overlayUsage = isPlainObject(site.overlayUsage) ? site.overlayUsage : {};
+  const weatherActivation = isPlainObject(site.weatherActivation) ? site.weatherActivation : {};
 
   return {
     ...publicSite(site),
@@ -1957,6 +1936,10 @@ function serviceAdminSite(site) {
     adminAccessLastAt: Number(adminAccess.lastAt || 0),
     overlayUseCount: Number(overlayUsage.count || 0),
     overlayLastAt: Number(overlayUsage.lastAt || 0),
+    weatherActivationAttempts: Number(weatherActivation.attempts || 0),
+    weatherActivationFirstAt: Number(weatherActivation.firstAttemptAt || 0),
+    weatherActivationLastAt: Number(weatherActivation.lastAttemptAt || 0),
+    weatherActivated: isPluginEnabledForSite(site, "weather"),
   };
 }
 
@@ -1973,6 +1956,8 @@ function buildServiceAdminPlatformStats(sites) {
   let messagesToday = 0;
   let messagesWeekly = 0;
   let ownersInAdmin7d = 0;
+  let weatherTried = 0;
+  let weatherActive = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -1988,6 +1973,8 @@ function buildServiceAdminPlatformStats(sites) {
     messagesToday += site.messageStats?.daily ?? 0;
     messagesWeekly += site.messageStats?.weekly ?? 0;
     if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * dayMs) ownersInAdmin7d += 1;
+    if ((site.weatherActivationAttempts ?? 0) > 0) weatherTried += 1;
+    if (site.weatherActivated) weatherActive += 1;
   }
 
   return {
@@ -2001,6 +1988,8 @@ function buildServiceAdminPlatformStats(sites) {
     messagesToday,
     messagesWeekly,
     ownersInAdmin7d,
+    weatherTried,
+    weatherActive,
     dailySeries: visitorStats.getAggregateDailySeries(7),
     messageDailySeries: messageStats.getAggregateDailySeries(7),
   };
@@ -2701,113 +2690,120 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       moderationLog: [],
       plugins: {},
       pluginsEnabled: {},
+      weatherActivation: { attempts: 0, firstAttemptAt: 0, lastAttemptAt: 0 },
     },
   };
 }
 
 let sitesMigratedOnLoad = false;
 
+function normalizeSiteRecord(site) {
+  let changed = false;
+  const ensureArray = (key) => {
+    if (Array.isArray(site[key])) return;
+    site[key] = [];
+    changed = true;
+  };
+  const ensureObject = (key, fallback = {}) => {
+    if (isPlainObject(site[key])) return;
+    site[key] = fallback;
+    changed = true;
+  };
+
+  if (site.adminToken) {
+    if (!site.adminTokenHash) site.adminTokenHash = hashAdminToken(site.adminToken);
+    delete site.adminToken;
+    changed = true;
+  }
+
+  for (const key of [
+    "blockedBrowserIds",
+    "blockedIps",
+    "mutedBrowserIds",
+    "shadowBlockedBrowserIds",
+    "ownerBrowserIds",
+    "blockedWords",
+    "moderationLog",
+    "connections",
+  ]) ensureArray(key);
+
+  ensureObject("ownerProfiles");
+  ensureObject("pluginsEnabled");
+  ensureObject("connectionClicks");
+  ensureObject("mapClicks", { count: 0, lastAt: 0 });
+  ensureObject("adminAccess", { count: 0, lastAt: 0 });
+  ensureObject("weatherActivation", { attempts: 0, firstAttemptAt: 0, lastAttemptAt: 0 });
+  if (ensurePluginData(site)) changed = true;
+
+  if (!isPlainObject(site.messageBoard)) {
+    site.messageBoard = sanitizeMessageBoard({});
+    changed = true;
+  }
+  const styleConfig = sanitizeSiteStyle(site.styleConfig);
+  if (JSON.stringify(styleConfig) !== JSON.stringify(site.styleConfig)) {
+    site.styleConfig = styleConfig;
+    changed = true;
+  }
+  if (typeof site.chatThrottleMs !== "number") {
+    site.chatThrottleMs = DEFAULT_CHAT_THROTTLE_MS;
+    changed = true;
+  }
+  const connectionLimit = sanitizeConnectionLimit(site.connectionLimit ?? DEFAULT_CONNECTION_LIMIT);
+  if (connectionLimit !== site.connectionLimit) {
+    site.connectionLimit = connectionLimit;
+    changed = true;
+  }
+
+  const allowedOrigins = getAllowedOrigins(site);
+  if (JSON.stringify(allowedOrigins) !== JSON.stringify(site.allowedOrigins || [])) {
+    site.allowedOrigins = allowedOrigins;
+    changed = true;
+  }
+  if (typeof site.messageCount !== "number") {
+    site.messageCount = 0;
+    changed = true;
+  }
+  if (site.lastMessageAt === undefined) {
+    site.lastMessageAt = null;
+    changed = true;
+  }
+  if (typeof site.supporter !== "boolean") {
+    site.supporter = false;
+    changed = true;
+  }
+  if (site.botProtectionDefaulted !== true) {
+    site.botProtection = true;
+    site.botProtectionDefaulted = true;
+    changed = true;
+  }
+  if (typeof site.plus !== "boolean") {
+    site.plus = typeof site.pro === "boolean" ? site.pro : false;
+    changed = true;
+  }
+  if (Object.hasOwn(site, "pro")) {
+    delete site.pro;
+    changed = true;
+  }
+
+  return changed;
+}
+
 function loadSites() {
   try {
     const raw = fs.readFileSync(SITES_FILE, "utf8");
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed.sites)) return new Map();
-    return new Map(parsed.sites.map((site) => {
-      if (site.adminToken) {
-        if (!site.adminTokenHash) {
-          site.adminTokenHash = hashAdminToken(site.adminToken);
-        }
-        delete site.adminToken;
+    if (parsed.version !== SITE_REGISTRY_VERSION) sitesMigratedOnLoad = true;
+    const sites = new Map();
+    for (const site of parsed.sites) {
+      if (!isPlainObject(site) || typeof site.siteKey !== "string" || !site.siteKey) {
         sitesMigratedOnLoad = true;
+        continue;
       }
-      if (!Array.isArray(site.blockedBrowserIds)) {
-        site.blockedBrowserIds = [];
-      }
-      if (!Array.isArray(site.blockedIps)) {
-        site.blockedIps = [];
-      }
-      if (!Array.isArray(site.mutedBrowserIds)) {
-        site.mutedBrowserIds = [];
-      }
-      if (!Array.isArray(site.shadowBlockedBrowserIds)) {
-        site.shadowBlockedBrowserIds = [];
-      }
-      if (!Array.isArray(site.ownerBrowserIds)) {
-        site.ownerBrowserIds = [];
-      }
-      if (!isPlainObject(site.ownerProfiles)) {
-        site.ownerProfiles = {};
-      }
-      if (!Array.isArray(site.blockedWords)) {
-        site.blockedWords = [];
-      }
-      if (typeof site.chatThrottleMs !== "number") {
-        site.chatThrottleMs = DEFAULT_CHAT_THROTTLE_MS;
-      }
-      if (typeof site.connectionLimit !== "number") {
-        site.connectionLimit = DEFAULT_CONNECTION_LIMIT;
-        sitesMigratedOnLoad = true;
-      } else {
-        const nextConnectionLimit = sanitizeConnectionLimit(site.connectionLimit);
-        if (nextConnectionLimit !== site.connectionLimit) {
-          site.connectionLimit = nextConnectionLimit;
-          sitesMigratedOnLoad = true;
-        }
-      }
-      if (!Array.isArray(site.moderationLog)) {
-        site.moderationLog = [];
-      }
-      if (!Array.isArray(site.connections)) {
-        site.connections = [];
-      }
-      if (!isPlainObject(site.messageBoard)) {
-        site.messageBoard = sanitizeMessageBoard({});
-        sitesMigratedOnLoad = true;
-      }
-      if (ensurePluginData(site)) {
-        sitesMigratedOnLoad = true;
-      }
-      if (!isPlainObject(site.pluginsEnabled)) {
-        site.pluginsEnabled = {};
-      }
-      const nextAllowedOrigins = getAllowedOrigins(site);
-      if (JSON.stringify(nextAllowedOrigins) !== JSON.stringify(site.allowedOrigins || [])) {
-        site.allowedOrigins = nextAllowedOrigins;
-        sitesMigratedOnLoad = true;
-      }
-      if (typeof site.messageCount !== "number") {
-        site.messageCount = 0;
-      }
-      if (site.lastMessageAt === undefined) {
-        site.lastMessageAt = null;
-      }
-      if (!isPlainObject(site.connectionClicks)) {
-        site.connectionClicks = {};
-      }
-      if (!isPlainObject(site.mapClicks)) {
-        site.mapClicks = { count: 0, lastAt: 0 };
-      }
-      if (!isPlainObject(site.adminAccess)) {
-        site.adminAccess = { count: 0, lastAt: 0 };
-      }
-      if (typeof site.supporter !== "boolean") {
-        site.supporter = false;
-      }
-      // Bot protection is on by default. Flip every pre-existing site on exactly
-      // once (including those persisted as `false`), then record the marker so a
-      // later owner toggle-off survives restarts instead of being re-forced.
-      if (site.botProtectionDefaulted !== true) {
-        site.botProtection = true;
-        site.botProtectionDefaulted = true;
-        sitesMigratedOnLoad = true;
-      }
-      if (typeof site.plus !== "boolean") {
-        // Migrate the former `pro` flag onto `plus`; default new/unset sites to false.
-        site.plus = typeof site.pro === "boolean" ? site.pro : false;
-      }
-      delete site.pro;
-      return [site.siteKey, site];
-    }));
+      if (normalizeSiteRecord(site)) sitesMigratedOnLoad = true;
+      sites.set(site.siteKey, site);
+    }
+    return sites;
   } catch (error) {
     if (error.code !== "ENOENT") {
       console.warn(`Could not load sites registry: ${error.message}`);
@@ -2867,7 +2863,7 @@ function loadNotifications() {
       }
       notificationsBySiteKey.get(notif.siteKey).push(notif);
     });
-  } catch (error) {
+  } catch {
     // File doesn't exist or is invalid; start fresh
   }
 }
@@ -3240,6 +3236,28 @@ function finalizeDisconnect(identity) {
   }
 }
 
+const HTTP_ROUTES = new Map([
+  ["GET /api/map", handleMap],
+  ["GET /api/stats", handleStats],
+  ["GET /api/site-presence", handleSitePresence],
+  ["POST /api/sites", handleRegisterSite],
+  ["POST /api/connection-click", handleConnectionClick],
+  ["POST /api/map-click", handleMapClick],
+  ["POST /api/admin/site", handlePostAdminSite],
+  ["POST /api/admin/login", handleAdminLogin],
+  ["POST /api/admin/logout", handleAdminLogout],
+  ["POST /api/admin/notifications", handleGetAdminNotifications],
+  ["POST /api/admin/notification/read", handleMarkAdminNotificationRead],
+  ["POST /api/admin/action", handleAdminAction],
+  ["POST /api/service-admin/sites", handleServiceAdminSites],
+  ["POST /api/service-admin/traffic", handleServiceAdminTraffic],
+  ["POST /api/service-admin/map", handleServiceAdminMap],
+  ["POST /api/service-admin/map/save", handleServiceAdminMapSave],
+  ["POST /api/service-admin/action", handleServiceAdminAction],
+  ["POST /api/service-admin/notifications/send", handleServiceAdminSendNotification],
+  ["POST /api/service-admin/notifications/stats", handleServiceAdminNotificationsStats],
+]);
+
 function handleHttpRequest(req, res) {
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
@@ -3269,108 +3287,14 @@ function handleHttpRequest(req, res) {
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/api/map") {
-    handleMap(req, res);
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/api/stats") {
-    handleStats(req, res);
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/api/site-presence") {
-    handleSitePresence(req, res);
-    return;
-  }
-
   if (req.method === "GET" && url.pathname.match(/^\/api\/sites\/[^/]+\/style\.css$/)) {
     handleSiteStyleCss(req, res, url);
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/sites") {
-    handleRegisterSite(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/connection-click") {
-    handleConnectionClick(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/map-click") {
-    handleMapClick(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/admin/site") {
-    handlePostAdminSite(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/admin/login") {
-    handleAdminLogin(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/admin/logout") {
-    handleAdminLogout(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/admin/notifications") {
-    handleGetAdminNotifications(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/admin/notification/create") {
-    handlePostAdminNotification(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/admin/notification/read") {
-    handleMarkAdminNotificationRead(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/admin/action") {
-    handleAdminAction(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/service-admin/sites") {
-    handleServiceAdminSites(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/service-admin/traffic") {
-    handleServiceAdminTraffic(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/service-admin/map") {
-    handleServiceAdminMap(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/service-admin/map/save") {
-    handleServiceAdminMapSave(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/service-admin/action") {
-    handleServiceAdminAction(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/send") {
-    handleServiceAdminSendNotification(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/service-admin/notifications/stats") {
-    handleServiceAdminNotificationsStats(req, res);
+  const handler = HTTP_ROUTES.get(`${req.method} ${url.pathname}`);
+  if (handler) {
+    handler(req, res);
     return;
   }
 
@@ -4085,7 +4009,7 @@ async function startServer() {
   messageStats.load();
   messageStats.start();
 
-  const shared = await import("./shared/shared-constants.mjs");
+  const shared = await import("./public/lib/shared-constants.mjs");
   MIN_X = shared.MIN_X;
   MAX_X = shared.MAX_X;
   MAX_MESSAGE_LEN = shared.MESSAGE_MAX;
@@ -4112,14 +4036,12 @@ async function startServer() {
 }
 
 async function loadSharedModules() {
-  const [siteConfig, scenePropsModule, birdPerchesModule, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
-    import("./shared/site-config-core.mjs"),
-    import("./shared/scene-props.mjs"),
-    import("./shared/bird-perches.mjs"),
-    import("./shared/scene-prop-geometry.mjs"),
-    import("./shared/map-world.mjs"),
-    import("./shared/url.mjs"),
-    import("./shared/protocol.mjs"),
+  const [siteConfig, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
+    import("./public/lib/site-config-core.mjs"),
+    import("./public/lib/scene-prop-geometry.mjs"),
+    import("./public/lib/map-world.mjs"),
+    import("./public/lib/url.mjs"),
+    import("./public/lib/protocol.mjs"),
   ]);
 
   MSG = protocol.MSG;
@@ -4152,8 +4074,9 @@ async function loadSharedModules() {
   mapWorld = loadMapWorld();
   ensureMapWorldGrown();
 
-  PROPS_BY_ID = new Map(scenePropsModule.PROPS.map((prop) => [prop.id, prop]));
-  BIRD_PERCHES = birdPerchesModule.BIRD_PERCHES;
+  const defaultProps = buildSceneProps(DEFAULT_SITE_SCENE_CONFIG);
+  PROPS_BY_ID = new Map(defaultProps.map((prop) => [prop.id, prop]));
+  BIRD_PERCHES = buildBirdPerches(defaultProps);
 }
 
 // Last-resort guards: log and keep running rather than letting an unexpected

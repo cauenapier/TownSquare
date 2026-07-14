@@ -11,7 +11,7 @@ import { mountTownSquare } from "../townsquare.mjs";
 import { DEFAULT_LAYOUT_CONFIG } from "../widget/bubble-layout.mjs";
 import { sayMessage } from "../widget/chat.mjs";
 import { CHARACTER_COLORS, MAX_X, MIN_X, randomSpawnX } from "../widget/constants.mjs";
-import { setWalking } from "../widget/dom.mjs";
+import { setWalking } from "../widget/gestures.mjs";
 import { clamp } from "../widget/math.mjs";
 import { applyPeerState, removePeer, setStatusMessage, updateStatus } from "../widget/presence.mjs";
 import { syncBirdsFromHello } from "../widget/birds.mjs";

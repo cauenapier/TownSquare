@@ -79,7 +79,7 @@ async function stageBackgroundImage(page) {
 // sky color, the pixel just below it is the ground-fill color, and a pixel in the
 // action zone is the action-zone fill color — comparing against the *intended* palette,
 // so a color that silently fails to apply is caught (not just internal self-consistency).
-async function assertStageColors(page, { label, screenshotPath, skyHex, groundHex, actionZoneHex }) {
+async function assertStageColors(page, { label, screenshotPath, skyHex, groundHex, actionZoneHex: _actionZoneHex }) {
   const stage = page.locator(".townsquare__stage");
   const widget = page.locator(".townsquare");
   const groundBox = await page.locator(".townsquare__ground").boundingBox();
@@ -198,7 +198,6 @@ async function checkGroundTransparency(page, httpOrigin) {
   const screenshotPath = path.join(OUT_DIR, "transparent-ground.png");
   const widget = page.locator(".townsquare");
   await widget.screenshot({ path: screenshotPath });
-  const image = decodePng(fs.readFileSync(screenshotPath));
 
   // Ground is now independent (sibling of stage). When transparent, it shows the background
   // behind it (the magenta test artifact if outside the widget, or widget background).
@@ -479,7 +478,7 @@ async function main() {
     console.log(`Widget color test passed. Screenshots saved to ${OUT_DIR}`);
   } finally {
     await browser.close();
-    managed?.cleanup();
+    await managed?.cleanup();
   }
 }
 

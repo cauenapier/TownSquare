@@ -1,17 +1,16 @@
 import { bindCopy } from "../../lib/ui-common.mjs";
-import { setStatus } from "./hosted-common.mjs";
+import { createStatusSetter } from "./hosted-common.mjs";
 import {
   applyConfigToForm,
   applySceneConfigToForm,
   bindSceneCountProse,
   bindStyleColorFields,
-  isSceneCountInputName,
   readSceneConfigFromForm,
   readStyleConfigFromForm,
   renderScenePositionFields,
   renderStyleOverrideFields,
-  sanitizeSceneConfig,
 } from "../../lib/site-config.mjs";
+import { isSceneCountInputName, sanitizeSceneConfig } from "../../lib/site-config-core.mjs";
 import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 
@@ -24,6 +23,7 @@ const includeMatchingWwwLabel = document.getElementById("include-matching-www-la
 const includeMatchingWwwNote = document.getElementById("include-matching-www-note");
 const submitButton = document.getElementById("register-submit");
 const statusEl = document.getElementById("register-status");
+const setStatus = createStatusSetter(statusEl, { toggleHidden: true });
 const successSiteEl = document.getElementById("success-site");
 const snippetEl = document.getElementById("embed-snippet");
 const adminTokenEl = document.getElementById("admin-token");
@@ -93,7 +93,7 @@ form.addEventListener("input", (event) => {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   submitButton.disabled = true;
-  setStatus(statusEl, "Creating your TownSquare...", false, { hideWhenEmpty: true });
+  setStatus("Creating your TownSquare...");
 
   try {
     const formData = new FormData(form);
@@ -112,14 +112,14 @@ form.addEventListener("submit", async (event) => {
 
     const body = await response.json();
     if (!response.ok) {
-      setStatus(statusEl, body.error || "Could not create this TownSquare.", true, { hideWhenEmpty: true });
+      setStatus(body.error || "Could not create this TownSquare.", true);
       return;
     }
 
-    setStatus(statusEl, "", false, { hideWhenEmpty: true });
+    setStatus("");
     showSuccess(body);
   } catch {
-    setStatus(statusEl, "Could not reach the server. Check your connection and try again.", true, { hideWhenEmpty: true });
+    setStatus("Could not reach the server. Check your connection and try again.", true);
   } finally {
     submitButton.disabled = false;
   }

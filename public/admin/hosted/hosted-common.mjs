@@ -6,20 +6,6 @@
  */
 
 /**
- * Escape a string for safe interpolation into innerHTML.
- *
- * @param {unknown} value
- * @returns {string}
- */
-export function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-/**
  * Build a DOM element. Untrusted values go through `text`/string children
  * (which become text nodes) or DOM properties — never string-interpolated HTML
  * — so there is no escaping to remember and no markup-injection surface.
@@ -168,22 +154,6 @@ export function createAutoRefresh(callback, intervalMs) {
       }
     },
   };
-}
-
-/**
- * Set the text/error state of a `.hosted-status` element in one call.
- *
- * @param {HTMLElement} element
- * @param {string} message
- * @param {boolean} [isError]
- * @param {{ hideWhenEmpty?: boolean }} [options]
- */
-export function setStatus(element, message, isError = false, { hideWhenEmpty = false } = {}) {
-  element.textContent = message;
-  element.classList.toggle("hosted-status--error", isError);
-  if (hideWhenEmpty) {
-    element.hidden = !message;
-  }
 }
 
 const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;

@@ -3,80 +3,23 @@
 // managed server, decoding Chromium's PNG screenshots without an image
 // dependency, and asserting sampled pixel colors.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import fs from "node:fs";
-import net from "node:net";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
+import managedServer from "./managed-server.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.join(__dirname, "..", "..");
-
-export function findFreePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.unref();
-    srv.on("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-export async function waitForHealth(origin, timeoutMs = 8000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${origin}/healthz`);
-      if (res.ok) return;
-    } catch {
-      // server not up yet
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("managed server did not become healthy in time");
-}
+const { startManagedServer: createManagedServer } = managedServer;
 
 // Spawn a throwaway server (isolated data dir, dev tools enabled) so the dev
 // fixtures under /dev are reachable. Returns the origin plus a cleanup fn.
 export async function startManagedServer() {
-  const port = await findFreePort();
-  const host = "127.0.0.1";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "townsquare-widget-shot-"));
-  const httpOrigin = `http://${host}:${port}`;
-
-  const child = spawn(process.execPath, [path.join(REPO_ROOT, "server.js")], {
+  const managed = await createManagedServer({
+    dataPrefix: "townsquare-widget-shot-",
     env: {
-      ...process.env,
-      HOST: host,
-      PORT: String(port),
-      DATA_DIR: dataDir,
-      ALLOWED_ORIGINS: httpOrigin,
       ENABLE_DEV_TOOLS: "1",
     },
-    stdio: ["ignore", "inherit", "inherit"],
   });
-
-  try {
-    await waitForHealth(httpOrigin);
-  } catch (error) {
-    child.kill("SIGKILL");
-    throw error;
-  }
-
   return {
-    httpOrigin,
-    cleanup: () => {
-      child.kill("SIGTERM");
-      try {
-        fs.rmSync(dataDir, { recursive: true, force: true });
-      } catch {
-        // best-effort cleanup
-      }
-    },
+    httpOrigin: managed.httpOrigin,
+    cleanup: managed.cleanup,
   };
 }
 

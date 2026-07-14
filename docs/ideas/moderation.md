@@ -1,114 +1,36 @@
-# Moderation roadmap
+# Moderation direction
 
-How TownSquare grows its moderation story without becoming "a moderation-heavy
-community platform" (see `spec.md`). Presence first, conversation second —
-moderation should protect that, not dominate it.
+TownSquare is a presence layer, not a community platform. Moderation should keep
+the space usable without becoming the dominant product surface.
 
-For admission controls, trust ladders, Turnstile placement, and bot-specific
-replay validation, see `docs/ideas/anti-bot-plan.md`.
+## Current behavior
 
-## Guiding principles
+Site owners can disable chat; filter whole words; configure chat cooldown; mark
+owners; kick, block, mute, hide, and reverse applicable actions; clear recent
+messages; and inspect a bounded moderation log. Browser-ID blocks raise the cost
+of returning but are not permanent identity bans.
 
-- **Off by default.** A fresh site needs zero moderation config to feel good.
-  Every tool here is opt-in per site.
-- **Owner-driven, low-ceremony.** Owners moderate from the admin page; actions
-  are one click and reversible where possible.
-- **Soft before hard.** Prefer mute/slow-mode over kick/ban. Kicking a visitor
-  removes presence, which is the one thing the product is trying to create.
-- **Honest about limits.** Identity is a `browserId` + secret, not an account.
-  Bans raise the cost of abuse; they are not permanent. The UI should say so
-  rather than imply more.
+The server also applies inactivity cleanup and source-scoped abuse limits. The
+real-server smoke suite covers the core moderation and visibility transitions.
+See `server.js` for action semantics and `public/admin/hosted/` for the owner UI.
 
-## Current state
+## Principles
 
-Implemented in `server.js` (admin action handlers near `kickVisitor`):
+- Keep defaults usable without configuration.
+- Prefer mute and cooldown before removing presence.
+- Keep actions one-click and reversible where possible.
+- State identity limitations honestly.
+- Add a tool only when its operational value exceeds its policy and UI cost.
 
-- `setChatDisabled` — site-wide chat kill switch
-- `kickVisitor` — disconnect, rejoinable (close code 4001)
-- `blockVisitor` — ban persisted by `browserId` (close code 4003)
-- `hideVisitor` — shadow block persisted by `browserId`; visitor stays
-  connected but invisible to peers (see Phase 1 hide notes)
-- `setOwnerVisitor` — promote / demote owners
-- auto inactive-kick, fixed chat throttle (`CHAT_THROTTLE_MS`), `MAX_MESSAGE_LEN`
-- per-IP/per-site limits for identities, joins, state changes, and chat
-- temporary per-IP/per-site quarantine for repeated synchronized actions across identities
-- Telegram notification on every chat message
+## Possible next work
 
-We have the hard tools (kick/ban) and a broadcast tool (disable chat). The gaps
-are **soft/graduated enforcement**, **content filtering**, and **review/visibility**.
+These are uncommitted options that need a concrete owner need before building:
 
----
+- report a visitor or message through the existing notification path;
+- link blocking or allow-listing for phishing/spam;
+- conservative repeated-message or flood detection feeding the existing mute;
+- enough recent-message context for an owner to judge an action.
 
-## Phase 1 — Low-hanging fruit ✅ shipped
-
-Small, self-contained, slotted into existing hooks (per-site config +
-`applyWordFilter` / `handleSay`). All off by default; admin-managed from the
-Moderation section.
-
-- [x] **Forbidden-words filter.** Per-site list (`site.blockedWords`), masked
-  with `*` via `applyWordFilter()`. Applied to chat in `handleSay()` and to
-  display names in `handleInit`/`handleProfile`. Whole-word, case-insensitive —
-  avoids the Scunthorpe problem.
-- [x] **Mute.** `site.mutedBrowserIds` (mirrors `blockedBrowserIds`). A muted
-  visitor stays present but their messages are dropped server-side in
-  `handleSay()`. Indefinite, toggled from the visitor list and chat thread.
-  - *Note:* like the existing site-wide chat disable, the muted user still sees
-    their own optimistic local echo (the widget echoes before the server);
-    peers never receive it. Timed/auto-expiring mutes were deferred.
-- [x] **Hide (shadow block).** `site.shadowBlockedBrowserIds`. A hidden visitor
-  stays connected but is invisible to everyone else: no JOIN/MOVE/chat/typing
-  events reach peers, and they are omitted from HELLO `peers`. Chat is dropped
-  server-side like mute. The hidden user still sees themselves and other visible
-  visitors. Indefinite, toggled as Hide/Unhide from the visitor list and chat
-  thread. Mid-session hide broadcasts LEAVE to visible peers; unhide broadcasts
-  JOIN.
-- [x] **Configurable slow mode.** `site.chatThrottleMs` (default 0.5s, capped at
-  30s) read by `getChatThrottle()`. Owners pick a cooldown in the admin UI; the
-  widget enforces it too, showing a "wait" hint instead of silently dropping.
-- [x] **Moderation log.** `site.moderationLog` (newest-first, capped at 50) via
-  `logModeration()`. Records kick/block/mute/unmute and chat/site toggles;
-  rendered read-only in the admin Moderation section.
-
-Covered by `scripts/smoke-test.js` (`assertModerationTools`, `assertHideVisitor`):
-word masking, mute/unmute propagation, hide/unhide propagation, slow-mode
-suppression, and log ordering.
-
-## Phase 2 — Medium
-
-Useful, slightly larger surface. Decide after Phase 1 ships and we see real use.
-
-- [ ] **Report button.** Visitors flag a message/visitor; routes to the existing
-  Telegram channel. Cheap given the notification plumbing already exists.
-- [ ] **Link controls in chat.** Block or allow-list URLs in messages, mirroring
-  how `readingUrl` is already validated against the site origin. Stops spam /
-  phishing.
-- [ ] **Spam heuristics.** Repeated-identical, ALL-CAPS, flood detection →
-  auto-mute. Builds on throttling + Phase 1 mute.
-- [ ] **Admin recent-messages view.** Surface `identity.messages` so an owner
-  can judge context before acting.
-
-## Phase 3 — Complex / needs a decision
-
-Real product tension with the "lightweight, not a community platform" ethos.
-Don't build until the open questions below are answered.
-
-- [ ] **Shadow mute.** Muted user still sees their own messages; nobody else
-  does. *(Chat already behaves this way; this item is about whether to keep
-  calling it out as an explicit product choice.)*
-- [ ] **Pre-moderation / approval mode.** Messages held until an owner approves.
-  Powerful for high-stakes sites, heavy for a presence layer.
-- [ ] **Stronger bans (IP / auth).** The only way past trivial ban evasion, but
-  it pushes toward an identity/account system the product explicitly avoids.
-- [ ] **Shared / built-in wordlist packs.** Curated slur and spam lists owners
-  toggle on. Convenient, but introduces a maintenance and policy burden.
-
----
-
-## Open questions
-
-- What *is* the minimum moderation story for lightweight public chat? Phase 1
-  is a proposed answer — validate it before committing to Phase 3.
-- Is shadow-muting acceptable for a product whose whole point is honest presence?
-- How far do we go on ban evasion before it forces an account system?
-- Should filtering ship with built-in wordlists, or stay BYO to avoid owning a
-  content-policy?
+Pre-moderation, IP/account bans, shared word-list packs, and broader reputation
+systems introduce substantially more identity or policy ownership. They should
+remain out of scope until the product explicitly chooses those responsibilities.

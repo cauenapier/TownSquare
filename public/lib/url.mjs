@@ -57,10 +57,3 @@ export function buildAllowedOrigins(origin, options = {}) {
     return true;
   });
 }
-
-export function originUsesMatchingWwwPair(origin) {
-  const normalized = normalizeAbsoluteOrigin(origin);
-  if (!normalized) return false;
-  const matching = getMatchingWwwOrigin(normalized);
-  return Boolean(matching && matching !== normalized);
-}

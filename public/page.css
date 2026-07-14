@@ -543,8 +543,7 @@ body {
   font-size: 1rem;
 }
 
-.hosted-shell--compact .hosted-grid,
-.hosted-shell--compact .hosted-grid--compact {
+.hosted-shell--compact .hosted-grid {
   gap: 8px;
 }
 
@@ -646,10 +645,6 @@ body {
    explicit for the weather add-on's conditional distribution controls. */
 .weather-config__distribution[hidden] {
   display: none;
-}
-
-.hosted-grid--compact {
-  gap: 12px;
 }
 
 .hosted-style-hint {

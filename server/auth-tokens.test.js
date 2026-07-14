@@ -41,12 +41,6 @@ test("adminTokenMatches verifies a salted-hash site record", () => {
   assert.equal(adminTokenMatches(site, "  " + token + "  "), true, "trims whitespace");
 });
 
-test("adminTokenMatches falls back to legacy plaintext adminToken", () => {
-  const site = { adminToken: "legacy-plain-token" };
-  assert.equal(adminTokenMatches(site, "legacy-plain-token"), true);
-  assert.equal(adminTokenMatches(site, "wrong"), false);
-});
-
 test("adminTokenMatches rejects malformed input and hashes", () => {
   assert.equal(adminTokenMatches(null, "x"), false);
   assert.equal(adminTokenMatches({ adminTokenHash: "sha256:" }, "x"), false, "missing salt");

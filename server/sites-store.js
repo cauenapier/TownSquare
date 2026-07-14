@@ -7,6 +7,7 @@
 // server.js; `getSites` reads the current snapshot at write time.
 
 const fs = require("fs");
+const SITE_REGISTRY_VERSION = 1;
 
 function createSitesWriter({ dataDir, sitesFile, getSites, debounceMs = 1000, logger = console }) {
   let timer = null;
@@ -23,7 +24,7 @@ function createSitesWriter({ dataDir, sitesFile, getSites, debounceMs = 1000, lo
     fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     const sites = getSites();
     const tmpFile = `${sitesFile}.tmp`;
-    fs.writeFileSync(tmpFile, `${JSON.stringify({ sites }, null, 2)}\n`, { mode: 0o600 });
+    fs.writeFileSync(tmpFile, `${JSON.stringify({ version: SITE_REGISTRY_VERSION, sites }, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(tmpFile, sitesFile);
   }
 
@@ -50,4 +51,4 @@ function createSitesWriter({ dataDir, sitesFile, getSites, debounceMs = 1000, lo
   return { saveNow, scheduleSave, flush, get pending() { return timer !== null; } };
 }
 
-module.exports = { createSitesWriter };
+module.exports = { SITE_REGISTRY_VERSION, createSitesWriter };

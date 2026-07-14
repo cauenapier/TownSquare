@@ -6,7 +6,7 @@ import { mountTownSquare } from "../../townsquare.mjs";
 
 /**
  * @typedef {Object} CustomizationPreviewConfig
- * @property {import("../../lib/site-config.mjs").SceneConfig} scene
+ * @property {import("../../lib/site-config-core.mjs").SceneConfig} scene
  * @property {Record<string, string>} style Flat palette for the active preview theme.
  */
 
