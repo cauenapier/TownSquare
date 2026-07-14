@@ -164,3 +164,40 @@ test("plugin admin actions receive only their scoped context", () => {
   assert.deepEqual(saved, { hat: "top-hat" });
   assert.deepEqual(manager.invokeAdminAction("owner-figure", "missing", {}, {}), { found: false });
 });
+
+test("scene entities preserve enabled state and route frames through lifecycle hooks", () => {
+  const manager = new PluginManager();
+  const state = { position: 0 };
+  manager.register({
+    name: "ball",
+    label: "Ball",
+    sceneEntity: {
+      create: () => state,
+      snapshot: ({ state: entity }) => ({ position: entity.position }),
+      tick: ({ state: entity, emit }) => {
+        entity.position += 1;
+        emit({ position: entity.position });
+      },
+    },
+    onSceneMove: ({ state: entity, emit }) => {
+      entity.position += 10;
+      emit({ position: entity.position });
+    },
+  });
+
+  const off = () => ({ enabled: false });
+  assert.deepEqual(manager.createSceneEntityState(off), {});
+
+  const on = () => ({ enabled: true });
+  const scene = manager.createSceneEntityState(on);
+  assert.deepEqual(manager.snapshotSceneEntities(scene, on), { ball: { position: 0 } });
+
+  const frames = [];
+  manager.runSceneMove(scene, on, (name, frame) => frames.push({ name, frame }));
+  manager.tickSceneEntities(scene, on, (name, frame) => frames.push({ name, frame }));
+  assert.deepEqual(frames, [
+    { name: "ball", frame: { position: 10 } },
+    { name: "ball", frame: { position: 11 } },
+  ]);
+  assert.deepEqual(manager.createSceneEntityState(off, scene), {});
+});

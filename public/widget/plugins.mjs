@@ -6,6 +6,9 @@
 export function createWidgetPluginRuntime(ctx) {
   const mounted = new Map();
   const loading = new Map();
+  // Last frame seen per scene-entity plugin, so a frame (or the hello snapshot)
+  // that arrives before its module finishes loading is applied once it mounts.
+  const lastFrames = new Map();
   let active = new Map();
   let disposed = false;
 
@@ -49,6 +52,8 @@ export function createWidgetPluginRuntime(ctx) {
         return;
       }
       mounted.set(descriptor.name, instance);
+      const seed = lastFrames.get(descriptor.name);
+      if (seed != null) instance?.applyEntity?.(seed);
       renderPresence(ctx.self);
       for (const peer of ctx.peers.values()) renderPresence(peer);
     } catch (error) {
@@ -81,14 +86,29 @@ export function createWidgetPluginRuntime(ctx) {
     }
   }
 
+  // Route a scene-entity frame to its plugin. Frames arrive from the server's
+  // namespaced `plugin` broadcasts and from the `hello` snapshot; the latest is
+  // retained so a not-yet-mounted module catches up on mount.
+  function applyEntity(name, frame) {
+    if (disposed || typeof name !== "string" || frame == null) return;
+    lastFrames.set(name, frame);
+    mounted.get(name)?.applyEntity?.(frame);
+  }
+
+  function applyEntities(entities) {
+    if (!entities || typeof entities !== "object") return;
+    for (const [name, frame] of Object.entries(entities)) applyEntity(name, frame);
+  }
+
   function destroy() {
     disposed = true;
     active.clear();
+    lastFrames.clear();
     for (const instance of mounted.values()) instance?.destroy?.();
     mounted.clear();
   }
 
-  return { setModules, renderPresence, removePresence, destroy };
+  return { setModules, renderPresence, removePresence, applyEntity, applyEntities, destroy };
 }
 
 function visitorSnapshot(presence) {
