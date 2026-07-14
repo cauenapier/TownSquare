@@ -617,6 +617,16 @@ body {
   gap: 12px;
 }
 
+.hosted-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hosted-head-actions .lp-support {
+  white-space: nowrap;
+}
+
 .hosted-quiet-button {
   min-height: 34px;
   border: 0;
@@ -2836,6 +2846,12 @@ body {
   }
 
   .hosted-panel { padding: 20px; }
+  .hosted-head {
+    flex-direction: column;
+  }
+  .hosted-head-actions {
+    align-self: flex-end;
+  }
   .hosted-shell--compact {
     padding: 16px 12px 24px;
   }
