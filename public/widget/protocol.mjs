@@ -174,6 +174,11 @@ function handleWeather(ctx, _socket, message) {
   ctx.applyLiveConfig?.({ weatherConfig: message.weatherConfig });
 }
 
+function handlePlugins(ctx, _socket, message) {
+  ctx.widgetPlugins?.setModules(message.pluginModules);
+  ctx.widgetPlugins?.applyEntities(message.pluginEntities);
+}
+
 function handleBird(ctx, _socket, message) {
   if (message.action === BIRD_ACTION.SPAWN) {
     applyBirdSpawn(ctx, message);
@@ -275,6 +280,7 @@ const MESSAGE_HANDLERS = {
   [MSG.CONNECTIONS]: handleConnections,
   [MSG.MESSAGE_BOARD]: handleMessageBoard,
   [MSG.WEATHER]: handleWeather,
+  [MSG.PLUGINS]: handlePlugins,
   [MSG.BIRD]: handleBird,
   [MSG.JOIN]: handleJoin,
   [MSG.LEAVE]: handleLeave,

@@ -91,6 +91,11 @@ switched them on; the enablement state persists under `site.pluginsEnabled` and
 is surfaced to `isEnabled` as `context.enabled`. Unlabelled plugins keep running
 globally as before.
 
+Changing a toggle updates connected widgets without a refresh. The server sends
+the active widget-module list again, so newly enabled modules mount and disabled
+ones are destroyed. A scene-entity plugin also receives its current snapshot;
+weather uses the same live update path to apply or remove its configuration.
+
 A plugin's own `isEnabled` layers on top of the owner's choice as an
 *entitlement* gate. The toggle is only offered to a site when its `isEnabled`
 passes, and the plugin runs only when both the entitlement holds **and** the
@@ -176,9 +181,54 @@ export function mountWidgetPlugin() {
 `data` is the current `visitor.plugins[pluginName]` value or `null`. The widget
 core continues to own figure creation, movement, presence, and removal.
 
+## Shared scene entities
+
+A plugin can own server-authoritative state for each live scene with a
+`sceneEntity` block. It is created only while the plugin is enabled, is kept
+across scene rebuilds while still enabled, and is discarded when disabled.
+
+```js
+module.exports = {
+  name: "counter",
+  sceneEntity: {
+    create() {
+      return { value: 0 };
+    },
+    snapshot({ state }) {
+      return { value: state.value };
+    },
+    tick({ state, dtMs, emit }) {
+      // Update server-owned state, then emit a JSON-shaped frame when needed.
+      state.value += dtMs;
+      emit({ value: state.value });
+    },
+  },
+};
+```
+
+`create`, `snapshot`, and `tick` are optional functions. `snapshot` defaults to
+the state value when omitted. `tick` receives the plugin context plus `state`,
+`figures` (`{ x }` for joined visitors), `bounds`, `dtMs`, and `emit(frame)`.
+Frames are namespaced by plugin name and delivered to widget modules through
+`applyEntity(frame)`. Emit only when a client needs a new frame; ticks run while
+the scene has connected clients.
+
+Use `onSceneMove` for interactions driven by a visitor's normal movement:
+
+```js
+onSceneMove({ state, x, direction, speed, emit }) {
+  // React on the server; do not add a client-controlled entity message.
+}
+```
+
+It receives the plugin context, the entity `state` when present, the destination
+`x`, movement `direction`, speed, bounds, visitor data, and `emit(frame)`. The
+hook follows the normal enablement and fail-open rules.
+
 ## Existing hooks
 
-Event/decision hooks are `onVisitorJoin`, `onMessage`, and `onSocketMessage`.
+Event/decision hooks are `onVisitorJoin`, `onMessage`, `onSocketMessage`, and
+`onSceneMove`.
 Payload hooks are `extendSiteConfig`, `extendAdminPanel`, `extendMapData`, and
 `extendWidgetConfig`. Hooks run synchronously in registration order. Returning
 `false` from `onMessage` or `onSocketMessage` stops the action. Plugin failures

@@ -1803,6 +1803,7 @@ const ADMIN_ACTIONS = {
     } else {
       rebuildSceneProps(scene, site);
     }
+    broadcastPluginState(site, scene);
     broadcastWeatherConfig(site, scene);
   },
   disableSite(site, scene, body) {
@@ -3120,6 +3121,15 @@ function pluginContext(site, values = {}) {
 function broadcastWeatherConfig(site, scene) {
   const config = plugins.extend("extendWidgetConfig", {}, pluginContext(site));
   broadcast(scene, { type: MSG.WEATHER, weatherConfig: config.weatherConfig });
+}
+
+function broadcastPluginState(site, scene) {
+  const context = pluginContext(site);
+  broadcast(scene, {
+    type: MSG.PLUGINS,
+    pluginModules: plugins.browserModules("widget", context),
+    pluginEntities: plugins.snapshotSceneEntities(scene.plugins, context),
+  });
 }
 
 function getScene(sceneKey, site = null) {
