@@ -9,6 +9,7 @@
 import { createChatScope, setLocalTyping, submitChat } from "./widget/chat.mjs";
 import { initBirds, destroyBirds, syncBirdPerches } from "./widget/birds.mjs";
 import { initClouds, destroyClouds } from "./widget/clouds.mjs";
+import { initWeather, destroyWeather, setWeatherConfig } from "./widget/weather.mjs";
 import { setupConnections, teardownConnections } from "./widget/connections.mjs";
 import { setupMessageBoard, teardownMessageBoard } from "./widget/message-board.mjs";
 import { CHARACTER_COLORS, DEFAULT_CHAT_THROTTLE_MS, MAX_X, MIN_X, randomSpawnX } from "./widget/constants.mjs";
@@ -74,6 +75,8 @@ import {
  * @property {Array<{ side: "left"|"right", label?: string, url: string }>} [connections] Neighbouring towns linked at the stage edges. Each grows a signpost on its side that opens a "walk over" modal.
  * @property {{ enabled?: boolean, x?: number, variant?: string, accent?: string, title?: string, body?: string }} [messageBoard] Owner message board: a single clickable prop that opens a modal with the owner's note. Sanitized client-side; disabled when blank.
  * @property {Array<{ name: string, module: string }>} [pluginModules] Trusted widget feature modules registered by the TownSquare server.
+ * @property {"clear" | "rain" | "storm" | "snow"} [weather] Pin the ambient weather. Omit to follow the shared hourly schedule every visitor sees.
+ * @property {{ mode: "automatic" | "permanent", weather: "clear" | "rain" | "storm" | "snow", distribution: Record<"clear" | "rain" | "snow" | "storm", number> }} [weatherConfig] Hosted weather add-on configuration.
  */
 
 /**
@@ -412,8 +415,10 @@ export function mountTownSquare(root, options = {}) {
   if (!preview) {
     initBirds(ctx);
     initClouds(ctx);
+    if (!serverDrivenScene || options.weather || options.weatherConfig) initWeather(ctx);
     disposers.push(() => destroyBirds(ctx));
     disposers.push(() => destroyClouds(ctx));
+    disposers.push(() => destroyWeather(ctx));
   }
   // Watch (overlay) mode is a passive viewer: it renders the real crowd but
   // never shows or moves a self avatar.
@@ -431,7 +436,10 @@ export function mountTownSquare(root, options = {}) {
 
   // Apply config the server pushes live (in `hello` and on owner edits). Inline
   // values are power-user overrides that stay in the host's control.
-  ctx.applyLiveConfig = (config = {}) => applyConfig(ctx, config, { respectInline: true });
+  ctx.applyLiveConfig = (config = {}) => {
+    applyConfig(ctx, config, { respectInline: true });
+    if (Object.hasOwn(config, "weatherConfig")) setWeatherConfig(ctx, config.weatherConfig);
+  };
 
   if (!localOnly) {
     wireSocket(ctx);

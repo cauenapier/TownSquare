@@ -2,8 +2,9 @@ import { createSvgElement } from "../lib/ui-common.mjs";
 import { buildMapEdges } from "./map-connections.mjs";
 import { activityLevel, cityTier, layoutMapSites } from "./map-layout.mjs";
 import { createCityMarker, renderMapEdge, supporterStarSize } from "./map-render.mjs";
+import { routeMapRoads } from "./map-roads.mjs";
 import { renderSceneryLayer } from "./map-scenery.mjs";
-import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH, validateMapWorld } from "../../lib/map-world.mjs";
+import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH, validateMapWorld } from "../lib/map-world.mjs";
 
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 2.8;
@@ -48,6 +49,7 @@ let sites = [];
 let siteByKey = new Map();
 let positionsBySiteKey = new Map();
 let mapEdges = [];
+let roadRoutes = new Map();
 let selectedSiteKey = "";
 let svg = null;
 let structureSnapshot = "";
@@ -124,6 +126,7 @@ function indexSites(nextSites) {
   siteByKey = new Map(nextSites.map((site) => [site.siteKey, site]));
   positionsBySiteKey = layoutMapSites(nextSites, worldWidth, worldHeight);
   mapEdges = buildMapEdges(nextSites);
+  roadRoutes = routeMapRoads(mapEdges, nextSites, positionsBySiteKey, mapWorld);
 }
 
 function buildMap() {
@@ -150,7 +153,7 @@ function buildMap() {
   statusEl.textContent = `${sites.length} verified TownSquare${sites.length === 1 ? "" : "s"} on the map.`;
 
   for (const edge of mapEdges) {
-    const path = renderMapEdge(edge, positionsBySiteKey, selectedSiteKey);
+    const path = renderMapEdge(edge, positionsBySiteKey, selectedSiteKey, roadRoutes);
     if (path) edgeLayer.appendChild(path);
   }
 

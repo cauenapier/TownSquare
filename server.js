@@ -1428,7 +1428,10 @@ function sendAdminSite(req, res, site, adminToken, setCookie = null) {
 
 function extendAdminPanel(panel, site) {
   const sitePlugins = describeSitePlugins(site);
-  const withPlugins = sitePlugins.length > 0 ? { ...panel, plugins: sitePlugins } : panel;
+  // `plugins` is reserved for plugin-owned admin data supplied by
+  // `extendAdminPanel`. Keep the add-on catalogue separate so activating an
+  // add-on cannot replace the owner's list of free and Pro choices.
+  const withPlugins = sitePlugins.length > 0 ? { ...panel, addons: sitePlugins } : panel;
   const pluginModules = plugins.browserModules("admin", pluginContext(site));
   const corePanel = pluginModules.length > 0 ? { ...withPlugins, pluginModules } : withPlugins;
   const extended = plugins.extend("extendAdminPanel", corePanel, pluginContext(site));
@@ -1800,6 +1803,7 @@ const ADMIN_ACTIONS = {
     } else {
       rebuildSceneProps(scene, site);
     }
+    broadcastWeatherConfig(site, scene);
   },
   disableSite(site, scene, body) {
     site.disabled = Boolean(body.disabled);
@@ -1873,6 +1877,7 @@ function handleAdminAction(req, res) {
       }
       if (changed) {
         touchSite(site);
+        broadcastWeatherConfig(site, scene);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
           broadcastIdentity(scene, { type: MSG.PROFILE, ...serializeIdentity(identity, { owner: true, badge: true }) }, identity);
@@ -1932,6 +1937,7 @@ function serviceAdminSite(site) {
   const connectionClicks = isPlainObject(site.connectionClicks) ? site.connectionClicks : {};
   const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
   const adminAccess = isPlainObject(site.adminAccess) ? site.adminAccess : {};
+  const overlayUsage = isPlainObject(site.overlayUsage) ? site.overlayUsage : {};
 
   return {
     ...publicSite(site),
@@ -1948,6 +1954,8 @@ function serviceAdminSite(site) {
     mapClickLastAt: Number(mapClicks.lastAt || 0),
     adminAccessCount: Number(adminAccess.count || 0),
     adminAccessLastAt: Number(adminAccess.lastAt || 0),
+    overlayUseCount: Number(overlayUsage.count || 0),
+    overlayLastAt: Number(overlayUsage.lastAt || 0),
   };
 }
 
@@ -2024,6 +2032,44 @@ function handleServiceAdminSites(req, res) {
   readJsonBody(req, res, (body) => {
     if (!isServiceAdminAuthorized(req, body, res)) return;
     sendServiceAdminSites(res);
+  });
+}
+
+function handleServiceAdminTraffic(req, res) {
+  readJsonBody(req, res, (body) => {
+    if (!isServiceAdminAuthorized(req, body, res)) return;
+
+    const siteKey = String(body.siteKey || "");
+    if (!siteKey) {
+      const sites = [];
+      for (const site of sitesByKey.values()) {
+        const activity = visitorStats.getActivityByWeekdayAndHour(site.siteKey);
+        if (!activity.weekdays.some((weekday) => weekday.hours.some((count) => count > 0))) continue;
+        sites.push({
+          siteKey: site.siteKey,
+          name: site.name,
+          origin: site.origin,
+          activity,
+        });
+      }
+      sendJson(res, 200, { sites });
+      return;
+    }
+
+    const site = sitesByKey.get(siteKey);
+    if (!site) {
+      sendJson(res, 404, { error: "Site not found." });
+      return;
+    }
+
+    sendJson(res, 200, {
+      site: {
+        siteKey: site.siteKey,
+        name: site.name,
+        origin: site.origin,
+      },
+      activity: visitorStats.getActivityByWeekdayAndHour(site.siteKey),
+    });
   });
 }
 
@@ -2249,6 +2295,8 @@ function refreshIdentityWidgetVisible(identity) {
 
 function touchIdentityActivity(identity, now = Date.now()) {
   identity.lastActivityAt = now;
+  const siteKey = identity.scene?.site?.siteKey;
+  if (siteKey) visitorStats.recordActivity(siteKey, identity.browserId, now);
 }
 
 function syncIdentityAwayState(identity, now = Date.now()) {
@@ -2636,6 +2684,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       lastMessageAt: null,
       connectionClicks: {},
       mapClicks: { count: 0, lastAt: 0 },
+      overlayUsage: { count: 0, lastAt: 0 },
       adminAccess: { count: 0, lastAt: 0 },
       createdAt: now,
       updatedAt: now,
@@ -2790,6 +2839,16 @@ function flushSites() {
 function touchSite(site) {
   site.updatedAt = Date.now();
   scheduleSitesSave();
+}
+
+function recordOverlayUse(site) {
+  if (!site) return;
+  const overlayUsage = isPlainObject(site.overlayUsage) ? site.overlayUsage : {};
+  site.overlayUsage = {
+    count: Number(overlayUsage.count || 0) + 1,
+    lastAt: Date.now(),
+  };
+  touchSite(site);
 }
 
 // Notifications are stored separately from sites to avoid losing on restart
@@ -3043,7 +3102,7 @@ function isPluginEnabledForSite(site, pluginName) {
 }
 
 function describeSitePlugins(site) {
-  return plugins.toggleable(pluginContext(site)).map((plugin) => ({
+  return plugins.toggleable(pluginContext(site), { includeUnavailable: true }).map((plugin) => ({
     ...plugin,
     enabled: isPluginEnabledForSite(site, plugin.name),
   }));
@@ -3056,6 +3115,11 @@ function pluginContext(site, values = {}) {
     data: getPluginData(site, pluginName),
     enabled: isPluginEnabledForSite(site, pluginName),
   });
+}
+
+function broadcastWeatherConfig(site, scene) {
+  const config = plugins.extend("extendWidgetConfig", {}, pluginContext(site));
+  broadcast(scene, { type: MSG.WEATHER, weatherConfig: config.weatherConfig });
 }
 
 function getScene(sceneKey, site = null) {
@@ -3270,6 +3334,11 @@ function handleHttpRequest(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/service-admin/traffic") {
+    handleServiceAdminTraffic(req, res);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/service-admin/map") {
     handleServiceAdminMap(req, res);
     return;
@@ -3404,6 +3473,7 @@ function handleInit(client, message) {
     if (client.initialized) return;
     if (!allowSpectatorInit(client)) return;
     client.initialized = true;
+    recordOverlayUse(client.site);
     sendSpectatorHello(client);
     return;
   }
@@ -3462,7 +3532,7 @@ function handleInit(client, message) {
   const self = serializeIdentity(identity, { reading: true, owner: true, messages: true, badge: true });
   const { id, ...selfFields } = self;
 
-  send(client.ws, {
+  const hello = {
     type: MSG.HELLO,
     id,
     browserSecret: identity.browserSecret,
@@ -3475,7 +3545,11 @@ function handleInit(client, message) {
     // Hosted sites carry scene, connections, and the message board over the socket
     // so admin edits apply live without re-pasting the embed snippet.
     ...(site ? { scene: getSceneConfig(site), connections: getConnections(site), messageBoard: getMessageBoard(site) } : {}),
-  });
+  };
+  const extendedHello = site
+    ? plugins.extend("extendWidgetConfig", hello, pluginContext(site))
+    : hello;
+  send(client.ws, isPlainObject(extendedHello) ? extendedHello : hello);
 
   if (identity.joined) {
     if (
@@ -3859,6 +3933,13 @@ const heartbeatTimer = setInterval(() => {
       if (!client.ws.isAlive) {
         client.ws.terminate();
         continue;
+      }
+
+      // Count presence, not socket noise: one stable visitor per UTC hour while
+      // at least one of their tabs is actively reading. recordActivity dedupes
+      // multiple tabs and the 30-second heartbeat cadence in constant time.
+      if (client.site && client.joined && client.identity?.readingActive) {
+        visitorStats.recordActivity(client.site.siteKey, client.identity.browserId, now);
       }
 
       client.ws.isAlive = false;

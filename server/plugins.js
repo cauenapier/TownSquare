@@ -16,6 +16,7 @@ const SCENE_ENTITY_FNS = ["create", "tick", "snapshot"];
 const MODULE_PATH_RE = /^\/[A-Za-z0-9_./-]+\.mjs$/;
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ACTION_RE = /^[A-Za-z][A-Za-z0-9]*$/;
+const ADDON_TIERS = new Set(["free", "pro"]);
 
 // Bump ONLY on breaking changes to the plugin contract: hook names/signatures,
 // context shape, registration rules, or module-path requirements. Private
@@ -57,6 +58,9 @@ class PluginManager {
       if (plugin[key] !== undefined && (typeof plugin[key] !== "string" || !plugin[key].trim())) {
         throw new TypeError(`${key} must be a non-empty string`);
       }
+    }
+    if (plugin.tier !== undefined && !ADDON_TIERS.has(plugin.tier)) {
+      throw new TypeError("tier must be free or pro");
     }
     if (plugin.adminActions !== undefined) {
       if (!plugin.adminActions || typeof plugin.adminActions !== "object" || Array.isArray(plugin.adminActions)) {
@@ -288,18 +292,26 @@ class PluginManager {
     return typeof context === "function" ? context(plugin.name) : context;
   }
 
-  // Labelled, site-toggleable add-ons. Pass a context factory to keep only the
-  // ones a site is actually entitled to (those whose own isEnabled passes), so
-  // owners never see a switch that cannot do anything on their tier.
-  toggleable(contextFactory = null) {
+  // Labelled, site-toggleable add-ons. Pass `includeUnavailable` when a caller
+  // needs the whole catalogue for discovery; those entries carry `available`
+  // so the UI can disable an unavailable switch.
+  toggleable(contextFactory = null, { includeUnavailable = false } = {}) {
     return this.plugins
       .filter((plugin) => plugin.label)
-      .filter((plugin) => !contextFactory || this.isAvailable(plugin, this.contextFor(plugin, contextFactory)))
-      .map((plugin) => ({
-        name: plugin.name,
-        label: plugin.label,
-        description: plugin.description || "",
-      }));
+      .map((plugin) => {
+        const available = !contextFactory || this.isAvailable(plugin, this.contextFor(plugin, contextFactory));
+        return {
+          name: plugin.name,
+          label: plugin.label,
+          description: plugin.description || "",
+          tier: plugin.tier || "free",
+          available,
+        };
+      })
+      .filter((plugin) => includeUnavailable || plugin.available)
+      .map(({ available: _available, ...plugin }) => (
+        includeUnavailable ? { ...plugin, available: _available } : plugin
+      ));
   }
 
   isEnabled(plugin, context) {
@@ -333,6 +345,7 @@ class PluginManager {
 const plugins = new PluginManager();
 
 module.exports = {
+  ADDON_TIERS,
   HOOKS,
   PLUGIN_API_VERSION,
   PluginManager,

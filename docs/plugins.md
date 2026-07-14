@@ -102,6 +102,15 @@ no toggle code lives in the Plus repo. A Plus plugin that omits `label` (like
 `owner-figure` and `scene-cat`) instead runs automatically on every site its
 `isEnabled` entitles.
 
+### Core weather add-on
+
+Weather is a built-in labelled add-on and is off for hosted sites until the
+owner enables it in **Admin → Add-ons**. Its panel can pin clear, rain, snow,
+or storm, or set whole-number probabilities for the shared UTC-hour schedule.
+The server rejects distributions that do not total 100, and changes are sent to
+connected widgets immediately; the standard hosted embed snippet needs no
+custom CSS or replacement.
+
 ## Plugin storage and admin actions
 
 Each site persists plugin data under `site.plugins[pluginName]`. Admin action

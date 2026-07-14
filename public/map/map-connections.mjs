@@ -1,4 +1,4 @@
-import { normalizeAbsoluteOrigin } from "../../lib/url.mjs";
+import { normalizeAbsoluteOrigin } from "../lib/url.mjs";
 
 export function buildMapEdges(sites) {
   const siteKeyByOrigin = new Map();
@@ -30,10 +30,31 @@ export function buildMapEdges(sites) {
       });
     }
   }
-  return edges;
+  const degreeBySiteKey = new Map(sites.map((site) => [site.siteKey, 0]));
+  for (const edge of edges) {
+    degreeBySiteKey.set(edge.fromKey, degreeBySiteKey.get(edge.fromKey) + 1);
+    degreeBySiteKey.set(edge.toKey, degreeBySiteKey.get(edge.toKey) + 1);
+  }
+  for (const edge of edges) {
+    edge.traffic = Math.min(degreeBySiteKey.get(edge.fromKey), degreeBySiteKey.get(edge.toKey));
+    edge.kind = !edge.bidirectional ? "trail" : edge.traffic >= 5 ? "major" : edge.traffic >= 3 ? "local" : "minor";
+  }
+  return edges.sort((left, right) => {
+    const trafficDelta = right.traffic - left.traffic;
+    return trafficDelta || `${left.fromKey}|${left.toKey}`.localeCompare(`${right.fromKey}|${right.toKey}`);
+  });
 }
 
-export function mapEdgePath(from, to, inset = 28) {
+function stableBend(seed) {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) / 0xffffffff) * 2 - 1;
+}
+
+export function mapEdgePath(from, to, inset = 28, seed = "") {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const length = Math.hypot(dx, dy) || 1;
@@ -42,7 +63,7 @@ export function mapEdgePath(from, to, inset = 28) {
   const pathDx = end.x - start.x;
   const pathDy = end.y - start.y;
   const pathLength = Math.hypot(pathDx, pathDy) || 1;
-  const bend = Math.min(140, pathLength * 0.22);
+  const bend = Math.min(70, pathLength * 0.15) * stableBend(seed);
   const controlX = (start.x + end.x) / 2 - (pathDy / pathLength) * bend;
   const controlY = (start.y + end.y) / 2 + (pathDx / pathLength) * bend;
   return `M ${start.x} ${start.y} Q ${controlX} ${controlY} ${end.x} ${end.y}`;

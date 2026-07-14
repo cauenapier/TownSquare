@@ -7,7 +7,8 @@
  * the idle drift animations don't run while the widget is collapsed.
  */
 
-const CLOUD_SVG = `
+// Also reused by weather.mjs for its rain/storm cloud banks.
+export const CLOUD_SVG = `
   <svg viewBox="0 0 64 28" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
     <path d="M14 24
       C7 24 3 20 3 15

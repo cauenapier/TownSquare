@@ -3,6 +3,7 @@
 const { registerPlugin } = require("../server/plugins");
 const { createTelegramNotificationsPlugin } = require("./telegram-notifications");
 const { createSoccerBallPlugin } = require("./soccer-ball");
+const { createWeatherPlugin } = require("./weather");
 
 function readLimit(name, fallback, env = process.env) {
   const value = Number(env[name]);
@@ -21,6 +22,7 @@ function registerPublicPlugins(env = process.env, logger = console) {
       maxPerMinute: readLimit("TELEGRAM_MAX_NOTIFICATIONS_PER_MIN", 20, env),
     }),
     () => createSoccerBallPlugin(),
+    () => createWeatherPlugin(),
   ];
 
   for (const factory of factories) {

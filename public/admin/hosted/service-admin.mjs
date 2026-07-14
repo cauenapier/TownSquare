@@ -2,7 +2,12 @@ import { bindCopy, createSvgElement } from "../../lib/ui-common.mjs";
 import { buildMapEdges } from "../../map/map-connections.mjs";
 import { layoutMapSites } from "../../map/map-layout.mjs";
 import { createCityMarker, renderMapEdge } from "../../map/map-render.mjs";
+import { routeMapRoads } from "../../map/map-roads.mjs";
 import { renderSceneryLayer } from "../../map/map-scenery.mjs";
+import {
+  mergeOverlappingWaterAreas,
+  waterAreaTouchesPoint,
+} from "../../map/map-water.mjs";
 import {
   cloneMapWorld,
   MAP_PROP_TYPES,
@@ -18,6 +23,10 @@ import {
   formatTime,
   postJson,
 } from "./hosted-common.mjs";
+import {
+  buildStackedVisitorActivityView,
+  buildVisitorActivityView,
+} from "./visitor-activity-view.mjs?v=traffic-activity-v3";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -29,7 +38,9 @@ const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
 const statusEl = document.getElementById("admin-status");
 const siteFilterEl = document.getElementById("site-filter");
+const siteVerifiedFilterEl = document.getElementById("site-verified-filter");
 const siteFilterMetaEl = document.getElementById("site-filter-meta");
+const allSiteTrafficButton = document.getElementById("all-site-traffic");
 const siteColumnPickerPanelEl = document.getElementById("site-column-picker-panel");
 const siteTableWrapEl = document.getElementById("site-table-wrap");
 const siteTableHeadEl = document.getElementById("site-table-head");
@@ -68,6 +79,12 @@ const notificationMessageEl = document.getElementById("notification-message");
 const sendNotificationBtn = document.getElementById("send-notification-btn");
 const sendNotificationStatus = document.getElementById("send-notification-status");
 const recentNotificationsListEl = document.getElementById("recent-notifications-list");
+const trafficDialogEl = document.getElementById("service-traffic-dialog");
+const trafficDialogTitleEl = document.getElementById("service-traffic-title");
+const trafficDialogMetaEl = document.getElementById("service-traffic-meta");
+const trafficDialogChartEl = document.getElementById("service-traffic-chart");
+const trafficDialogCloseButton = document.getElementById("service-traffic-close");
+const trafficTooltipEl = document.getElementById("service-traffic-tooltip");
 
 const STORAGE_KEY = "townsquare-service-admin-password";
 const TABLE_PREFS_KEY = "townsquare-service-admin-table";
@@ -85,6 +102,7 @@ const TABLE_COLUMNS = [
   { key: "chatDisabled", label: "Chat", render: (site) => (site.chatDisabled ? "Disabled" : "Enabled") },
   { key: "supporter", label: "Supporter", render: (site) => (site.supporter ? "Yes" : "No") },
   { key: "plus", label: "Plus", render: (site) => (site.plus ? "Yes" : "No") },
+  { key: "overlayLastAt", label: "Overlay used", render: (site) => site.overlayUseCount ? `${site.overlayUseCount} · ${formatTime(site.overlayLastAt)}` : "Never" },
   { key: "verifiedAt", label: "Verified", render: (site) => formatTime(site.verifiedAt) },
   { key: "lastSeenAt", label: "Last seen", render: (site) => formatTime(site.lastSeenAt) },
   { key: "lastSeenUrl", label: "Last URL", link: true, render: (site) => site.lastSeenUrl || "" },
@@ -116,16 +134,23 @@ function loadTablePrefs() {
 function saveTablePrefs() {
   localStorage.setItem(TABLE_PREFS_KEY, JSON.stringify({
     visibleColumns: [...visibleColumnKeys],
+    verifiedOnly,
   }));
 }
 
 const tablePrefs = loadTablePrefs();
 const defaultVisibleColumnKeys = TABLE_COLUMNS.map((column) => column.key);
+const storedVisibleColumnKeys = Array.isArray(tablePrefs?.visibleColumns)
+  ? tablePrefs.visibleColumns.filter((key) => TABLE_COLUMNS.some((column) => column.key === key))
+  : null;
 let visibleColumnKeys = new Set(
-  Array.isArray(tablePrefs?.visibleColumns) && tablePrefs.visibleColumns.length > 0
-    ? tablePrefs.visibleColumns.filter((key) => TABLE_COLUMNS.some((column) => column.key === key))
-    : defaultVisibleColumnKeys,
+  storedVisibleColumnKeys?.length > 0 ? storedVisibleColumnKeys : defaultVisibleColumnKeys,
 );
+if (storedVisibleColumnKeys?.length > 0 && !visibleColumnKeys.has("overlayLastAt")) {
+  visibleColumnKeys.add("overlayLastAt");
+}
+let verifiedOnly = typeof tablePrefs?.verifiedOnly === "boolean" ? tablePrefs.verifiedOnly : true;
+siteVerifiedFilterEl.checked = verifiedOnly;
 
 const credentialStore = createCredentialStore(STORAGE_KEY);
 
@@ -135,8 +160,8 @@ let rememberMe = stored?.remembered ?? false;
 
 let allSites = [];
 let filterQuery = "";
-let sortKey = "name";
-let sortAsc = true;
+let sortKey = "verifiedAt";
+let sortAsc = false;
 let columnPickerReady = false;
 let tableHeadSignature = "";
 let savedMapWorld = null;
@@ -144,6 +169,7 @@ let draftMapWorld = null;
 let mapEditorSvg = null;
 let mapEditorDirty = false;
 let mapEditorRenderFrame = null;
+let mapEditorRoadRoutes = new Map();
 let mapTownSnapshot = "";
 let mapTool = "tree";
 let mapUndoStack = [];
@@ -154,6 +180,7 @@ let mapEditorSaving = false;
 let mapEditorMessage = "";
 let mapBrushSize = Number(mapBrushSizeEl.value);
 let mapTreeDensity = Number(mapDensityEl.value);
+let trafficRequestId = 0;
 
 const setLoginStatus = createStatusSetter(loginStatusEl, { toggleHidden: true });
 const setStatus = createStatusSetter(statusEl);
@@ -218,8 +245,10 @@ function renderMapEditor() {
   const visibleSites = allSites.filter((site) => site.verifiedAt && !site.disabled);
   const positions = layoutMapSites(visibleSites, draftMapWorld.width, draftMapWorld.height);
   const edges = createSvgElement("g", { class: "map-edges", "aria-hidden": "true" });
-  for (const edge of buildMapEdges(visibleSites)) {
-    const path = renderMapEdge(edge, positions);
+  const mapEdges = buildMapEdges(visibleSites);
+  if (!mapGesture) mapEditorRoadRoutes = routeMapRoads(mapEdges, visibleSites, positions, draftMapWorld);
+  for (const edge of mapEdges) {
+    const path = renderMapEdge(edge, positions, "", mapEditorRoadRoutes);
     if (path) edges.appendChild(path);
   }
   svg.appendChild(edges);
@@ -261,36 +290,30 @@ function mapPoint(event) {
   };
 }
 
-function distanceToSegment(point, start, end) {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  if (dx === 0 && dy === 0) return Math.hypot(point.x - start.x, point.y - start.y);
-  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx ** 2 + dy ** 2)));
-  return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
-}
-
-function strokeTouchesPoint(stroke, point, radius) {
-  const hitRadius = radius + stroke.width / 2;
-  if (stroke.points.length === 1) {
-    return Math.hypot(point.x - stroke.points[0].x, point.y - stroke.points[0].y) <= hitRadius;
-  }
-  for (let index = 1; index < stroke.points.length; index += 1) {
-    if (distanceToSegment(point, stroke.points[index - 1], stroke.points[index]) <= hitRadius) return true;
-  }
-  return false;
-}
-
 function eraseMapAt(point) {
   const radius = mapBrushSize / 2;
   const propCount = draftMapWorld.props.length;
-  const waterCount = draftMapWorld.water.length;
   draftMapWorld.props = draftMapWorld.props.filter(
     (prop) => Math.hypot(prop.x - point.x, prop.y - point.y) > radius,
   );
-  draftMapWorld.water = draftMapWorld.water.filter(
-    (stroke) => !strokeTouchesPoint(stroke, point, radius),
-  );
-  return propCount !== draftMapWorld.props.length || waterCount !== draftMapWorld.water.length;
+  let erasedWater = false;
+  for (const area of draftMapWorld.water) {
+    if (!waterAreaTouchesPoint(area, point, radius)) continue;
+    if (area.cutouts.some((cutout) => Math.hypot(cutout.x - point.x, cutout.y - point.y) + radius <= cutout.radius)) continue;
+    if (mapGesture.waterPointCount >= MAX_WATER_POINTS) {
+      mapEditorMessage = `The map is limited to ${MAX_WATER_POINTS} water points.`;
+      break;
+    }
+    area.cutouts.push({
+      x: Math.round(point.x * 100) / 100,
+      y: Math.round(point.y * 100) / 100,
+      radius,
+      order: nextWaterOrder(),
+    });
+    mapGesture.waterPointCount += 1;
+    erasedWater = true;
+  }
+  return propCount !== draftMapWorld.props.length || erasedWater;
 }
 
 const TREE_SPACING = 24;
@@ -373,7 +396,22 @@ function paintMountain(point) {
 }
 
 function countWaterPoints() {
-  return draftMapWorld.water.reduce((count, stroke) => count + stroke.points.length, 0);
+  return draftMapWorld.water.reduce((count, area) => (
+    count + area.cutouts.length + area.paths.reduce((pathCount, path) => pathCount + path.points.length, 0)
+  ), 0);
+}
+
+function countWaterPaths() {
+  return draftMapWorld.water.reduce((count, area) => count + area.paths.length, 0);
+}
+
+function nextWaterOrder() {
+  let order = 0;
+  for (const area of draftMapWorld.water) {
+    for (const path of area.paths) order = Math.max(order, path.order || 0);
+    for (const cutout of area.cutouts) order = Math.max(order, cutout.order || 0);
+  }
+  return order + 1;
 }
 
 function paintWater(point) {
@@ -382,19 +420,19 @@ function paintWater(point) {
     updateMapEditorControls();
     return false;
   }
-  if (!mapGesture.stroke) {
-    if (draftMapWorld.water.length >= MAX_WATER_STROKES) {
-      mapEditorMessage = `The map is limited to ${MAX_WATER_STROKES} water strokes.`;
+  if (!mapGesture.waterPath) {
+    if (countWaterPaths() >= MAX_WATER_STROKES) {
+      mapEditorMessage = `The map is limited to ${MAX_WATER_STROKES} water paths.`;
       updateMapEditorControls();
       return false;
     }
-    mapGesture.stroke = { type: "water", width: mapBrushSize, points: [] };
-    draftMapWorld.water.push(mapGesture.stroke);
+    mapGesture.waterPath = { width: mapBrushSize, points: [], order: nextWaterOrder() };
+    draftMapWorld.water.push({ type: "water", paths: [mapGesture.waterPath], cutouts: [] });
   }
-  const lastPoint = mapGesture.stroke.points[mapGesture.stroke.points.length - 1];
+  const lastPoint = mapGesture.waterPath.points.at(-1);
   const spacing = mapBrushSize <= 40 ? 14 : Math.max(10, mapBrushSize * 0.16);
   if (lastPoint && Math.hypot(lastPoint.x - point.x, lastPoint.y - point.y) < spacing) return false;
-  mapGesture.stroke.points.push({ x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 });
+  mapGesture.waterPath.points.push({ x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 });
   mapGesture.waterPointCount += 1;
   return true;
 }
@@ -421,18 +459,23 @@ function applyMapGesture(event) {
 
 function finishMapGesture(event) {
   if (!mapGesture || mapGesture.pointerId !== event.pointerId) return;
-  if (mapGesture.changed) {
+  const changed = mapGesture.changed;
+  if (changed) {
     mapUndoStack.push({ world: mapGesture.before, dirty: mapGesture.beforeDirty });
     trimMapHistory(mapUndoStack);
     mapRedoStack = [];
   }
+  if (changed && mapGesture.waterPath) draftMapWorld.water = mergeOverlappingWaterAreas(draftMapWorld.water);
   mapGesture = null;
   if (mapEditorRenderFrame !== null) flushMapEditorRender();
+  else if (changed) renderMapEditor();
   else updateMapEditorControls();
 }
 
 function mapWorldItemCount(world) {
-  return world.props.length + world.water.reduce((count, stroke) => count + stroke.points.length, 0);
+  return world.props.length + world.water.reduce((count, area) => (
+    count + area.cutouts.length + area.paths.reduce((pathCount, path) => pathCount + path.points.length, 0)
+  ), 0);
 }
 
 function trimMapHistory(history) {
@@ -480,7 +523,8 @@ async function loadMapEditor() {
   }
   savedMapWorld = cloneMapWorld(validated.world);
   draftMapWorld = cloneMapWorld(validated.world);
-  mapEditorDirty = false;
+  draftMapWorld.water = mergeOverlappingWaterAreas(draftMapWorld.water);
+  mapEditorDirty = draftMapWorld.water.length !== savedMapWorld.water.length;
   mapEditorMessage = "";
   renderMapEditor();
 }
@@ -524,6 +568,7 @@ function siteSortValue(site, key) {
     case "lastSeenAt":
     case "lastMessageAt":
     case "adminAccessLastAt":
+    case "overlayLastAt":
       return Number(site[key] || 0);
     case "messageCount":
     case "activeVisitors":
@@ -573,6 +618,7 @@ function siteMatchesFilter(site, query) {
 function visibleSites() {
   const query = filterQuery.trim().toLowerCase();
   return allSites
+    .filter((site) => !verifiedOnly || Boolean(site.verifiedAt))
     .filter((site) => siteMatchesFilter(site, query))
     .sort((left, right) => {
       const order = compareSites(left, right, sortKey);
@@ -763,6 +809,185 @@ function createActionMenu(site) {
   return menu;
 }
 
+function formatVisitorAverage(value) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function hourLabel(hour) {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+function trafficToneClass(tone) {
+  return `service-traffic-tone--${tone}`;
+}
+
+function positionTrafficTooltip(x, y) {
+  const offset = 14;
+  const rect = trafficTooltipEl.getBoundingClientRect();
+  let left = x + offset;
+  let top = y + offset;
+  if (left + rect.width > window.innerWidth) left = x - rect.width - offset;
+  if (top + rect.height > window.innerHeight) top = y - rect.height - offset;
+  trafficTooltipEl.style.left = `${Math.max(0, left)}px`;
+  trafficTooltipEl.style.top = `${Math.max(0, top)}px`;
+}
+
+function showTrafficTooltip(text, x, y) {
+  trafficTooltipEl.textContent = text;
+  trafficTooltipEl.hidden = false;
+  positionTrafficTooltip(x, y);
+}
+
+function hideTrafficTooltip() {
+  trafficTooltipEl.hidden = true;
+}
+
+function attachTrafficTooltip(el, text) {
+  el.addEventListener("mouseenter", (event) => showTrafficTooltip(text, event.clientX, event.clientY));
+  el.addEventListener("mousemove", (event) => positionTrafficTooltip(event.clientX, event.clientY));
+  el.addEventListener("mouseleave", hideTrafficTooltip);
+}
+
+function renderVisitorTraffic(view, { aggregate = false } = {}) {
+  trafficDialogChartEl.replaceChildren();
+  trafficDialogMetaEl.textContent = aggregate
+    ? `Up to the last ${view.windowDays} days · ${view.timeZone}. Each stack sums the sites' own weekday averages.`
+    : `Up to the last ${view.windowDays} days · ${view.timeZone}. Bar height is relative to this site's busiest average hour.`;
+
+  if (view.peakAverage === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note service-traffic-dialog__empty";
+    empty.textContent = "No hourly visitor activity has been recorded yet.";
+    trafficDialogChartEl.append(empty);
+    return;
+  }
+
+  const peak = view.rows
+    .flatMap((row) => row.hours.map((slot) => ({ ...slot, day: row.name })))
+    .find((slot) => slot.average === view.peakAverage);
+  const summary = document.createElement("p");
+  summary.className = "service-traffic-dialog__summary";
+  const scope = aggregate ? ` across ${view.siteCount} site${view.siteCount === 1 ? "" : "s"} with recorded traffic` : "";
+  summary.textContent = `Busiest: ${peak.day} at ${hourLabel(peak.hour)} ${view.timeZone} · ${formatVisitorAverage(peak.average)} average visitor${peak.average === 1 ? "" : "s"}${scope}.`;
+
+  const legend = document.createElement("ul");
+  legend.className = "service-traffic-legend";
+  for (const contributor of view.legend || []) {
+    const item = document.createElement("li");
+    const swatch = document.createElement("span");
+    swatch.className = `service-traffic-legend__swatch ${trafficToneClass(contributor.tone)}`;
+    swatch.setAttribute("aria-hidden", "true");
+    item.append(swatch, contributor.label);
+    legend.append(item);
+  }
+
+  const table = document.createElement("table");
+  table.className = "service-traffic-chart";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const dayHeading = document.createElement("th");
+  dayHeading.scope = "col";
+  dayHeading.textContent = "Day";
+  headRow.append(dayHeading);
+  for (let hour = 0; hour < 24; hour += 1) {
+    const heading = document.createElement("th");
+    heading.scope = "col";
+    heading.textContent = String(hour).padStart(2, "0");
+    heading.title = hourLabel(hour);
+    headRow.append(heading);
+  }
+  head.append(headRow);
+
+  const body = document.createElement("tbody");
+  for (const row of view.rows) {
+    const tableRow = document.createElement("tr");
+    const day = document.createElement("th");
+    day.scope = "row";
+    day.textContent = row.name.slice(0, 3);
+    day.title = aggregate
+      ? row.name
+      : `${row.name} · ${row.sampleDays} sampled day${row.sampleDays === 1 ? "" : "s"}`;
+    tableRow.append(day);
+
+    for (const slot of row.hours) {
+      const cell = document.createElement("td");
+      const average = formatVisitorAverage(slot.average);
+      const percentage = Math.round(slot.percentage);
+      const breakdown = (slot.segments || [])
+        .filter((segment) => segment.average > 0)
+        .map((segment) => `${segment.label}: ${formatVisitorAverage(segment.average)}`)
+        .join("; ");
+      const tooltipText = `${row.name} ${hourLabel(slot.hour)} ${view.timeZone}: ${average} average visitor${slot.average === 1 ? "" : "s"} (${percentage}% of peak)${breakdown ? `. ${breakdown}` : ""}`;
+      cell.setAttribute("aria-label", tooltipText);
+      attachTrafficTooltip(cell, tooltipText);
+
+      const track = document.createElement("span");
+      track.className = `service-traffic-chart__track${aggregate ? " service-traffic-chart__track--stacked" : ""}`;
+      track.setAttribute("aria-hidden", "true");
+      if (aggregate) {
+        for (const segment of slot.segments) {
+          if (segment.average <= 0) continue;
+          const bar = document.createElement("span");
+          bar.className = `service-traffic-chart__bar ${trafficToneClass(segment.tone)}`;
+          bar.style.height = `${segment.percentage}%`;
+          track.append(bar);
+        }
+      } else if (slot.average > 0) {
+        const bar = document.createElement("span");
+        bar.className = "service-traffic-chart__bar";
+        bar.style.height = `${slot.percentage}%`;
+        track.append(bar);
+      }
+      cell.append(track);
+      tableRow.append(cell);
+    }
+    body.append(tableRow);
+  }
+  table.append(head, body);
+  trafficDialogChartEl.append(summary, ...(legend.childElementCount > 0 ? [legend] : []), table);
+}
+
+async function openVisitorTraffic(title, payload, render) {
+  const requestId = ++trafficRequestId;
+  closeRowMenus();
+  trafficDialogTitleEl.textContent = title;
+  trafficDialogMetaEl.textContent = "Loading hourly activity...";
+  trafficDialogChartEl.replaceChildren();
+  hideTrafficTooltip();
+  if (!trafficDialogEl.open) trafficDialogEl.showModal();
+
+  const result = await api("/api/service-admin/traffic", payload);
+  if (requestId !== trafficRequestId) return;
+  if (result.status === 403) {
+    trafficDialogEl.close();
+    credentialStore.clear();
+    password = "";
+    showLogin(result.body.error || "Could not open service admin.", true);
+    return;
+  }
+  if (!result.ok) {
+    trafficDialogMetaEl.textContent = result.body.error || "Could not load visitor traffic.";
+    return;
+  }
+  render(result.body);
+}
+
+function showVisitorTraffic(site) {
+  return openVisitorTraffic(
+    `${site.name || site.origin || site.siteKey} traffic`,
+    { siteKey: site.siteKey },
+    (body) => renderVisitorTraffic(buildVisitorActivityView(body.activity)),
+  );
+}
+
+function showAllVisitorTraffic() {
+  return openVisitorTraffic(
+    "All websites traffic",
+    {},
+    (body) => renderVisitorTraffic(buildStackedVisitorActivityView(body.sites), { aggregate: true }),
+  );
+}
+
 function renderCell(site, column) {
   const cell = document.createElement("td");
   const value = column.render ? column.render(site) : String(site[column.key] ?? "");
@@ -809,7 +1034,7 @@ function renderCell(site, column) {
 
 function renderSitesTableBody() {
   const sites = visibleSites();
-  const filtered = Boolean(filterQuery.trim());
+  const filtered = Boolean(filterQuery.trim()) || verifiedOnly;
 
   siteEmptyEl.hidden = allSites.length > 0;
   siteNoMatchesEl.hidden = allSites.length === 0 || sites.length > 0;
@@ -834,7 +1059,16 @@ function renderSitesTableBody() {
 
     const actionsCell = document.createElement("td");
     actionsCell.className = "service-table-actions-cell";
-    actionsCell.append(createActionMenu(site));
+    const actions = document.createElement("div");
+    actions.className = "service-table-actions";
+    const traffic = document.createElement("button");
+    traffic.type = "button";
+    traffic.className = "service-row-action-button";
+    traffic.textContent = "Traffic";
+    traffic.setAttribute("aria-label", `View hourly traffic for ${site.name || site.siteKey}`);
+    traffic.addEventListener("click", () => void showVisitorTraffic(site));
+    actions.append(createActionMenu(site), traffic);
+    actionsCell.append(actions);
     row.append(actionsCell);
 
     siteTableBodyEl.append(row);
@@ -1247,6 +1481,7 @@ function renderStatistics(sites, platform = null) {
 
 function renderSites(sites, platform = null) {
   allSites = sites;
+  allSiteTrafficButton.disabled = sites.length === 0;
   renderSitesTable();
   renderStatistics(sites, platform);
   renderTrafficFlows(sites);
@@ -1351,6 +1586,14 @@ siteFilterEl.addEventListener("input", () => {
   renderSitesTableBody();
 });
 
+siteVerifiedFilterEl.addEventListener("change", () => {
+  verifiedOnly = siteVerifiedFilterEl.checked;
+  saveTablePrefs();
+  renderSitesTableBody();
+});
+
+allSiteTrafficButton.addEventListener("click", () => void showAllVisitorTraffic());
+
 for (const button of mapToolButtons) {
   button.addEventListener("click", () => {
     mapTool = button.dataset.mapTool;
@@ -1379,7 +1622,7 @@ mapEditorCanvasEl.addEventListener("pointerdown", (event) => {
     beforeDirty: mapEditorDirty,
     changed: false,
     lastPoint: null,
-    stroke: null,
+    waterPath: null,
     treeGrid: null,
     waterPointCount: countWaterPoints(),
   };
@@ -1452,8 +1695,15 @@ signOutButton.addEventListener("click", () => {
   if (mapEditorRenderFrame !== null) cancelAnimationFrame(mapEditorRenderFrame);
   mapEditorRenderFrame = null;
   mapEditorCanvasEl.hidden = true;
+  if (trafficDialogEl.open) trafficDialogEl.close();
   showLogin("Signed out. The service admin password was forgotten on this device.");
 });
+
+trafficDialogCloseButton.addEventListener("click", () => trafficDialogEl.close());
+trafficDialogEl.addEventListener("click", (event) => {
+  if (event.target === trafficDialogEl) trafficDialogEl.close();
+});
+trafficDialogEl.addEventListener("close", hideTrafficTooltip);
 
 bindCopy(copyTokenButton, { text: () => newAdminTokenEl.value, source: newAdminTokenEl });
 
