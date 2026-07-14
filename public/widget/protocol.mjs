@@ -150,6 +150,7 @@ function handleHello(ctx, _socket, message) {
   if (Object.hasOwn(message, "weatherConfig")) liveConfig.weatherConfig = message.weatherConfig;
   ctx.applyLiveConfig?.(liveConfig);
   syncBirdsFromHello(ctx, message.birds);
+  ctx.widgetPlugins?.applyEntities(message.pluginEntities);
   updateStatus(ctx);
 }
 
@@ -171,6 +172,11 @@ function handleMessageBoard(ctx, _socket, message) {
 
 function handleWeather(ctx, _socket, message) {
   ctx.applyLiveConfig?.({ weatherConfig: message.weatherConfig });
+}
+
+function handlePlugins(ctx, _socket, message) {
+  ctx.widgetPlugins?.setModules(message.pluginModules);
+  ctx.widgetPlugins?.applyEntities(message.pluginEntities);
 }
 
 function handleBird(ctx, _socket, message) {
@@ -262,6 +268,10 @@ function handleReading(ctx, _socket, message) {
   }
 }
 
+function handlePlugin(ctx, _socket, message) {
+  ctx.widgetPlugins?.applyEntity(message.plugin, message);
+}
+
 const MESSAGE_HANDLERS = {
   [MSG.CHALLENGE]: handleChallenge,
   [MSG.HELLO]: handleHello,
@@ -270,6 +280,7 @@ const MESSAGE_HANDLERS = {
   [MSG.CONNECTIONS]: handleConnections,
   [MSG.MESSAGE_BOARD]: handleMessageBoard,
   [MSG.WEATHER]: handleWeather,
+  [MSG.PLUGINS]: handlePlugins,
   [MSG.BIRD]: handleBird,
   [MSG.JOIN]: handleJoin,
   [MSG.LEAVE]: handleLeave,
@@ -279,6 +290,7 @@ const MESSAGE_HANDLERS = {
   [MSG.TYPING]: handleTyping,
   [MSG.PROFILE]: handleProfile,
   [MSG.READING]: handleReading,
+  [MSG.PLUGIN]: handlePlugin,
 };
 
 for (const type of Object.keys(MESSAGE_HANDLERS)) {

@@ -28,6 +28,9 @@ export const MSG = Object.freeze({
   MESSAGE_BOARD: "messageBoard",
   SCENE: "scene",
   CONNECTIONS: "connections",
+  WEATHER: "weather",
+  PLUGINS: "plugins",
+  PLUGIN: "plugin",
 });
 
 /** `action`-message gesture verbs. */
