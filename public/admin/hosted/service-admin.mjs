@@ -117,6 +117,7 @@ const TABLE_COLUMNS = [
   { key: "adminAccessCount", label: "Admin visits", render: (site) => String(site.adminAccessCount ?? 0) },
   { key: "weatherActivationAttempts", label: "Weather tried", render: (site) => site.weatherActivationAttempts ? `${site.weatherActivationAttempts} · ${formatTime(site.weatherActivationLastAt)}` : "Never" },
   { key: "weatherActivated", label: "Weather active", render: (site) => (site.weatherActivated ? "Yes" : "No") },
+  { key: "footballActivated", label: "Football active", render: (site) => (site.footballActivated ? "Yes" : "No") },
   { key: "blockedCount", label: "Blocked", render: (site) => String(site.blockedCount ?? 0) },
 ];
 
@@ -1307,6 +1308,7 @@ function renderPlatformStats(platform) {
     { value: platform.ownersInAdmin7d ?? 0, label: "Owners in admin (7d)" },
     { value: platform.weatherTried ?? 0, label: "Tried weather" },
     { value: platform.weatherActive ?? 0, label: "Weather active" },
+    { value: platform.footballActive ?? 0, label: "Football active" },
   ];
 
   for (const card of cards) {

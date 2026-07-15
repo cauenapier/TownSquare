@@ -1940,6 +1940,7 @@ function serviceAdminSite(site) {
     weatherActivationFirstAt: Number(weatherActivation.firstAttemptAt || 0),
     weatherActivationLastAt: Number(weatherActivation.lastAttemptAt || 0),
     weatherActivated: isPluginEnabledForSite(site, "weather"),
+    footballActivated: isPluginEnabledForSite(site, "soccer-ball"),
   };
 }
 
@@ -1958,6 +1959,7 @@ function buildServiceAdminPlatformStats(sites) {
   let ownersInAdmin7d = 0;
   let weatherTried = 0;
   let weatherActive = 0;
+  let footballActive = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -1975,6 +1977,7 @@ function buildServiceAdminPlatformStats(sites) {
     if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * dayMs) ownersInAdmin7d += 1;
     if ((site.weatherActivationAttempts ?? 0) > 0) weatherTried += 1;
     if (site.weatherActivated) weatherActive += 1;
+    if (site.footballActivated) footballActive += 1;
   }
 
   return {
@@ -1990,6 +1993,7 @@ function buildServiceAdminPlatformStats(sites) {
     ownersInAdmin7d,
     weatherTried,
     weatherActive,
+    footballActive,
     dailySeries: visitorStats.getAggregateDailySeries(7),
     messageDailySeries: messageStats.getAggregateDailySeries(7),
   };
