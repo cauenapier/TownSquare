@@ -1952,6 +1952,7 @@ function buildServiceAdminPlatformStats(sites) {
   let seenToday = 0;
   let activeSites7d = 0;
   let activeSites30d = 0;
+  let inactiveVerifiedSites30d = 0;
   let visitorsWeekly = 0;
   let chattingThisWeek = 0;
   let messagesToday = 0;
@@ -1971,6 +1972,9 @@ function buildServiceAdminPlatformStats(sites) {
     visitorsWeekly += weekly;
     if (weekly > 0) activeSites7d += 1;
     if (monthly > 0) activeSites30d += 1;
+    if (site.verifiedAt && !site.disabled && now - site.verifiedAt > 30 * dayMs && monthly === 0) {
+      inactiveVerifiedSites30d += 1;
+    }
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;
     messagesToday += site.messageStats?.daily ?? 0;
     messagesWeekly += site.messageStats?.weekly ?? 0;
@@ -1986,6 +1990,7 @@ function buildServiceAdminPlatformStats(sites) {
     seenToday,
     activeSites7d,
     activeSites30d,
+    inactiveVerifiedSites30d,
     visitorsWeekly,
     chattingThisWeek,
     messagesToday,
