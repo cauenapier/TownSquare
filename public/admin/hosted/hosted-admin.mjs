@@ -83,6 +83,8 @@ const connectionsList = document.getElementById("connections-list");
 const addConnectionButton = document.getElementById("add-connection");
 const saveConnectionsButton = document.getElementById("save-connections");
 const connectionsStatusEl = document.getElementById("connections-status");
+const neighbourhoodSummary = document.getElementById("neighbourhood-summary");
+const neighbourhoodList = document.getElementById("neighbourhood-list");
 const chatDisabledInput = document.getElementById("chat-disabled");
 const botProtectionInput = document.getElementById("bot-protection");
 const clearMessagesButton = document.getElementById("clear-messages");
@@ -591,6 +593,103 @@ function addConnection() {
   connectionsList.querySelector(".hosted-connection-row:last-child .hosted-connection-url")?.focus();
 }
 
+function connectionOrigin(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "";
+  }
+}
+
+function addReciprocalConnection(connection) {
+  const destination = connectionOrigin(connection.url);
+  if (connectionsDraft.some((saved) => connectionOrigin(saved.url) === destination)) {
+    setConnectionsStatus(`${connection.name} is already one of your outgoing signposts.`);
+    return;
+  }
+
+  const counts = Object.fromEntries(CONNECTION_SIDES.map((side) => [
+    side,
+    connectionsDraft.filter((saved) => saved.side === side).length,
+  ]));
+  const side = CONNECTION_SIDES
+    .filter((candidate) => counts[candidate] < MAX_CONNECTIONS_PER_SIDE)
+    .sort((left, right) => counts[left] - counts[right])[0];
+  if (!side) {
+    setConnectionsStatus("Both signposts are full. Remove a town before adding this one.", true);
+    return;
+  }
+
+  connectionsDraft.push({ side, label: connection.name, url: connection.url });
+  connectionsTouched = true;
+  connectionsSavedMessage = `${connection.name} is ready to add. Choose its edge below, then save connections.`;
+  renderConnectionRows();
+  updateConnectionsControls();
+  connectionsList.querySelector(".hosted-connection-row:last-child select")?.focus();
+}
+
+function neighbourhoodAvailability(connection) {
+  if (!connection.known) {
+    return [el("span", { class: "neighbourhood-availability", text: "Not registered" })];
+  }
+  return [
+    el("span", {
+      class: `neighbourhood-availability${connection.enabled ? " is-active" : ""}`,
+      text: connection.enabled ? "Enabled" : "Unavailable",
+    }),
+    el("span", {
+      class: `neighbourhood-availability${connection.verified ? " is-active" : ""}`,
+      text: connection.verified ? "Verified" : "Unverified",
+    }),
+  ];
+}
+
+function renderNeighbourhood(neighbourhood = {}) {
+  const summary = neighbourhood.summary || { mutual: 0, incoming: 0, outgoing: 0 };
+  neighbourhoodSummary.textContent = `${summary.mutual} mutual · ${summary.incoming} incoming · ${summary.outgoing} outgoing`;
+  neighbourhoodList.replaceChildren();
+
+  const connections = Array.isArray(neighbourhood.connections) ? neighbourhood.connections : [];
+  if (connections.length === 0) {
+    neighbourhoodList.append(el("p", {
+      class: "hosted-note",
+      text: "No known connections yet. Add an outgoing signpost to start your neighbourhood.",
+    }));
+    return;
+  }
+
+  for (const connection of connections) {
+    const website = safeLink(connection.url);
+    const actions = el("div", { class: "neighbourhood-card__actions" });
+    const open = safeLink(connection.url);
+    open.textContent = "Open site ↗";
+    open.className = "neighbourhood-card__link";
+    actions.append(open);
+
+    if (connection.state === "incoming") {
+      const reciprocal = el("button", { type: "button", text: "Add as neighbour" });
+      reciprocal.addEventListener("click", () => addReciprocalConnection(connection));
+      actions.append(reciprocal);
+    }
+
+    neighbourhoodList.append(el("article", { class: "neighbourhood-card" }, [
+      el("div", { class: "neighbourhood-card__head" }, [
+        el("strong", { text: connection.name }),
+        el("span", {
+          class: `neighbourhood-state neighbourhood-state--${connection.state}`,
+          text: connection.state,
+        }),
+      ]),
+      el("div", { class: "neighbourhood-card__url" }, website),
+      el("div", { class: "neighbourhood-card__meta" }, [
+        ...neighbourhoodAvailability(connection),
+        el("span", { text: `Last observed: ${formatTime(connection.lastObservedAt, "Not observed yet")}` }),
+      ]),
+      actions,
+    ]));
+  }
+}
+
 async function saveConnections() {
   if (!currentSite || connectionsBusy || !connectionsAreDirty()) return;
 
@@ -894,6 +993,7 @@ function render(data, { background = false } = {}) {
   botProtectionInput.checked = Boolean(currentSite.botProtection);
   disableSiteButton.textContent = currentSite.disabled ? "Enable site" : "Disable site";
   syncCustomizationForm();
+  renderNeighbourhood(data.neighbourhood);
   syncConnectionsFromServer();
   syncModerationFromServer();
   renderModerationLog(currentSite.moderationLog);

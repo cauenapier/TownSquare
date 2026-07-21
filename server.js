@@ -260,6 +260,7 @@ let mapWorld;
 let normalizeOrigin;
 let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
 let getMatchingWwwOrigin = () => null;
+let buildNeighbourhood;
 
 function parseAllowedOrigins(value) {
   return new Set(
@@ -1415,6 +1416,7 @@ function sendAdminSite(req, res, site, adminToken, setCookie = null) {
   const scene = getScene(site.siteKey, site);
   const panel = {
     site: publicSite(site),
+    neighbourhood: buildNeighbourhood(site, sitesByKey.values()),
     // The recovery link embeds the raw token, so only surface it on a request
     // that actually presented it (login/bootstrap), never on cookie-auth polls.
     ...(adminToken ? { adminUrl: buildAdminUrl(req, adminToken) } : {}),
@@ -4045,12 +4047,13 @@ async function startServer() {
 }
 
 async function loadSharedModules() {
-  const [siteConfig, geometry, mapWorldModule, urlModule, protocol] = await Promise.all([
+  const [siteConfig, geometry, mapWorldModule, urlModule, protocol, neighbourhoodModule] = await Promise.all([
     import("./public/lib/site-config-core.mjs"),
     import("./public/lib/scene-prop-geometry.mjs"),
     import("./public/lib/map-world.mjs"),
     import("./public/lib/url.mjs"),
     import("./public/lib/protocol.mjs"),
+    import("./public/lib/neighbourhood.mjs"),
   ]);
 
   MSG = protocol.MSG;
@@ -4079,6 +4082,7 @@ async function loadSharedModules() {
   normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
   buildAllowedOrigins = urlModule.buildAllowedOrigins;
   getMatchingWwwOrigin = urlModule.getMatchingWwwOrigin;
+  buildNeighbourhood = neighbourhoodModule.buildNeighbourhood;
   ALLOWED_ORIGINS = parseAllowedOrigins(process.env.ALLOWED_ORIGINS || "");
   mapWorld = loadMapWorld();
   ensureMapWorldGrown();

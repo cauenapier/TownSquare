@@ -388,6 +388,82 @@ async function assertMatchingWwwOriginsWork() {
   www.ws.close();
 }
 
+async function assertAdminNeighbourhoodRelationships() {
+  const home = await createSite("Neighbourhood Home", { origin: "https://home.neighbourhood.example" });
+  const mutual = await createSite("Mutual Town", { origin: "https://mutual.neighbourhood.example" });
+  const incoming = await createSite("Incoming Town", { origin: "https://incoming.neighbourhood.example" });
+
+  const update = async (site, connections) => {
+    const result = await postJson("/api/admin/action", {
+      siteKey: site.site.siteKey,
+      adminToken: site.adminToken,
+      action: "updateConnections",
+      connections,
+    });
+    assert(result.response.ok, result.body.error || `could not update ${site.site.name} connections`);
+  };
+
+  const homeConnections = [
+    { side: "left", label: "Mutual Town", url: `${mutual.site.origin}/visit` },
+    { side: "right", label: "Unregistered Town", url: "https://unregistered.neighbourhood.example" },
+  ];
+  await update(home, homeConnections);
+  await update(mutual, [
+    { side: "right", label: "Home", url: `${home.site.origin}/about` },
+  ]);
+  await update(incoming, [
+    { side: "left", label: "Home", url: home.site.origin },
+  ]);
+
+  const mutualVisitor = await connect({
+    x: 0.5,
+    browserId: "neighbourhood-mutual",
+    siteKey: mutual.site.siteKey,
+    origin: mutual.site.origin,
+  });
+  mutualVisitor.ws.close();
+
+  const disabled = await postJson("/api/admin/action", {
+    siteKey: incoming.site.siteKey,
+    adminToken: incoming.adminToken,
+    action: "disableSite",
+    disabled: true,
+  });
+  assert(disabled.response.ok, disabled.body.error || "could not disable incoming neighbourhood site");
+
+  const panel = await postJson("/api/admin/site", {
+    siteKey: home.site.siteKey,
+    adminToken: home.adminToken,
+  });
+  assert(panel.response.ok, panel.body.error || "could not load neighbourhood admin panel");
+  assert(
+    JSON.stringify(panel.body.neighbourhood.summary) === JSON.stringify({ mutual: 1, incoming: 1, outgoing: 1 }),
+    "neighbourhood summary did not count each relationship state",
+  );
+
+  const byName = new Map(panel.body.neighbourhood.connections.map((connection) => [connection.name, connection]));
+  assert(byName.get("Mutual Town")?.state === "mutual", "mutual relationship was not derived");
+  assert(byName.get("Mutual Town")?.verified === true, "verified neighbour was not marked verified");
+  assert(byName.get("Mutual Town")?.enabled === true, "active neighbour was not marked enabled");
+  assert(byName.get("Incoming Town")?.state === "incoming", "incoming relationship was not derived");
+  assert(byName.get("Incoming Town")?.enabled === false, "disabled neighbour was not marked unavailable");
+  assert(byName.get("Unregistered Town")?.state === "outgoing", "unregistered outgoing relationship was omitted");
+  assert(byName.get("Unregistered Town")?.known === false, "unregistered neighbour was marked known");
+
+  await update(home, [
+    ...homeConnections,
+    { side: "right", label: "Incoming Town", url: incoming.site.origin },
+  ]);
+  const reciprocal = await postJson("/api/admin/site", {
+    siteKey: home.site.siteKey,
+    adminToken: home.adminToken,
+  });
+  assert(
+    JSON.stringify(reciprocal.body.neighbourhood.summary) === JSON.stringify({ mutual: 2, incoming: 0, outgoing: 1 }),
+    "adding a reciprocal connection did not turn the incoming relationship mutual",
+  );
+}
+
 async function assertOwnerProfilePersists() {
   const hosted = await createSite("Owner Profile");
   const { siteKey } = hosted.site;
@@ -1782,6 +1858,7 @@ async function main() {
 
   await assertCustomizationPersists();
   await assertMatchingWwwOriginsWork();
+  await assertAdminNeighbourhoodRelationships();
   await assertOwnerProfilePersists();
   await assertModerationTools();
   await assertHideVisitor();

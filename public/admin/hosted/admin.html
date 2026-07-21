@@ -126,13 +126,20 @@
           <div class="owner-list" id="owner-list"></div>
         </section>
 
-        <!-- 3. Connected towns — neighbouring squares linked at the edges. -->
+        <!-- 3. Neighbourhood — every known relationship involving this site. -->
         <section class="hosted-section" id="connections-section">
           <div class="hosted-section-head">
-            <h2>Connected towns</h2>
+            <h2>Your neighbourhood</h2>
           </div>
           <p class="hosted-note">
-            Link neighbouring TownSquares to the left or right edge of your square. A signpost appears on that side, and visitors can walk over to travel there. Saved links appear on your site automatically — no need to re-paste the snippet.
+            See the TownSquares that connect with yours. Incoming towns link here, outgoing towns are on your signposts, and mutual towns do both.
+          </p>
+          <p class="neighbourhood-summary" id="neighbourhood-summary"></p>
+          <div class="neighbourhood-list" id="neighbourhood-list"></div>
+
+          <h3 class="hosted-subhead">Your outgoing signposts</h3>
+          <p class="hosted-note">
+            Link a town to the left or right edge of your square. Saved links appear automatically — no need to re-paste the snippet.
           </p>
           <div class="hosted-connections" id="connections-list"></div>
           <div class="hosted-actions">
