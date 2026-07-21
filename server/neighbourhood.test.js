@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const modulePromise = import("../public/lib/neighbourhood.mjs");
 
-test("neighbourhood derives mutual, incoming, outgoing, and site availability", async () => {
+test("neighbourhood derives mutual, incoming, and outgoing relationships", async () => {
   const { buildNeighbourhood } = await modulePromise;
   const current = {
     siteKey: "home",
@@ -19,16 +19,12 @@ test("neighbourhood derives mutual, incoming, outgoing, and site availability", 
     siteKey: "mutual",
     name: "Mutual Town",
     origin: "https://mutual.example",
-    verifiedAt: 10,
-    lastSeenAt: 20,
     connections: [{ url: "https://www.home.example/hello" }],
   };
   const incoming = {
     siteKey: "incoming",
     name: "Incoming Town",
     origin: "https://incoming.example",
-    disabled: true,
-    verifiedAt: 30,
     connections: [{ url: "https://home.example" }],
   };
 
@@ -43,11 +39,6 @@ test("neighbourhood derives mutual, incoming, outgoing, and site availability", 
       { name: "Elsewhere", state: "outgoing" },
     ],
   );
-  assert.equal(neighbourhood.connections[0].lastObservedAt, 20);
-  assert.equal(neighbourhood.connections[0].verified, true);
-  assert.equal(neighbourhood.connections[0].enabled, true);
-  assert.equal(neighbourhood.connections[1].enabled, false);
-  assert.equal(neighbourhood.connections[2].known, false);
 });
 
 test("neighbourhood ignores self-links and consolidates repeated known-site links", async () => {
@@ -68,5 +59,31 @@ test("neighbourhood ignores self-links and consolidates repeated known-site link
 
   assert.deepEqual(neighbourhood.summary, { mutual: 0, incoming: 0, outgoing: 1 });
   assert.equal(neighbourhood.connections.length, 1);
-  assert.equal(neighbourhood.connections[0].siteKey, "town");
+  assert.equal(neighbourhood.connections[0].name, "Town");
+});
+
+test("reciprocal connection preparation balances sides and rejects duplicates or full signposts", async () => {
+  const { prepareReciprocalConnection } = await modulePromise;
+  const target = { name: "Incoming", url: "https://incoming.example/path" };
+  const draft = [
+    { side: "left", label: "Left", url: "https://left.example" },
+    { side: "left", label: "Left two", url: "https://left-two.example" },
+    { side: "right", label: "Right", url: "https://right.example" },
+  ];
+
+  assert.deepEqual(prepareReciprocalConnection(draft, target), {
+    connection: { side: "right", label: "Incoming", url: target.url },
+  });
+  assert.deepEqual(
+    prepareReciprocalConnection([...draft, { side: "right", label: "Existing", url: "https://incoming.example/other" }], target),
+    { reason: "duplicate" },
+  );
+
+  const full = ["left", "right"].flatMap((side) => Array.from({ length: 4 }, (_, index) => ({
+    side,
+    label: `${side} ${index}`,
+    url: `https://${side}-${index}.example`,
+  })));
+  assert.deepEqual(prepareReciprocalConnection(full, target), { reason: "full" });
+  assert.deepEqual(prepareReciprocalConnection([], { name: "Bad", url: "not a URL" }), { reason: "invalid" });
 });

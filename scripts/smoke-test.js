@@ -415,22 +415,6 @@ async function assertAdminNeighbourhoodRelationships() {
     { side: "left", label: "Home", url: home.site.origin },
   ]);
 
-  const mutualVisitor = await connect({
-    x: 0.5,
-    browserId: "neighbourhood-mutual",
-    siteKey: mutual.site.siteKey,
-    origin: mutual.site.origin,
-  });
-  mutualVisitor.ws.close();
-
-  const disabled = await postJson("/api/admin/action", {
-    siteKey: incoming.site.siteKey,
-    adminToken: incoming.adminToken,
-    action: "disableSite",
-    disabled: true,
-  });
-  assert(disabled.response.ok, disabled.body.error || "could not disable incoming neighbourhood site");
-
   const panel = await postJson("/api/admin/site", {
     siteKey: home.site.siteKey,
     adminToken: home.adminToken,
@@ -443,12 +427,8 @@ async function assertAdminNeighbourhoodRelationships() {
 
   const byName = new Map(panel.body.neighbourhood.connections.map((connection) => [connection.name, connection]));
   assert(byName.get("Mutual Town")?.state === "mutual", "mutual relationship was not derived");
-  assert(byName.get("Mutual Town")?.verified === true, "verified neighbour was not marked verified");
-  assert(byName.get("Mutual Town")?.enabled === true, "active neighbour was not marked enabled");
   assert(byName.get("Incoming Town")?.state === "incoming", "incoming relationship was not derived");
-  assert(byName.get("Incoming Town")?.enabled === false, "disabled neighbour was not marked unavailable");
   assert(byName.get("Unregistered Town")?.state === "outgoing", "unregistered outgoing relationship was omitted");
-  assert(byName.get("Unregistered Town")?.known === false, "unregistered neighbour was marked known");
 
   await update(home, [
     ...homeConnections,

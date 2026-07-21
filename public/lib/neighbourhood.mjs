@@ -1,4 +1,5 @@
 import { normalizeAbsoluteOrigin } from "./url.mjs";
+import { CONNECTION_SIDES, MAX_CONNECTIONS_PER_SIDE } from "./site-config-core.mjs";
 
 /**
  * Derive every known relationship involving one site from the site registry.
@@ -32,13 +33,8 @@ export function buildNeighbourhood(currentSite, sites) {
     const key = `site:${site.siteKey}`;
     if (!relationships.has(key)) {
       relationships.set(key, {
-        siteKey: site.siteKey,
         name: site.name,
         url: site.origin,
-        known: true,
-        verified: Boolean(site.verifiedAt),
-        enabled: !site.disabled,
-        lastObservedAt: site.lastSeenAt || site.verifiedAt || null,
         incoming: false,
         outgoing: false,
       });
@@ -59,13 +55,8 @@ export function buildNeighbourhood(currentSite, sites) {
     const key = `url:${normalized}`;
     if (!relationships.has(key)) {
       relationships.set(key, {
-        siteKey: null,
         name: connection.label || normalized,
         url: connection.url,
-        known: false,
-        verified: false,
-        enabled: false,
-        lastObservedAt: null,
         incoming: false,
         outgoing: true,
       });
@@ -81,16 +72,11 @@ export function buildNeighbourhood(currentSite, sites) {
   }
 
   const connections = Array.from(relationships.values()).map((relationship) => ({
-    siteKey: relationship.siteKey,
     name: relationship.name,
     url: relationship.url,
     state: relationship.incoming && relationship.outgoing
       ? "mutual"
       : relationship.incoming ? "incoming" : "outgoing",
-    known: relationship.known,
-    verified: relationship.verified,
-    enabled: relationship.enabled,
-    lastObservedAt: relationship.lastObservedAt,
   })).sort((left, right) => {
     const order = { mutual: 0, incoming: 1, outgoing: 2 };
     return order[left.state] - order[right.state]
@@ -104,5 +90,39 @@ export function buildNeighbourhood(currentSite, sites) {
       outgoing: connections.filter((connection) => connection.state === "outgoing").length,
     },
     connections,
+  };
+}
+
+/**
+ * Prepare one reciprocal signpost without mutating the owner's current draft.
+ * The caller owns presentation and persistence; this function owns duplicate
+ * detection and balanced side selection so those rules stay testable.
+ */
+export function prepareReciprocalConnection(connections, target) {
+  const draft = Array.isArray(connections) ? connections : [];
+  const destination = normalizeAbsoluteOrigin(target?.url);
+  if (!destination) return { reason: "invalid" };
+
+  if (draft.some((connection) => normalizeAbsoluteOrigin(connection?.url) === destination)) {
+    return { reason: "duplicate" };
+  }
+
+  const counts = Object.fromEntries(CONNECTION_SIDES.map((side) => [
+    side,
+    draft.filter((connection) => connection?.side === side).length,
+  ]));
+  let selectedSide = null;
+  for (const side of CONNECTION_SIDES) {
+    if (counts[side] >= MAX_CONNECTIONS_PER_SIDE) continue;
+    if (selectedSide === null || counts[side] < counts[selectedSide]) selectedSide = side;
+  }
+  if (!selectedSide) return { reason: "full" };
+
+  return {
+    connection: {
+      side: selectedSide,
+      label: String(target?.name || "").trim(),
+      url: target.url,
+    },
   };
 }

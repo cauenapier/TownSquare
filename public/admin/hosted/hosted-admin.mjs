@@ -28,6 +28,7 @@ import {
   sanitizeSiteStyle,
 } from "../../lib/site-config-core.mjs";
 import { getMatchingWwwOrigin } from "../../lib/url.mjs";
+import { prepareReciprocalConnection } from "../../lib/neighbourhood.mjs";
 import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../../lib/shared-constants.mjs";
@@ -593,34 +594,22 @@ function addConnection() {
   connectionsList.querySelector(".hosted-connection-row:last-child .hosted-connection-url")?.focus();
 }
 
-function connectionOrigin(value) {
-  try {
-    return new URL(value).origin;
-  } catch {
-    return "";
-  }
-}
-
 function addReciprocalConnection(connection) {
-  const destination = connectionOrigin(connection.url);
-  if (connectionsDraft.some((saved) => connectionOrigin(saved.url) === destination)) {
+  const prepared = prepareReciprocalConnection(connectionsDraft, connection);
+  if (prepared.reason === "duplicate") {
     setConnectionsStatus(`${connection.name} is already one of your outgoing signposts.`);
     return;
   }
-
-  const counts = Object.fromEntries(CONNECTION_SIDES.map((side) => [
-    side,
-    connectionsDraft.filter((saved) => saved.side === side).length,
-  ]));
-  const side = CONNECTION_SIDES
-    .filter((candidate) => counts[candidate] < MAX_CONNECTIONS_PER_SIDE)
-    .sort((left, right) => counts[left] - counts[right])[0];
-  if (!side) {
+  if (prepared.reason === "full") {
     setConnectionsStatus("Both signposts are full. Remove a town before adding this one.", true);
     return;
   }
+  if (!prepared.connection) {
+    setConnectionsStatus("This neighbour does not have a valid website URL.", true);
+    return;
+  }
 
-  connectionsDraft.push({ side, label: connection.name, url: connection.url });
+  connectionsDraft.push(prepared.connection);
   connectionsTouched = true;
   connectionsSavedMessage = `${connection.name} is ready to add. Choose its edge below, then save connections.`;
   renderConnectionRows();
@@ -664,7 +653,6 @@ function renderNeighbourhood(neighbourhood = {}) {
         class: `neighbourhood-state neighbourhood-state--${connection.state}`,
         text: connection.state === "mutual" ? "Mutual (both)" : connection.state,
       })),
-      el("td", { text: formatTime(connection.lastObservedAt, "Not observed yet") }),
       el("td", {}, actions),
     ]));
   }
@@ -676,7 +664,6 @@ function renderNeighbourhood(neighbourhood = {}) {
     el("thead", {}, el("tr", {}, [
       el("th", { scope: "col", text: "Site" }),
       el("th", { scope: "col", text: "Relationship" }),
-      el("th", { scope: "col", text: "Last observed" }),
       el("th", { scope: "col", text: "Actions" }),
     ])),
     body,

@@ -1208,7 +1208,7 @@ body {
 
 .neighbourhood-table {
   width: 100%;
-  min-width: 600px;
+  min-width: 480px;
   border-collapse: collapse;
   font-size: 0.86rem;
 }
@@ -1254,6 +1254,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 
 .neighbourhood-state {
@@ -1269,10 +1270,6 @@ body {
 .neighbourhood-state--mutual {
   background: color-mix(in oklab, var(--accent) 14%, transparent);
   color: var(--accent-deep);
-}
-
-.neighbourhood-table__actions {
-  white-space: nowrap;
 }
 
 .neighbourhood-table__actions button {
