@@ -628,22 +628,6 @@ function addReciprocalConnection(connection) {
   connectionsList.querySelector(".hosted-connection-row:last-child select")?.focus();
 }
 
-function neighbourhoodAvailability(connection) {
-  if (!connection.known) {
-    return [el("span", { class: "neighbourhood-availability", text: "Not registered" })];
-  }
-  return [
-    el("span", {
-      class: `neighbourhood-availability${connection.enabled ? " is-active" : ""}`,
-      text: connection.enabled ? "Enabled" : "Unavailable",
-    }),
-    el("span", {
-      class: `neighbourhood-availability${connection.verified ? " is-active" : ""}`,
-      text: connection.verified ? "Verified" : "Unverified",
-    }),
-  ];
-}
-
 function renderNeighbourhood(neighbourhood = {}) {
   const summary = neighbourhood.summary || { mutual: 0, incoming: 0, outgoing: 0 };
   neighbourhoodSummary.textContent = `${summary.mutual} mutual · ${summary.incoming} incoming · ${summary.outgoing} outgoing`;
@@ -662,13 +646,10 @@ function renderNeighbourhood(neighbourhood = {}) {
   for (const connection of connections) {
     const website = safeLink(connection.url);
     website.className = "neighbourhood-table__url";
-    const actions = el("div", { class: "neighbourhood-table__actions" });
-    const open = safeLink(connection.url);
-    open.textContent = "Open ↗";
-    open.className = "neighbourhood-table__link";
-    actions.append(open);
+    let actions = null;
 
     if (connection.state === "incoming") {
+      actions = el("div", { class: "neighbourhood-table__actions" });
       const reciprocal = el("button", { type: "button", text: "Add neighbour" });
       reciprocal.addEventListener("click", () => addReciprocalConnection(connection));
       actions.append(reciprocal);
@@ -680,12 +661,9 @@ function renderNeighbourhood(neighbourhood = {}) {
         website,
       ]),
       el("td", {}, el("span", {
-          class: `neighbourhood-state neighbourhood-state--${connection.state}`,
-          text: connection.state,
+        class: `neighbourhood-state neighbourhood-state--${connection.state}`,
+        text: connection.state === "mutual" ? "Mutual (both)" : connection.state,
       })),
-      el("td", {}, el("div", { class: "neighbourhood-table__status" }, [
-        ...neighbourhoodAvailability(connection),
-      ])),
       el("td", { text: formatTime(connection.lastObservedAt, "Not observed yet") }),
       el("td", {}, actions),
     ]));
@@ -698,7 +676,6 @@ function renderNeighbourhood(neighbourhood = {}) {
     el("thead", {}, el("tr", {}, [
       el("th", { scope: "col", text: "Site" }),
       el("th", { scope: "col", text: "Relationship" }),
-      el("th", { scope: "col", text: "Status" }),
       el("th", { scope: "col", text: "Last observed" }),
       el("th", { scope: "col", text: "Actions" }),
     ])),

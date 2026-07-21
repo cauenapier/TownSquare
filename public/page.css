@@ -1208,7 +1208,7 @@ body {
 
 .neighbourhood-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 600px;
   border-collapse: collapse;
   font-size: 0.86rem;
 }
@@ -1250,15 +1250,13 @@ body {
   white-space: nowrap;
 }
 
-.neighbourhood-table__status,
 .neighbourhood-table__actions {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.neighbourhood-state,
-.neighbourhood-availability {
+.neighbourhood-state {
   display: inline-flex;
   padding: 2px 8px;
   border-radius: 999px;
@@ -1268,8 +1266,7 @@ body {
   text-transform: capitalize;
 }
 
-.neighbourhood-state--mutual,
-.neighbourhood-availability.is-active {
+.neighbourhood-state--mutual {
   background: color-mix(in oklab, var(--accent) 14%, transparent);
   color: var(--accent-deep);
 }
@@ -1278,8 +1275,7 @@ body {
   white-space: nowrap;
 }
 
-.neighbourhood-table__actions button,
-.neighbourhood-table__link {
+.neighbourhood-table__actions button {
   display: inline-flex;
   align-items: center;
   min-height: 36px;
@@ -1294,8 +1290,7 @@ body {
   cursor: pointer;
 }
 
-.neighbourhood-table__actions button:focus-visible,
-.neighbourhood-table__link:focus-visible {
+.neighbourhood-table__actions button:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 48%, transparent);
   outline-offset: 2px;
 }
