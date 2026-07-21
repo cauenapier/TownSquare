@@ -28,7 +28,13 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
       const card = cards.get(addon.name);
       card.input.checked = addon.enabled;
       card.input.disabled = !addon.available;
-      card.config.hidden = !addon.enabled || !addon.available;
+      const configurable = addon.enabled && addon.available;
+      card.expand.disabled = !configurable;
+      card.expand.hidden = !configurable;
+      card.config.hidden = !configurable || card.collapsed;
+      card.expand.setAttribute("aria-expanded", String(configurable && !card.collapsed));
+      card.expand.textContent = card.collapsed ? "Expand settings" : "Collapse settings";
+      card.element.classList.toggle("is-collapsed", configurable && card.collapsed);
       if (addon.enabled && addon.available && activeModules.has(addon.name)) mount(addon.name, background);
       else destroyMounted(addon.name);
     }
@@ -88,30 +94,50 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
     if (!card) {
       const element = document.createElement("article");
       element.className = "addon-card";
+      const head = document.createElement("div");
+      head.className = "addon-card__head";
       const toggle = document.createElement("label");
       toggle.className = "addon-card__toggle";
+      const identity = document.createElement("span");
+      identity.className = "addon-card__identity";
       const name = document.createElement("strong");
       const badge = document.createElement("span");
       badge.className = "addon-card__badge";
       badge.textContent = "Coming up";
       const input = document.createElement("input");
       input.type = "checkbox";
-      toggle.append(name, badge, input);
+      identity.append(name, badge);
+      toggle.append(input);
+      const expand = document.createElement("button");
+      expand.type = "button";
+      expand.className = "addon-card__expand hosted-quiet-button";
+      const configId = `addon-${addon.name.replace(/[^a-z0-9_-]/gi, "-")}-settings`;
+      expand.setAttribute("aria-controls", configId);
+      head.append(identity, expand, toggle);
       const description = document.createElement("p");
       description.className = "hosted-note";
       const config = document.createElement("div");
       config.className = "addon-card__config";
-      element.append(toggle, description, config);
+      config.id = configId;
+      element.append(head, description, config);
+      expand.addEventListener("click", () => {
+        card.collapsed = !card.collapsed;
+        config.hidden = card.collapsed;
+        expand.setAttribute("aria-expanded", String(!card.collapsed));
+        expand.textContent = card.collapsed ? "Expand settings" : "Collapse settings";
+        element.classList.toggle("is-collapsed", card.collapsed);
+      });
       input.addEventListener("change", async () => {
         input.disabled = true;
         const ok = await setEnabled(addon.name, input.checked);
         if (!ok) input.checked = !input.checked;
         input.disabled = false;
       });
-      card = { element, name, badge, description, input, config };
+      card = { element, name, badge, description, input, expand, config, collapsed: false };
       cards.set(addon.name, card);
     }
     card.name.textContent = addon.label;
+    card.input.setAttribute("aria-label", `Enable ${addon.label}`);
     card.badge.hidden = addon.tier !== "pro" || hasPlus;
     card.description.hidden = !addon.description;
     card.description.textContent = addon.description;

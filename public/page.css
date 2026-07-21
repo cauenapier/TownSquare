@@ -1455,10 +1455,35 @@ body {
 }
 
 .addon-card {
-  padding: 10px 12px;
+  padding: 14px;
   border: 1px solid var(--hair-2);
-  border-radius: 10px;
-  background: var(--surface-2);
+  border-radius: var(--r-control);
+  background: color-mix(in oklab, var(--surface-2) 68%, var(--surface));
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.addon-card:has(.addon-card__toggle input:checked) {
+  border-color: color-mix(in oklab, var(--you) 38%, var(--hair-2));
+  background: color-mix(in oklab, var(--you-tint) 42%, var(--surface));
+}
+
+.addon-card__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.addon-card__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.addon-card__identity strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
 }
 
 .addon-group + .addon-group {
@@ -1483,11 +1508,25 @@ body {
 }
 
 .addon-card__toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   cursor: pointer;
+}
+
+.addon-card__expand.hosted-quiet-button {
+  min-height: 32px;
+  padding-inline: 10px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.addon-card__expand.hosted-quiet-button:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.addon-card__expand[hidden] {
+  display: none;
 }
 
 .addon-card__toggle input {
@@ -1505,7 +1544,6 @@ body {
 }
 
 .addon-card__badge {
-  margin-right: auto;
   padding: 2px 7px;
   border: 1px solid var(--hair-1, var(--hair-2));
   border-radius: 999px;
@@ -1554,12 +1592,41 @@ body {
 }
 
 .addon-card > .hosted-note {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
 }
 
-.addon-card__config > .hosted-section {
-  margin-top: 12px;
-  padding-top: 12px;
+.addon-card__config[hidden] {
+  display: none;
+}
+
+.addon-card__config > div > .hosted-section {
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+/* The card already owns the add-on name and summary. Plugin modules retain
+   their standalone heading markup, but it is redundant when mounted here. */
+.addon-card__config > div > .hosted-section > .hosted-section-head:first-child,
+.addon-card__config > div > .hosted-section > h2:first-child,
+.addon-card__config > div > .hosted-section > .hosted-section-head:first-child + .hosted-note,
+.addon-card__config > div > .hosted-section > h2:first-child + .hosted-note {
+  display: none;
+}
+
+.addon-card__config > div > .hosted-section > .hosted-form:first-of-type {
+  margin-top: 0;
+}
+
+@media (max-width: 560px) {
+  .addon-card__head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .addon-card__expand.hosted-quiet-button {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+  }
 }
 
 .hosted-actions {
@@ -2824,7 +2891,8 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .addon-card__toggle input,
-  .addon-card__toggle input::before {
+  .addon-card__toggle input::before,
+  .addon-card {
     transition: none;
   }
 
