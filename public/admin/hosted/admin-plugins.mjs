@@ -33,7 +33,9 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
       card.expand.hidden = !configurable;
       card.config.hidden = !configurable || card.collapsed;
       card.expand.setAttribute("aria-expanded", String(configurable && !card.collapsed));
-      card.expand.textContent = card.collapsed ? "Expand settings" : "Collapse settings";
+      card.expand.textContent = card.collapsed ? "↓" : "↑";
+      card.expand.setAttribute("aria-label", `${card.collapsed ? "Expand" : "Collapse"} ${addon.label} settings`);
+      card.expand.title = `${card.collapsed ? "Expand" : "Collapse"} settings`;
       card.element.classList.toggle("is-collapsed", configurable && card.collapsed);
       if (addon.enabled && addon.available && activeModules.has(addon.name)) mount(addon.name, background);
       else destroyMounted(addon.name);
@@ -124,7 +126,9 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
         card.collapsed = !card.collapsed;
         config.hidden = card.collapsed;
         expand.setAttribute("aria-expanded", String(!card.collapsed));
-        expand.textContent = card.collapsed ? "Expand settings" : "Collapse settings";
+        expand.textContent = card.collapsed ? "↓" : "↑";
+        expand.setAttribute("aria-label", `${card.collapsed ? "Expand" : "Collapse"} ${card.name.textContent} settings`);
+        expand.title = `${card.collapsed ? "Expand" : "Collapse"} settings`;
         element.classList.toggle("is-collapsed", card.collapsed);
       });
       input.addEventListener("change", async () => {

@@ -1,7 +1,7 @@
 import { bindCopy } from "../../lib/ui-common.mjs";
 import { createStatusSetter, el, formatTime, safeLink } from "./hosted-common.mjs";
 import { createAdminSession } from "./hosted-admin-session.mjs";
-import { createAdminPluginRuntime } from "./admin-plugins.mjs?v=5";
+import { createAdminPluginRuntime } from "./admin-plugins.mjs?v=6";
 import {
   applyConfigToForm,
   applySceneConfigToForm,

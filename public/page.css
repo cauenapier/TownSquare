@@ -1514,15 +1514,24 @@ body {
 }
 
 .addon-card__expand.hosted-quiet-button {
-  min-height: 32px;
-  padding-inline: 10px;
-  color: var(--ink-soft);
-  font-size: 0.78rem;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--you) 46%, var(--hair-2));
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--you-tint) 58%, var(--surface));
+  color: var(--you-deep);
+  font: 800 1.3rem/1 var(--font);
+  box-shadow: none;
 }
 
 .addon-card__expand.hosted-quiet-button:hover {
-  color: var(--ink);
-  background: var(--surface);
+  border-color: var(--you);
+  background: color-mix(in oklab, var(--you-tint) 82%, var(--surface));
+  color: var(--you-deep);
 }
 
 .addon-card__expand[hidden] {
@@ -1619,13 +1628,7 @@ body {
 
 @media (max-width: 560px) {
   .addon-card__head {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .addon-card__expand.hosted-quiet-button {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: start;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 }
 
