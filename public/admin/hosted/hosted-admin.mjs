@@ -658,36 +658,52 @@ function renderNeighbourhood(neighbourhood = {}) {
     return;
   }
 
+  const body = el("tbody");
   for (const connection of connections) {
     const website = safeLink(connection.url);
-    const actions = el("div", { class: "neighbourhood-card__actions" });
+    website.className = "neighbourhood-table__url";
+    const actions = el("div", { class: "neighbourhood-table__actions" });
     const open = safeLink(connection.url);
-    open.textContent = "Open site ↗";
-    open.className = "neighbourhood-card__link";
+    open.textContent = "Open ↗";
+    open.className = "neighbourhood-table__link";
     actions.append(open);
 
     if (connection.state === "incoming") {
-      const reciprocal = el("button", { type: "button", text: "Add as neighbour" });
+      const reciprocal = el("button", { type: "button", text: "Add neighbour" });
       reciprocal.addEventListener("click", () => addReciprocalConnection(connection));
       actions.append(reciprocal);
     }
 
-    neighbourhoodList.append(el("article", { class: "neighbourhood-card" }, [
-      el("div", { class: "neighbourhood-card__head" }, [
+    body.append(el("tr", {}, [
+      el("td", {}, [
         el("strong", { text: connection.name }),
-        el("span", {
+        website,
+      ]),
+      el("td", {}, el("span", {
           class: `neighbourhood-state neighbourhood-state--${connection.state}`,
           text: connection.state,
-        }),
-      ]),
-      el("div", { class: "neighbourhood-card__url" }, website),
-      el("div", { class: "neighbourhood-card__meta" }, [
+      })),
+      el("td", {}, el("div", { class: "neighbourhood-table__status" }, [
         ...neighbourhoodAvailability(connection),
-        el("span", { text: `Last observed: ${formatTime(connection.lastObservedAt, "Not observed yet")}` }),
-      ]),
-      actions,
+      ])),
+      el("td", { text: formatTime(connection.lastObservedAt, "Not observed yet") }),
+      el("td", {}, actions),
     ]));
   }
+
+  neighbourhoodList.append(el("table", {
+    class: "neighbourhood-table",
+    "aria-label": "Known site connections",
+  }, [
+    el("thead", {}, el("tr", {}, [
+      el("th", { scope: "col", text: "Site" }),
+      el("th", { scope: "col", text: "Relationship" }),
+      el("th", { scope: "col", text: "Status" }),
+      el("th", { scope: "col", text: "Last observed" }),
+      el("th", { scope: "col", text: "Actions" }),
+    ])),
+    body,
+  ]));
 }
 
 async function saveConnections() {
