@@ -16,7 +16,7 @@ const SCENE_ENTITY_FNS = ["create", "tick", "snapshot"];
 const MODULE_PATH_RE = /^\/[A-Za-z0-9_./-]+\.mjs$/;
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ACTION_RE = /^[A-Za-z][A-Za-z0-9]*$/;
-const ADDON_TIERS = new Set(["free", "pro"]);
+const ADDON_TIERS = new Set(["free", "supporter", "pro"]);
 
 // Bump ONLY on breaking changes to the plugin contract: hook names/signatures,
 // context shape, registration rules, or module-path requirements. Private
@@ -60,7 +60,7 @@ class PluginManager {
       }
     }
     if (plugin.tier !== undefined && !ADDON_TIERS.has(plugin.tier)) {
-      throw new TypeError("tier must be free or pro");
+      throw new TypeError("tier must be free, supporter, or pro");
     }
     if (plugin.adminActions !== undefined) {
       if (!plugin.adminActions || typeof plugin.adminActions !== "object" || Array.isArray(plugin.adminActions)) {

@@ -138,7 +138,8 @@ test("plugin metadata must be non-empty strings", () => {
   const manager = new PluginManager();
   assert.throws(() => manager.register({ name: "a", label: "" }), /label must be a non-empty string/);
   assert.throws(() => manager.register({ name: "b", description: 5 }), /description must be a non-empty string/);
-  assert.throws(() => manager.register({ name: "c", tier: "premium" }), /tier must be free or pro/);
+  assert.throws(() => manager.register({ name: "c", tier: "premium" }), /tier must be free, supporter, or pro/);
+  assert.doesNotThrow(() => manager.register({ name: "d", tier: "supporter" }));
 });
 
 test("plugin admin actions receive only their scoped context", () => {

@@ -712,18 +712,18 @@ async function assertSpectatorOverlay() {
   const beforePresence = await getSitePresence(siteKey);
   assert(beforePresence.activeVisitors === 1, "expected one active visitor before spectator joins");
 
-  const nonPlusSpectator = await connectSpectatorUntilClose({ siteKey, origin: HTTP_ORIGIN });
-  assert(nonPlusSpectator.code === 4003, `expected non-Plus overlay close code 4003, got ${nonPlusSpectator.code}`);
-  assert(nonPlusSpectator.reason === "plus required", `expected plus-required close reason, got ${nonPlusSpectator.reason}`);
+  const nonSupporterSpectator = await connectSpectatorUntilClose({ siteKey, origin: HTTP_ORIGIN });
+  assert(nonSupporterSpectator.code === 4003, `expected non-Supporter overlay close code 4003, got ${nonSupporterSpectator.code}`);
+  assert(nonSupporterSpectator.reason === "plus required", `expected entitlement-required close reason, got ${nonSupporterSpectator.reason}`);
   const afterRejectedPresence = await getSitePresence(siteKey);
   assert(afterRejectedPresence.activeVisitors === 1, "rejected non-Plus spectator changed the active visitor count");
 
   const upgraded = await serviceAdminApi("/api/service-admin/action", {
-    action: "setSitePlus",
+    action: "setSiteSupporter",
     siteKey,
-    plus: true,
+    supporter: true,
   });
-  assert(upgraded.site.plus === true, "service admin did not mark spectator test site as Plus");
+  assert(upgraded.site.supporter === true, "service admin did not mark spectator test site as a Supporter");
 
   const spectator = await connectSpectator({
     siteKey,

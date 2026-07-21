@@ -216,6 +216,23 @@ async function main() {
     "plugin action did not broadcast updated visitor data",
   );
 
+  visitor.ws.send(JSON.stringify({
+    type: "plugin",
+    plugin: "test-feature",
+    action: "store",
+    value: "from-socket",
+  }));
+  await waitForValue(
+    () => visitor.seen.find((message) => (
+      message.type === "plugin"
+      && message.plugin === "test-feature"
+      && message.action === "stored"
+      && message.value === "from-socket"
+    )),
+    Boolean,
+    "socket plugin could not persist data and broadcast a scoped frame",
+  );
+
   const mover = await connect(siteKey, { browserId: "plugin-smoke-mover", x: 0.25 });
   const joinForMover = await waitForValue(
     () => visitor.seen.find((message) => message.type === "join" && message.peer?.id === mover.hello.id),
@@ -244,10 +261,14 @@ async function main() {
         return null;
       }
     },
-    (site) => site?.plugins?.["test-feature"]?.hat === "top-hat",
+    (site) => (
+      site?.plugins?.["test-feature"]?.hat === "top-hat"
+      && site.plugins["test-feature"].socketValue === "from-socket"
+    ),
     "plugin data was not persisted",
   );
   assert(savedSite?.plugins?.["test-feature"]?.hat === "top-hat", "plugin data was not persisted");
+  assert(savedSite.plugins["test-feature"].socketValue === "from-socket", "socket plugin data was not persisted");
 
   visitor.ws.close();
   console.log("Plugin smoke test passed.");

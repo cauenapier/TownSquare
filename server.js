@@ -1858,6 +1858,7 @@ function handleAdminAction(req, res) {
       }
       if (changed) {
         touchSite(site);
+        broadcastPluginState(site, scene);
         broadcastWeatherConfig(site, scene);
         for (const identity of scene.identities.values()) {
           if (!identity.joined) continue;
@@ -3189,7 +3190,7 @@ function validateSiteAccess(reqUrl) {
   if (!site || site.disabled) {
     return { ok: false, status: 403, reason: CLOSE_REASON.SITE_DISABLED_OR_UNKNOWN };
   }
-  if (watch && !site.plus) {
+  if (watch && !site.supporter && !site.plus) {
     return { ok: false, status: 403, reason: CLOSE_REASON.PLUS_REQUIRED };
   }
 
@@ -3810,9 +3811,21 @@ function handleClientMessage(client, raw) {
 
   const pluginMessage = { ...message };
   delete pluginMessage.browserSecret;
-  const accepted = plugins.run("onSocketMessage", pluginContext(client.site, {
+  const accepted = plugins.run("onSocketMessage", (pluginName) => Object.freeze({
+    site: pluginSite(client.site),
+    data: getPluginData(client.site, pluginName),
+    enabled: isPluginEnabledForSite(client.site, pluginName),
     visitor: client.identity ? pluginVisitor(client.identity) : null,
     message: Object.freeze(pluginMessage),
+    setData(value) {
+      if (!client.site || !client.joined) throw new Error("A joined hosted visitor is required.");
+      setPluginData(client.site, pluginName, value);
+      touchSite(client.site);
+    },
+    emit(frame = {}) {
+      if (!client.joined || !isPlainObject(frame)) return;
+      broadcast(client.scene, { ...frame, type: MSG.PLUGIN, plugin: pluginName });
+    },
   }));
   if (!accepted) return;
 

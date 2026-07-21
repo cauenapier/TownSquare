@@ -12,6 +12,13 @@ registerPlugin({
       setData({ hat: input.hat });
     },
   },
+  onSocketMessage({ data, visitor, message, setData, emit }) {
+    if (message.type !== "plugin" || message.plugin !== "test-feature" || message.action !== "store") return;
+    if (!visitor) return false;
+    setData({ ...(data || {}), socketValue: String(message.value || "") });
+    emit({ action: "stored", value: String(message.value || "") });
+    return false;
+  },
   extendVisitor(_visitor, { data }) {
     return { hat: data?.hat || "none" };
   },

@@ -20,7 +20,7 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
       addons: addons.map(({ name, label, description, tier }) => ({ name, label, description, tier })),
     });
     if (nextLayoutSignature !== layoutSignature) {
-      reconcileCards(addons, hasPlus);
+      reconcileCards(addons, { hasPlus });
       layoutSignature = nextLayoutSignature;
     }
 
@@ -38,7 +38,7 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
     }
   }
 
-  function reconcileCards(addons, hasPlus) {
+  function reconcileCards(addons, { hasPlus }) {
     const names = new Set(addons.map((addon) => addon.name));
     for (const [name, card] of cards) {
       if (!names.has(name)) {
@@ -57,17 +57,18 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
       return;
     }
 
-    for (const tier of ["free", "pro"]) {
+    for (const tier of ["free", "supporter", "pro"]) {
       const group = addons.filter((addon) => addon.tier === tier);
       if (group.length === 0) continue;
       const section = document.createElement("section");
       section.className = "addon-group";
-      section.appendChild(Object.assign(document.createElement("h3"), { textContent: `${tier === "free" ? "Free" : "Plus"} add-ons` }));
-      if (tier === "pro" && !hasPlus) {
+      const tierLabel = tier === "free" ? "Free" : tier === "supporter" ? "Supporter" : "Plus";
+      section.appendChild(Object.assign(document.createElement("h3"), { textContent: `${tierLabel} add-ons` }));
+      if (tier === "supporter") {
         const note = document.createElement("p");
         note.className = "hosted-note addon-group__plus-note";
         note.append(
-          "Looking for a little more? These extra touches come with TownSquare Plus. It’s a small thank-you for supporting TownSquare. ",
+          "These extra touches are available to TownSquare supporters. ",
           Object.assign(document.createElement("a"), {
             className: "addon-group__plus-cta",
             href: "https://buymeacoffee.com/cauenapier",
@@ -77,12 +78,12 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
         );
         section.appendChild(note);
       }
-      for (const addon of group) section.appendChild(thisCard(addon));
+      for (const addon of group) section.appendChild(thisCard(addon, { hasPlus }));
       container.appendChild(section);
     }
   }
 
-  function thisCard(addon) {
+  function thisCard(addon, { hasPlus }) {
     let card = cards.get(addon.name);
     if (!card) {
       const element = document.createElement("article");
@@ -90,9 +91,12 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
       const toggle = document.createElement("label");
       toggle.className = "addon-card__toggle";
       const name = document.createElement("strong");
+      const badge = document.createElement("span");
+      badge.className = "addon-card__badge";
+      badge.textContent = "Coming up";
       const input = document.createElement("input");
       input.type = "checkbox";
-      toggle.append(name, input);
+      toggle.append(name, badge, input);
       const description = document.createElement("p");
       description.className = "hosted-note";
       const config = document.createElement("div");
@@ -104,10 +108,11 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
         if (!ok) input.checked = !input.checked;
         input.disabled = false;
       });
-      card = { element, name, description, input, config };
+      card = { element, name, badge, description, input, config };
       cards.set(addon.name, card);
     }
     card.name.textContent = addon.label;
+    card.badge.hidden = addon.tier !== "pro" || hasPlus;
     card.description.hidden = !addon.description;
     card.description.textContent = addon.description;
     return card.element;
@@ -190,6 +195,6 @@ function validAddons(value) {
       ...addon,
       available: addon.available !== false,
       enabled: addon.enabled === true,
-      tier: addon.tier === "pro" ? "pro" : "free",
+      tier: addon.tier === "pro" ? "pro" : addon.tier === "supporter" ? "supporter" : "free",
     }));
 }

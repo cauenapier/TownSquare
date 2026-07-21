@@ -1,6 +1,6 @@
 /**
  * Loads trusted widget feature modules declared by the TownSquare server.
- * A module exports mountWidgetPlugin({ root, stage, plugin }) and returns an
+ * A module exports mountWidgetPlugin({ root, stage, plugin, send }) and returns an
  * optional { renderFigure(...), removeFigure(...), destroy() } lifecycle.
  */
 export function createWidgetPluginRuntime(ctx) {
@@ -46,6 +46,12 @@ export function createWidgetPluginRuntime(ctx) {
         root: ctx.root,
         stage: ctx.stage,
         plugin: descriptor.name,
+        send(frame = {}) {
+          if (!frame || typeof frame !== "object" || Array.isArray(frame)) return false;
+          if (ctx.socket?.readyState !== WebSocket.OPEN) return false;
+          ctx.socket.send(JSON.stringify({ ...frame, type: "plugin", plugin: descriptor.name }));
+          return true;
+        },
       });
       if (disposed || !active.has(descriptor.name)) {
         instance?.destroy?.();

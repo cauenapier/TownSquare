@@ -1504,6 +1504,23 @@ body {
   cursor: pointer;
 }
 
+.addon-card__badge {
+  margin-right: auto;
+  padding: 2px 7px;
+  border: 1px solid var(--hair-1, var(--hair-2));
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.addon-card__badge[hidden] {
+  display: none;
+}
+
 .addon-card__toggle input::before {
   content: "";
   position: absolute;
