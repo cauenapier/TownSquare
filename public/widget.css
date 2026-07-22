@@ -2610,10 +2610,11 @@
   box-shadow: var(--bshadow);
 }
 
-/* In expanded (fixed) mode the page can't scroll, so ride above the keyboard. */
-.townsquare--expanded .townsquare__toolbar {
-  bottom: calc(7px + var(--ts-keyboard, 0px));
-}
+/* Expanded mode needs no keyboard offset here: the container's ::after spacer
+   (--ts-keyboard-scroll-room) already lifts the action-zone — the toolbar's
+   anchor — to the keyboard's top edge. Adding var(--ts-keyboard) again would
+   raise the input a second keyboard-height, stranding it near the top of the
+   visible area. */
 
 @media (pointer: coarse) {
   .townsquare__button--sm {
