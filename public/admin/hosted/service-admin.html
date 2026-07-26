@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TownSquare service admin</title>
-    <link rel="stylesheet" href="/page.css?v=statistics-range-v2" />
+    <link rel="stylesheet" href="/page.css?v=statistics-range-v3" />
   </head>
   <body>
     <main class="hosted-shell hosted-shell--wide">
@@ -164,12 +164,12 @@
         <section class="hosted-section" aria-labelledby="active-sites-trend-title">
           <div class="hosted-section-head">
             <div>
-              <h2 id="active-sites-trend-title">Active sites over the last 30 days</h2>
-              <p class="hosted-note">Sites with visitors during the trailing 30 days ending on each date.</p>
+              <h2 id="active-sites-trend-title">Active sites over the last 7 days</h2>
+              <p class="hosted-note" id="active-sites-trend-note">Sites with visitors during the trailing 7 days ending on each date.</p>
             </div>
           </div>
           <div
-            class="service-stats-chart service-stats-chart--scroll"
+            class="service-stats-chart"
             id="active-sites-trend-chart"
             role="img"
             aria-label="Rolling active sites chart"
@@ -297,6 +297,6 @@
       <div class="service-traffic-tooltip" id="service-traffic-tooltip" role="tooltip" hidden></div>
     </dialog>
 
-    <script type="module" src="/admin/hosted/service-admin.mjs?v=statistics-range-v2"></script>
+    <script type="module" src="/admin/hosted/service-admin.mjs?v=statistics-range-v3"></script>
   </body>
 </html>

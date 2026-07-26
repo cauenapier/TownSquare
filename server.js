@@ -2014,9 +2014,10 @@ function buildServiceAdminPlatformStats(sites) {
     weatherTried,
     weatherActive,
     footballActive,
-    rollingActiveSitesSeries: visitorStats.getActiveSiteSeries(30, 30),
-    dailySeries: visitorStats.getAggregateDailySeries(7),
-    messageDailySeries: messageStats.getAggregateDailySeries(7),
+    rollingActiveSitesSeries7d: visitorStats.getActiveSiteSeries(7, 7),
+    rollingActiveSitesSeries30d: visitorStats.getActiveSiteSeries(30, 30),
+    dailySeries: visitorStats.getAggregateDailySeries(30),
+    messageDailySeries: messageStats.getAggregateDailySeries(30),
   };
 }
 

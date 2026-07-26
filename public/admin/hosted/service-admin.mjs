@@ -52,9 +52,14 @@ const trafficFlowsEl = document.getElementById("traffic-flows");
 const platformStatsCardsEl = document.getElementById("platform-stats-cards");
 const statisticsRangeEl = document.getElementById("statistics-range");
 const activeSitesTrendChartEl = document.getElementById("active-sites-trend-chart");
+const activeSitesTrendTitleEl = document.getElementById("active-sites-trend-title");
+const activeSitesTrendNoteEl = document.getElementById("active-sites-trend-note");
 const visitorTrendChartEl = document.getElementById("visitor-trend-chart");
+const visitorTrendTitleEl = document.getElementById("visitor-trend-title");
 const messageTrendChartEl = document.getElementById("message-trend-chart");
+const messageTrendTitleEl = document.getElementById("message-trend-title");
 const verifiedTrendChartEl = document.getElementById("verified-trend-chart");
+const verifiedTrendTitleEl = document.getElementById("verified-trend-title");
 const topSitesListEl = document.getElementById("top-sites-list");
 const dormantSitesListEl = document.getElementById("dormant-sites-list");
 const ownerActivityListEl = document.getElementById("owner-activity-list");
@@ -1231,7 +1236,8 @@ function buildPlatformStats(sites, platform = null) {
     messagesMonthly,
     ownersInAdmin7d,
     ownersInAdmin30d,
-    rollingActiveSitesSeries: [],
+    rollingActiveSitesSeries7d: [],
+    rollingActiveSitesSeries30d: [],
     dailySeries: [],
     messageDailySeries: [],
   };
@@ -1374,10 +1380,12 @@ function renderVisitorTrendChart(dailySeries) {
   });
 }
 
-function renderActiveSitesTrendChart(series) {
+function renderActiveSitesTrendChart(series, rangeDays) {
+  activeSitesTrendTitleEl.textContent = `Active sites over the last ${rangeDays} days`;
+  activeSitesTrendNoteEl.textContent = `Sites with visitors during the trailing ${rangeDays} days ending on each date.`;
   renderStatsBarChart(activeSitesTrendChartEl, series, {
     emptyText: "No site activity history yet.",
-    ariaLabelPrefix: "Sites active in each trailing 30-day window",
+    ariaLabelPrefix: `Sites active in each trailing ${rangeDays}-day window`,
     scaleFromZero: true,
   });
 }
@@ -1390,14 +1398,38 @@ function renderMessageTrendChart(messageDailySeries) {
   });
 }
 
-function renderVerifiedSitesChart(sites) {
-  const series = buildVerifiedSitesSeries(sites);
+function renderVerifiedSitesChart(sites, rangeDays = VERIFIED_CHART_DAYS) {
+  const series = buildVerifiedSitesSeries(sites, rangeDays);
   renderStatsBarChart(verifiedTrendChartEl, series, {
     emptyText: "No verified websites yet.",
-    ariaLabelPrefix: `Verified sites by day over the last ${VERIFIED_CHART_DAYS} days`,
+    ariaLabelPrefix: `Verified sites by day over the last ${rangeDays} days`,
     barClass: "service-stats-chart__bar--growth",
     scaleFromZero: false,
   });
+}
+
+function renderRangedStatistics(sites, stats) {
+  const rangeDays = Number(statisticsRangeEl?.value) || 7;
+  const activeSitesSeries = rangeDays === 30
+    ? stats.rollingActiveSitesSeries30d
+    : stats.rollingActiveSitesSeries7d;
+  for (const chart of [
+    activeSitesTrendChartEl,
+    visitorTrendChartEl,
+    messageTrendChartEl,
+    verifiedTrendChartEl,
+  ]) {
+    chart.classList.toggle("service-stats-chart--scroll", rangeDays === 30);
+  }
+
+  renderPlatformStats(stats, rangeDays);
+  renderActiveSitesTrendChart(activeSitesSeries, rangeDays);
+  visitorTrendTitleEl.textContent = `Visitors over the last ${rangeDays} days`;
+  renderVisitorTrendChart(stats.dailySeries?.slice(-rangeDays));
+  messageTrendTitleEl.textContent = `Messages over the last ${rangeDays} days`;
+  renderMessageTrendChart(stats.messageDailySeries?.slice(-rangeDays));
+  verifiedTrendTitleEl.textContent = `Verified sites over the last ${rangeDays} days`;
+  renderVerifiedSitesChart(sites, rangeDays);
 }
 
 function renderSiteHealthTable(container, sites, emptyText) {
@@ -1521,11 +1553,7 @@ function renderOwnerActivityList(sites) {
 function renderStatistics(sites, platform = null) {
   const stats = buildPlatformStats(sites, platform);
   platformStats = stats;
-  renderPlatformStats(stats, Number(statisticsRangeEl?.value) || 7);
-  renderActiveSitesTrendChart(stats.rollingActiveSitesSeries);
-  renderVisitorTrendChart(stats.dailySeries);
-  renderMessageTrendChart(stats.messageDailySeries);
-  renderVerifiedSitesChart(sites);
+  renderRangedStatistics(sites, stats);
   renderSiteHealthLists(sites);
   renderOwnerActivityList(sites);
 }
@@ -1549,7 +1577,7 @@ function renderSites(sites, platform = null) {
 }
 
 statisticsRangeEl?.addEventListener("change", () => {
-  renderPlatformStats(platformStats || buildPlatformStats(allSites), Number(statisticsRangeEl.value));
+  renderRangedStatistics(allSites, platformStats || buildPlatformStats(allSites));
 });
 
 function showLogin(message = "", isError = false) {
