@@ -50,6 +50,8 @@ const siteEmptyEl = document.getElementById("site-empty");
 const siteNoMatchesEl = document.getElementById("site-no-matches");
 const trafficFlowsEl = document.getElementById("traffic-flows");
 const platformStatsCardsEl = document.getElementById("platform-stats-cards");
+const statisticsRangeEl = document.getElementById("statistics-range");
+const activeSitesTrendChartEl = document.getElementById("active-sites-trend-chart");
 const visitorTrendChartEl = document.getElementById("visitor-trend-chart");
 const messageTrendChartEl = document.getElementById("message-trend-chart");
 const verifiedTrendChartEl = document.getElementById("verified-trend-chart");
@@ -159,6 +161,7 @@ let rememberMe = stored?.remembered ?? false;
 const notifications = createServiceAdminNotifications(() => password);
 
 let allSites = [];
+let platformStats = null;
 let filterQuery = "";
 let sortKey = "verifiedAt";
 let sortAsc = false;
@@ -1180,10 +1183,14 @@ function buildPlatformStats(sites, platform = null) {
   let activeSites30d = 0;
   let inactiveVerifiedSites30d = 0;
   let visitorsWeekly = 0;
+  let visitorsMonthly = 0;
   let chattingThisWeek = 0;
+  let chattingThisMonth = 0;
   let messagesToday = 0;
   let messagesWeekly = 0;
+  let messagesMonthly = 0;
   let ownersInAdmin7d = 0;
+  let ownersInAdmin30d = 0;
 
   for (const site of sites) {
     const active = site.activeVisitors ?? 0;
@@ -1193,15 +1200,19 @@ function buildPlatformStats(sites, platform = null) {
     if (active > 0) activeSitesNow += 1;
     if (site.lastSeenAt && now - site.lastSeenAt < DAY_MS) seenToday += 1;
     visitorsWeekly += weekly;
+    visitorsMonthly += monthly;
     if (weekly > 0) activeSites7d += 1;
     if (monthly > 0) activeSites30d += 1;
     if (site.verifiedAt && !site.disabled && now - site.verifiedAt > 30 * DAY_MS && monthly === 0) {
       inactiveVerifiedSites30d += 1;
     }
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * DAY_MS) chattingThisWeek += 1;
+    if (site.lastMessageAt && now - site.lastMessageAt < 30 * DAY_MS) chattingThisMonth += 1;
     messagesToday += site.messageStats?.daily ?? 0;
     messagesWeekly += site.messageStats?.weekly ?? 0;
+    messagesMonthly += site.messageStats?.monthly ?? 0;
     if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * DAY_MS) ownersInAdmin7d += 1;
+    if (site.adminAccessLastAt && now - site.adminAccessLastAt < 30 * DAY_MS) ownersInAdmin30d += 1;
   }
 
   return {
@@ -1212,10 +1223,15 @@ function buildPlatformStats(sites, platform = null) {
     activeSites30d,
     inactiveVerifiedSites30d,
     visitorsWeekly,
+    visitorsMonthly,
     chattingThisWeek,
+    chattingThisMonth,
     messagesToday,
     messagesWeekly,
+    messagesMonthly,
     ownersInAdmin7d,
+    ownersInAdmin30d,
+    rollingActiveSitesSeries: [],
     dailySeries: [],
     messageDailySeries: [],
   };
@@ -1296,22 +1312,38 @@ function renderStatsBarChart(container, series, {
   }
 }
 
-function renderPlatformStats(platform) {
+function renderPlatformStats(platform, rangeDays = 7) {
   if (!platformStatsCardsEl) return;
   platformStatsCardsEl.replaceChildren();
 
+  const monthly = rangeDays === 30;
+  const rangeLabel = `${rangeDays}d`;
   const cards = [
     { value: platform.onlineNow, label: "Online now" },
     { value: platform.activeSitesNow, label: "Active sites now" },
     { value: platform.seenToday, label: "Seen today" },
-    { value: platform.activeSites7d, label: "Active sites (7d)" },
-    { value: platform.activeSites30d, label: "Active sites (30d)" },
+    {
+      value: monthly ? platform.activeSites30d : platform.activeSites7d,
+      label: `Active sites (${rangeLabel})`,
+    },
     { value: platform.inactiveVerifiedSites30d ?? 0, label: "Inactive verified sites (30d+)" },
-    { value: platform.visitorsWeekly, label: "Unique visitors (7d)" },
-    { value: platform.chattingThisWeek, label: "Chatting this week" },
+    {
+      value: (monthly ? platform.visitorsMonthly : platform.visitorsWeekly) ?? 0,
+      label: `Unique visitors (${rangeLabel})`,
+    },
+    {
+      value: (monthly ? platform.chattingThisMonth : platform.chattingThisWeek) ?? 0,
+      label: `Chatting (${rangeLabel})`,
+    },
     { value: platform.messagesToday ?? 0, label: "Messages today" },
-    { value: platform.messagesWeekly ?? 0, label: "Messages (7d)" },
-    { value: platform.ownersInAdmin7d ?? 0, label: "Owners in admin (7d)" },
+    {
+      value: (monthly ? platform.messagesMonthly : platform.messagesWeekly) ?? 0,
+      label: `Messages (${rangeLabel})`,
+    },
+    {
+      value: (monthly ? platform.ownersInAdmin30d : platform.ownersInAdmin7d) ?? 0,
+      label: `Owners in admin (${rangeLabel})`,
+    },
     { value: platform.weatherTried ?? 0, label: "Tried weather" },
     { value: platform.weatherActive ?? 0, label: "Weather active" },
     { value: platform.footballActive ?? 0, label: "Football active" },
@@ -1338,6 +1370,14 @@ function renderVisitorTrendChart(dailySeries) {
   renderStatsBarChart(visitorTrendChartEl, dailySeries, {
     emptyText: "No visitor history yet.",
     ariaLabelPrefix: `Visitor trend for the last ${dailySeries?.length || 0} days`,
+    scaleFromZero: true,
+  });
+}
+
+function renderActiveSitesTrendChart(series) {
+  renderStatsBarChart(activeSitesTrendChartEl, series, {
+    emptyText: "No site activity history yet.",
+    ariaLabelPrefix: "Sites active in each trailing 30-day window",
     scaleFromZero: true,
   });
 }
@@ -1480,7 +1520,9 @@ function renderOwnerActivityList(sites) {
 
 function renderStatistics(sites, platform = null) {
   const stats = buildPlatformStats(sites, platform);
-  renderPlatformStats(stats);
+  platformStats = stats;
+  renderPlatformStats(stats, Number(statisticsRangeEl?.value) || 7);
+  renderActiveSitesTrendChart(stats.rollingActiveSitesSeries);
   renderVisitorTrendChart(stats.dailySeries);
   renderMessageTrendChart(stats.messageDailySeries);
   renderVerifiedSitesChart(sites);
@@ -1505,6 +1547,10 @@ function renderSites(sites, platform = null) {
   if (draftMapWorld && !mapGesture && nextMapTownSnapshot !== mapTownSnapshot) renderMapEditor();
   mapTownSnapshot = nextMapTownSnapshot;
 }
+
+statisticsRangeEl?.addEventListener("change", () => {
+  renderPlatformStats(platformStats || buildPlatformStats(allSites), Number(statisticsRangeEl.value));
+});
 
 function showLogin(message = "", isError = false) {
   autoRefresh.stop();

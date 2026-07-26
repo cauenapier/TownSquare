@@ -2512,6 +2512,29 @@ body {
   gap: 10px;
 }
 
+.service-stats-range {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.service-stats-range select {
+  min-height: 40px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 0.9rem var(--font);
+}
+
+.service-stats-range select:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--you) 48%, transparent);
+  outline-offset: 2px;
+}
+
 .service-stats-card {
   padding: 14px 16px;
   border: 1px solid var(--hair-2);
@@ -2539,6 +2562,15 @@ body {
   gap: 8px;
   min-height: 168px;
   padding: 8px 2px 0;
+}
+
+.service-stats-chart--scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.service-stats-chart--scroll .service-stats-chart__bar-wrap {
+  flex: 0 0 24px;
 }
 
 .service-stats-chart__bar-wrap {

@@ -16,7 +16,7 @@
 // many tabs, reconnects, heartbeats, or interactions they produce.
 //
 // Buckets older than the retention window are pruned, so storage stays bounded
-// by (unique visitors/day x 30) per site. This data is analytics-only and lives
+// by (unique visitors/day x 59) per site. This data is analytics-only and lives
 // in its own file, separate from the critical sites registry, so its frequent
 // writes never touch sites.json.
 
@@ -28,8 +28,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_DAYS = 1;
 const WEEKLY_DAYS = 7;
 const MONTHLY_DAYS = 30;
-// Keep enough buckets to satisfy the widest window. Anything older is dropped.
-const RETENTION_DAYS = MONTHLY_DAYS;
+// A 30-point series of trailing 30-day windows needs today and the prior 58 days.
+const RETENTION_DAYS = MONTHLY_DAYS * 2 - 1;
 // Coalesce bursts of joins into at most one write per this interval.
 const DEFAULT_SAVE_INTERVAL_MS = 60000;
 const STORAGE_VERSION = 3;
@@ -164,6 +164,21 @@ function createVisitorStats(options = {}) {
     return series;
   }
 
+  /** Count sites with any visitors in each trailing window ending on the displayed day. */
+  function getActiveSiteSeries(seriesDays, windowDays, at = now()) {
+    const today = dayIndex(at);
+    const series = [];
+    for (let offset = seriesDays - 1; offset >= 0; offset -= 1) {
+      const day = today - offset;
+      let count = 0;
+      for (const days of bySite.values()) {
+        if (uniqueOverWindow(days, day, windowDays) > 0) count += 1;
+      }
+      series.push({ day, count });
+    }
+    return series;
+  }
+
   /**
    * Aggregate visitor-hours into a UTC weekday/hour grid.
    *
@@ -172,7 +187,7 @@ function createVisitorStats(options = {}) {
    * Historical version-1 visitor data remains in daily totals but has no hour
    * information, so it is intentionally absent from this grid.
    */
-  function getActivityByWeekdayAndHour(siteKey, windowDays = RETENTION_DAYS, at = now()) {
+  function getActivityByWeekdayAndHour(siteKey, windowDays = MONTHLY_DAYS, at = now()) {
     const days = bySite.get(siteKey);
     const today = dayIndex(at);
     const activityStartedDay = activityStartedDays.get(siteKey);
@@ -319,6 +334,7 @@ function createVisitorStats(options = {}) {
     getStats,
     getDailySeries,
     getAggregateDailySeries,
+    getActiveSiteSeries,
     getActivityByWeekdayAndHour,
     load,
     flush,

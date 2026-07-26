@@ -144,6 +144,16 @@ test("aggregate daily series sums per-site daily uniques", () => {
   assert.deepEqual(series.map((entry) => entry.count), [0, 0, 3]);
 });
 
+test("active-site series counts each site in the trailing window for every day", () => {
+  const stats = createVisitorStats();
+  stats.recordVisit("early", "a", day(2));
+  stats.recordVisit("recent", "b", day(4));
+  stats.recordVisit("recent", "c", day(5));
+
+  const series = stats.getActiveSiteSeries(4, 3, day(5));
+  assert.deepEqual(series.map((entry) => entry.count), [1, 1, 2, 1]);
+});
+
 test("tracks each visitor once per UTC hour and aggregates by weekday", () => {
   const stats = createVisitorStats();
 

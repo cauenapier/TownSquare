@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TownSquare service admin</title>
-    <link rel="stylesheet" href="/page.css?v=traffic-activity-v3" />
+    <link rel="stylesheet" href="/page.css?v=statistics-range-v2" />
   </head>
   <body>
     <main class="hosted-shell hosted-shell--wide">
@@ -150,8 +150,30 @@
               <h2 id="platform-stats-title">Overview</h2>
               <p class="hosted-note">Live usage across all registered websites.</p>
             </div>
+            <label class="service-stats-range">
+              <span>Time range</span>
+              <select id="statistics-range">
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+              </select>
+            </label>
           </div>
           <div class="service-stats-cards" id="platform-stats-cards" aria-live="polite"></div>
+        </section>
+
+        <section class="hosted-section" aria-labelledby="active-sites-trend-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="active-sites-trend-title">Active sites over the last 30 days</h2>
+              <p class="hosted-note">Sites with visitors during the trailing 30 days ending on each date.</p>
+            </div>
+          </div>
+          <div
+            class="service-stats-chart service-stats-chart--scroll"
+            id="active-sites-trend-chart"
+            role="img"
+            aria-label="Rolling active sites chart"
+          ></div>
         </section>
 
         <section class="hosted-section" aria-labelledby="visitor-trend-title">
@@ -275,6 +297,6 @@
       <div class="service-traffic-tooltip" id="service-traffic-tooltip" role="tooltip" hidden></div>
     </dialog>
 
-    <script type="module" src="/admin/hosted/service-admin.mjs?v=traffic-activity-v3"></script>
+    <script type="module" src="/admin/hosted/service-admin.mjs?v=statistics-range-v2"></script>
   </body>
 </html>

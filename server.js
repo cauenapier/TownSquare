@@ -1957,10 +1957,14 @@ function buildServiceAdminPlatformStats(sites) {
   let activeSites30d = 0;
   let inactiveVerifiedSites30d = 0;
   let visitorsWeekly = 0;
+  let visitorsMonthly = 0;
   let chattingThisWeek = 0;
+  let chattingThisMonth = 0;
   let messagesToday = 0;
   let messagesWeekly = 0;
+  let messagesMonthly = 0;
   let ownersInAdmin7d = 0;
+  let ownersInAdmin30d = 0;
   let weatherTried = 0;
   let weatherActive = 0;
   let footballActive = 0;
@@ -1973,15 +1977,19 @@ function buildServiceAdminPlatformStats(sites) {
     if (active > 0) activeSitesNow += 1;
     if (site.lastSeenAt && now - site.lastSeenAt < dayMs) seenToday += 1;
     visitorsWeekly += weekly;
+    visitorsMonthly += monthly;
     if (weekly > 0) activeSites7d += 1;
     if (monthly > 0) activeSites30d += 1;
     if (site.verifiedAt && !site.disabled && now - site.verifiedAt > 30 * dayMs && monthly === 0) {
       inactiveVerifiedSites30d += 1;
     }
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;
+    if (site.lastMessageAt && now - site.lastMessageAt < 30 * dayMs) chattingThisMonth += 1;
     messagesToday += site.messageStats?.daily ?? 0;
     messagesWeekly += site.messageStats?.weekly ?? 0;
+    messagesMonthly += site.messageStats?.monthly ?? 0;
     if (site.adminAccessLastAt && now - site.adminAccessLastAt < 7 * dayMs) ownersInAdmin7d += 1;
+    if (site.adminAccessLastAt && now - site.adminAccessLastAt < 30 * dayMs) ownersInAdmin30d += 1;
     if ((site.weatherActivationAttempts ?? 0) > 0) weatherTried += 1;
     if (site.weatherActivated) weatherActive += 1;
     if (site.footballActivated) footballActive += 1;
@@ -1995,13 +2003,18 @@ function buildServiceAdminPlatformStats(sites) {
     activeSites30d,
     inactiveVerifiedSites30d,
     visitorsWeekly,
+    visitorsMonthly,
     chattingThisWeek,
+    chattingThisMonth,
     messagesToday,
     messagesWeekly,
+    messagesMonthly,
     ownersInAdmin7d,
+    ownersInAdmin30d,
     weatherTried,
     weatherActive,
     footballActive,
+    rollingActiveSitesSeries: visitorStats.getActiveSiteSeries(30, 30),
     dailySeries: visitorStats.getAggregateDailySeries(7),
     messageDailySeries: messageStats.getAggregateDailySeries(7),
   };
