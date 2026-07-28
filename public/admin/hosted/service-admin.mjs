@@ -1292,7 +1292,10 @@ function renderStatsBarChart(container, series, {
   const summary = series.map((entry) => `${formatChartDay(entry.day)}: ${entry.count ?? 0}`).join(", ");
   container.setAttribute("aria-label", `${ariaLabelPrefix}. ${summary}`);
 
-  const labelEvery = series.length > 14 ? Math.ceil(series.length / 7) : 1;
+  const hasRoomForEveryLabel = container.classList.contains("service-stats-chart--scroll");
+  const labelEvery = hasRoomForEveryLabel || series.length <= 14
+    ? 1
+    : Math.ceil(series.length / 7);
 
   for (const [index, entry] of series.entries()) {
     const count = entry.count ?? 0;
