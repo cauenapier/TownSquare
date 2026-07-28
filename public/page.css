@@ -2602,10 +2602,12 @@ body {
 }
 
 .service-stats-chart__label {
+  min-height: 2.4em;
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.2;
   text-align: center;
+  white-space: pre-line;
 }
 
 .service-stats-columns {

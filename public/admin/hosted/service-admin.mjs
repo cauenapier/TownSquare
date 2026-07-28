@@ -1248,6 +1248,15 @@ function formatChartDay(dayIndex) {
   return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
+function formatChartDayLabel(dayIndex) {
+  const date = new Date(dayIndex * DAY_MS);
+  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+  const calendarDay = date
+    .toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    .replace(/\s+/gu, "\u00a0");
+  return `${weekday}\n${calendarDay}`;
+}
+
 function buildVerifiedSitesSeries(sites, windowDays = VERIFIED_CHART_DAYS) {
   const verifiedAt = sites
     .map((site) => site.verifiedAt)
@@ -1314,7 +1323,7 @@ function renderStatsBarChart(container, series, {
 
     const label = document.createElement("span");
     label.className = "service-stats-chart__label";
-    label.textContent = labeled ? formatChartDay(entry.day) : "";
+    label.textContent = labeled ? formatChartDayLabel(entry.day) : "";
 
     wrap.append(value, bar, label);
     container.append(wrap);
