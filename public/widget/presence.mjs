@@ -3,6 +3,7 @@
  */
 
 import { recordMessage } from "./chat.mjs";
+import { updateCampfires } from "./campfire.mjs";
 import { OWNER_SETUP_HASH } from "./constants.mjs";
 import { createAvatar, destroyAvatar, setAvatarProfile } from "./avatar.mjs";
 import { renderAvatar, setFacing, updatePose, updatePropEffects } from "./gestures.mjs";
@@ -123,6 +124,7 @@ export function removePeer(ctx, id) {
   ctx.widgetPlugins?.removePresence(peer);
   peer.avatar.el.remove();
   ctx.peers.delete(id);
+  updateCampfires(ctx);
   updateStatus(ctx);
 }
 
@@ -170,6 +172,7 @@ function renderPresence(ctx, presence, previousX, { profileChanged, faceOnMove =
   updatePose(presence.avatar, presence.pose);
   updatePropEffects(presence.avatar, presence.x, presence.propId, ctx.sceneProps);
   ctx.widgetPlugins?.renderPresence(presence);
+  updateCampfires(ctx);
 }
 
 /**

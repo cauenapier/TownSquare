@@ -12,6 +12,7 @@ export function renderProps(container, props = []) {
   for (const prop of props) {
     const el = document.createElement("div");
     el.className = `prop prop--${prop.kind}`;
+    el.dataset.propId = prop.id;
     el.style.left = `${(prop.x * 100).toFixed(2)}%`;
     el.style.width = `${prop.width}px`;
     el.style.height = `${prop.height}px`;

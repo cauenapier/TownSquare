@@ -1346,6 +1346,116 @@
 
 .townsquare-avatar--peer { color: var(--other); }
 
+/* Core campfire prop: four authoritative settle seats live inside its 160px
+   interaction width. Occupancy is a local 0–4 presence-derived strength. */
+.prop--campfire {
+  --campfire-strength: 0;
+  z-index: 1;
+  color: var(--ink);
+  pointer-events: none;
+  opacity: 1;
+}
+.townsquare .prop--campfire .prop__light {
+  top: 30%;
+  left: 50%;
+  width: 92px;
+  height: 58px;
+  clip-path: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(246, 157, 59, calc(0.11 + var(--campfire-strength) * 0.035)), transparent 68%);
+  filter: blur(3px);
+  opacity: 1;
+}
+.prop--campfire::after {
+  content: "walk close to sit";
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  translate: -50% 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 90%, transparent);
+  color: var(--ink-soft);
+  font: 650 9px/1.2 var(--font);
+  white-space: nowrap;
+  opacity: 0.72;
+}
+.townsquare .prop--campfire .campfire-glow {
+  fill: rgba(246, 157, 59, calc(0.08 + var(--campfire-strength) * 0.04));
+  filter: blur(calc(3px + var(--campfire-strength) * 1px));
+}
+.townsquare .prop--campfire .campfire-stones {
+  fill: color-mix(in oklab, var(--ink) 10%, var(--surface));
+  stroke: color-mix(in oklab, var(--ink) 50%, transparent);
+  stroke-width: 1;
+}
+.townsquare .prop--campfire .campfire-logs {
+  fill: color-mix(in oklab, #8b4c2c 60%, var(--surface));
+  stroke: color-mix(in oklab, var(--ink) 68%, transparent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.townsquare .prop--campfire .campfire-flame {
+  stroke: color-mix(in oklab, var(--ink) 42%, transparent);
+  stroke-width: 1.15;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: townsquare-campfire-flicker 1.15s ease-in-out infinite alternate;
+}
+.townsquare .prop--campfire .campfire-flame--1 { fill: #ed7136; }
+.townsquare .prop--campfire .campfire-flame--2 { fill: #ffd477; }
+.townsquare .prop--campfire .campfire-flame--3 { fill: #f5a14d; opacity: clamp(0, calc(var(--campfire-strength) - 1), 1); }
+.townsquare .prop--campfire .campfire-spark {
+  fill: #f2a34b;
+  opacity: clamp(0, calc(var(--campfire-strength) - 2), 1);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: townsquare-campfire-spark 1.8s ease-out infinite;
+}
+.townsquare .prop--campfire .campfire-spark--2 { animation-delay: -900ms; }
+.townsquare--campfire-chat .prop--campfire::after { display: none; }
+
+.townsquare--campfire-chat .townsquare-avatar:not(.townsquare-avatar--campfire-companion) {
+  opacity: 0.72;
+}
+.townsquare--campfire-chat .townsquare-avatar--campfire-companion {
+  --townsquare-avatar-light-filter: drop-shadow(0 0 3px rgba(253, 188, 92, 0.75));
+}
+.townsquare--campfire-chat .townsquare-avatar--campfire-companion .townsquare-avatar__peer-label {
+  box-shadow: 0 0 0 2px color-mix(in oklab, #ed7136 44%, transparent), var(--bshadow);
+}
+.townsquare--campfire-chat .townsquare-avatar__composer--docked {
+  outline: 2px solid color-mix(in oklab, #ed7136 45%, transparent);
+  outline-offset: 2px;
+}
+.townsquare-campfire__chat-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.townsquare-campfire__chat-note[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .prop--campfire .campfire-flame,
+  .prop--campfire .campfire-spark { animation: none; }
+}
+
+@keyframes townsquare-campfire-flicker {
+  from { transform: scale(0.94, 0.91) rotate(-2deg); }
+  to { transform: scale(1.04, 1.07) rotate(2deg); }
+}
+@keyframes townsquare-campfire-spark {
+  from { transform: translateY(4px) scale(0.6); opacity: 0; }
+  28% { opacity: 0.8; }
+  to { transform: translateY(-13px) translateX(3px) scale(0.2); opacity: 0; }
+}
+
 /* peers are clickable (recent-message tray); the cursor also marks the slim
    figure as interactive, and on iOS Safari makes taps produce click events */
 .townsquare-avatar--peer { cursor: pointer; }

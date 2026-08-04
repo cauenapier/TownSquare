@@ -1,6 +1,7 @@
 "use strict";
 
 const { registerPlugin } = require("../server/plugins");
+const { createCampfirePlugin } = require("./campfire");
 const { createTelegramNotificationsPlugin } = require("./telegram-notifications");
 const { createSoccerBallPlugin } = require("./soccer-ball");
 const { createWeatherPlugin } = require("./weather");
@@ -21,6 +22,7 @@ function registerPublicPlugins(env = process.env, logger = console) {
       chatId: env.TELEGRAM_CHAT_ID,
       maxPerMinute: readLimit("TELEGRAM_MAX_NOTIFICATIONS_PER_MIN", 20, env),
     }),
+    () => createCampfirePlugin(),
     () => createSoccerBallPlugin(),
     () => createWeatherPlugin(),
   ];

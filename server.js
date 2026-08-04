@@ -727,7 +727,9 @@ function getPublicOrigin(req) {
 }
 
 function getSceneConfig(site) {
-  return sanitizeSceneConfig(site?.sceneConfig || DEFAULT_SITE_SCENE_CONFIG);
+  const scene = sanitizeSceneConfig(site?.sceneConfig || DEFAULT_SITE_SCENE_CONFIG);
+  if (!isPluginEnabledForSite(site, "campfire")) return scene;
+  return { ...scene, campfires: 1, campfireXs: [0.5] };
 }
 
 function getStyleConfig(site) {
@@ -1784,6 +1786,9 @@ const ADMIN_ACTIONS = {
       rebuildSceneProps(scene, site);
     }
     broadcastPluginState(site, scene);
+    // A toggle may add or remove a core scene prop (the campfire), so connected
+    // widgets receive the same rebuilt scene the settle arbiter now owns.
+    broadcast(scene, { type: MSG.SCENE, scene: getSceneConfig(site) });
     broadcastWeatherConfig(site, scene);
   },
   disableSite(site, scene, body) {

@@ -7,6 +7,7 @@
  */
 
 import { createChatScope, setLocalTyping, submitChat } from "./widget/chat.mjs";
+import { syncCampfires } from "./widget/campfire.mjs";
 import { initBirds, destroyBirds, syncBirdPerches } from "./widget/birds.mjs";
 import { initClouds, destroyClouds } from "./widget/clouds.mjs";
 import { initWeather, destroyWeather, setWeatherConfig } from "./widget/weather.mjs";
@@ -122,6 +123,7 @@ function refreshScene(ctx, sceneConfig) {
     el.remove();
   }
   renderProps(ctx.stage, sceneProps);
+  syncCampfires(ctx);
   updatePropEffects(ctx.self.avatar, ctx.self.x, ctx.self.propId, ctx.sceneProps);
   for (const peer of ctx.peers.values()) {
     updatePropEffects(peer.avatar, peer.x, peer.propId, ctx.sceneProps);

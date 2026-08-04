@@ -4,6 +4,7 @@
 
 import { activeSignpostSide, openConnectionsModal, updateConnectionProximity } from "./connections.mjs";
 import { layoutStage, layoutConfigFor } from "./bubble-layout.mjs";
+import { updateCampfires } from "./campfire.mjs";
 import { HIGH_FIVE_DISTANCE, JUMP_MS, MAX_X, MIN_X, MOVEMENT_SPEED, PROP_SETTLE_MS, SEND_INTERVAL_MS } from "./constants.mjs";
 import { findSettleProp } from "../lib/scene-prop-geometry.mjs";
 import { MSG, GESTURE } from "../lib/protocol.mjs";
@@ -72,6 +73,7 @@ function applyLocalPropSettle(ctx, prop) {
   renderAvatar(self.avatar, self.x);
   updatePose(self.avatar, self.pose);
   updatePropEffects(self.avatar, self.x, self.propId, ctx.sceneProps);
+  updateCampfires(ctx);
 }
 
 /**
@@ -140,6 +142,7 @@ const SWIPE_CLICK_SUPPRESSION_MS = 500;
 function clearSelfPoseForAction(ctx) {
   resetPropSettle(ctx);
   clearPresencePose(ctx.self, ctx.sceneProps);
+  updateCampfires(ctx);
 }
 
 /**
@@ -235,7 +238,9 @@ export function tick(ctx, now) {
 
   if (direction !== 0) {
     resetPropSettle(ctx);
+    const wasSeated = Boolean(ctx.self.propId);
     clearPresencePose(ctx.self, ctx.sceneProps);
+    if (wasSeated) updateCampfires(ctx);
     ctx.self.x = clampSelfX(arrived ? ctx.self.targetX : ctx.self.x + direction * MOVEMENT_SPEED * dt);
     if (arrived) {
       ctx.self.targetX = null;

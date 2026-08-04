@@ -161,6 +161,9 @@ const POSITION_PRESETS = Object.freeze({
   lamps: Object.freeze([0.12, 0.88, 0.36, 0.64]),
 });
 
+/** Runtime-only campfire field injected by the free add-on toggle. */
+export const CAMPFIRE_SCENE = Object.freeze({ countKey: "campfires", positionsKey: "campfireXs", x: 0.5 });
+
 export const DEFAULT_SCENE_CONFIG = Object.freeze(buildDefaultSceneConfig());
 
 export const DEFAULT_SITE_STYLE_LIGHT = Object.freeze(
@@ -209,6 +212,25 @@ const TREE_SVG = `
   </svg>
 `;
 
+const CAMPFIRE_SVG = `
+  <svg viewBox="-18 0 160 64" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <ellipse class="campfire-glow" cx="62" cy="45" rx="27" ry="16"></ellipse>
+    <g class="campfire-stones">
+      <ellipse cx="43" cy="56" rx="7" ry="3"></ellipse><ellipse cx="55" cy="59" rx="7" ry="3"></ellipse>
+      <ellipse cx="69" cy="59" rx="7" ry="3"></ellipse><ellipse cx="81" cy="56" rx="7" ry="3"></ellipse>
+    </g>
+    <g class="campfire-logs">
+      <path d="M45 51 L78 59"></path><path d="M79 51 L46 59"></path>
+      <circle cx="45" cy="51" r="2.8"></circle><circle cx="79" cy="51" r="2.8"></circle>
+    </g>
+    <path class="campfire-flame campfire-flame--1" d="M62 53 C49 47 51 38 58 30 C57 38 63 35 65 21 C76 34 78 47 62 53 Z"></path>
+    <path class="campfire-flame campfire-flame--2" d="M62 51 C56 47 57 42 63 35 C69 42 69 48 62 51 Z"></path>
+    <path class="campfire-flame campfire-flame--3" d="M55 43 C49 39 51 33 56 28 C55 34 59 34 60 25 C64 34 63 41 55 43 Z"></path>
+    <circle class="campfire-spark campfire-spark--1" cx="55" cy="23" r="1.2"></circle>
+    <circle class="campfire-spark campfire-spark--2" cx="70" cy="17" r="1"></circle>
+  </svg>
+`;
+
 // A notice sign on a single post — same silhouette as the edge signposts but
 // with a square panel instead of a pointed flag. The `--<variant>` class fills
 // the panel differently in CSS; the line-art frame is shared.
@@ -230,6 +252,7 @@ const PROP_PX = Object.freeze({
   bench: { width: 52, height: 18 },
   lamp: { width: 20, height: 56 },
   tree: { width: 56, height: 76 },
+  campfire: { width: 160, height: 64 },
   "message-board": { width: 18, height: 30 },
 });
 
@@ -350,6 +373,24 @@ function createTree(index, x) {
   };
 }
 
+function createCampfire(index, x) {
+  const { width, height } = PROP_PX.campfire;
+  return {
+    id: uniqueId("campfire", index),
+    kind: "campfire",
+    x,
+    width,
+    height,
+    pose: "sitting",
+    // All four offsets remain inside width / 2 / REFERENCE_STAGE_WIDTH, which
+    // is also the server's authoritative settle/reconciliation half-width.
+    seats: [-0.1, -0.035, 0.035, 0.1],
+    faceAway: true,
+    lightRadius: 0.1,
+    svg: CAMPFIRE_SVG,
+  };
+}
+
 /**
  * Build the render-ready message-board prop from a sanitized board config, or
  * `null` when the board is disabled. Shaped like a {@link SceneProp} so the
@@ -401,6 +442,12 @@ export function sanitizeSceneConfig(input = {}) {
     SCENE_BIRDS_FIELD.max,
     SCENE_BIRDS_FIELD.defaultValue,
   );
+
+  const campfireCount = clampInt(base[CAMPFIRE_SCENE.countKey], 0, 1, 0);
+  next[CAMPFIRE_SCENE.countKey] = campfireCount;
+  next[CAMPFIRE_SCENE.positionsKey] = campfireCount
+    ? [roundPosition(clampNumber(base[CAMPFIRE_SCENE.positionsKey]?.[0], 0.15, 0.85, CAMPFIRE_SCENE.x))]
+    : [];
 
   return next;
 }
@@ -611,6 +658,9 @@ export function buildSceneProps(config = DEFAULT_SCENE_CONFIG) {
   });
   scene.treeXs.forEach((x, index) => {
     props.push(createTree(index, x));
+  });
+  scene.campfireXs.forEach((x, index) => {
+    props.push(createCampfire(index, x));
   });
 
   return props.sort((a, b) => a.x - b.x);

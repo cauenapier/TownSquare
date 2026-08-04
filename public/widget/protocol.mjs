@@ -4,6 +4,7 @@
 
 import { recordMessage, sayMessage, setHistory } from "./chat.mjs";
 import { applyBirdFlee, applyBirdSpawn, syncBirdsFromHello } from "./birds.mjs";
+import { updateCampfires } from "./campfire.mjs";
 import { clearPresencePose, needsStandUp, playHighFivePair, playJump, playRaisedHand, setWalking } from "./gestures.mjs";
 import {
   applyPeerState,
@@ -57,6 +58,7 @@ function applyJump(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
   clearPresencePose(presence, ctx.sceneProps);
+  updateCampfires(ctx);
   playJump(presence.avatar);
 }
 
@@ -64,6 +66,7 @@ function applyRaiseHand(ctx, id) {
   const presence = presenceById(ctx, id);
   if (!presence) return;
   clearPresencePose(presence, ctx.sceneProps);
+  updateCampfires(ctx);
   playRaisedHand(presence.avatar);
 }
 
@@ -75,6 +78,7 @@ function applyHighFive(ctx, id, targetId) {
   for (const presence of [initiator, target]) {
     clearPresencePose(presence, ctx.sceneProps);
   }
+  updateCampfires(ctx);
   playHighFivePair(initiator, target, standUpFirst);
 }
 

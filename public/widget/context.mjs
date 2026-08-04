@@ -79,6 +79,7 @@
  * @property {Map<string, import("../lib/site-config-core.mjs").BirdPerch>} birdPerchesById
  * @property {number} chatThrottleMs Slow-mode cooldown from the server.
  * @property {ReturnType<import("./plugins.mjs").createWidgetPluginRuntime>} widgetPlugins
+ * @property {HTMLParagraphElement} [campfireChatNote] Screen-reader public-chat context while seated by a campfire.
  * @property {ReturnType<typeof setTimeout> | null} reconnectTimer
  * @property {ReturnType<typeof setTimeout> | null} typingTimer
  * @property {ReturnType<import("./pow.mjs").solveChallenge> | null} [challenge]
