@@ -8,9 +8,76 @@ function distanceToSegment(point, start, end) {
   return Math.hypot(point.x - (start.x + dx * ratio), point.y - (start.y + dy * ratio));
 }
 
-function pathSegments(path) {
-  if (path.points.length === 1) return [[path.points[0], path.points[0]]];
-  return path.points.slice(1).map((point, index) => [path.points[index], point]);
+const flattenedPathCache = new WeakMap();
+
+function curveControls(points, index) {
+  const previous = points[Math.max(0, index - 1)];
+  const current = points[index];
+  const next = points[index + 1];
+  const after = points[Math.min(points.length - 1, index + 2)];
+  return {
+    current,
+    next,
+    control1: {
+      x: current.x + (next.x - previous.x) / 6,
+      y: current.y + (next.y - previous.y) / 6,
+    },
+    control2: {
+      x: next.x - (after.x - current.x) / 6,
+      y: next.y - (after.y - current.y) / 6,
+    },
+  };
+}
+
+function cubicPoint({ current, control1, control2, next }, ratio) {
+  const inverse = 1 - ratio;
+  const a = inverse ** 3;
+  const b = 3 * inverse ** 2 * ratio;
+  const c = 3 * inverse * ratio ** 2;
+  const d = ratio ** 3;
+  return {
+    x: a * current.x + b * control1.x + c * control2.x + d * next.x,
+    y: a * current.y + b * control1.y + c * control2.y + d * next.y,
+  };
+}
+
+export function waterPathData(path) {
+  const { points } = path;
+  if (points.length === 1) return `M${points[0].x} ${points[0].y} l0.01 0`;
+  if (points.length === 2) return `M${points[0].x} ${points[0].y} L${points[1].x} ${points[1].y}`;
+  let data = `M${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const { control1, control2, next } = curveControls(points, index);
+    data += ` C${control1.x} ${control1.y} ${control2.x} ${control2.y} ${next.x} ${next.y}`;
+  }
+  return data;
+}
+
+export function flattenWaterPath(path) {
+  const last = path.points.at(-1);
+  const cached = flattenedPathCache.get(path);
+  if (cached
+    && cached.length === path.points.length
+    && cached.lastX === last?.x
+    && cached.lastY === last?.y) return cached.points;
+  if (path.points.length < 3) return path.points;
+
+  const points = [path.points[0]];
+  for (let index = 0; index < path.points.length - 1; index += 1) {
+    const curve = curveControls(path.points, index);
+    const chord = Math.hypot(curve.next.x - curve.current.x, curve.next.y - curve.current.y);
+    const subdivisions = Math.max(2, Math.ceil(chord / 12));
+    for (let step = 1; step <= subdivisions; step += 1) {
+      points.push(cubicPoint(curve, step / subdivisions));
+    }
+  }
+  flattenedPathCache.set(path, {
+    length: path.points.length,
+    lastX: last.x,
+    lastY: last.y,
+    points,
+  });
+  return points;
 }
 
 function segmentsIntersect(a, b, c, d) {
@@ -42,12 +109,17 @@ function segmentDistance(a, b, c, d) {
 
 export function waterPathTouchesPoint(path, point, radius = 0) {
   const hitRadius = radius + path.width / 2;
-  return pathSegments(path).some(([start, end]) => distanceToSegment(point, start, end) <= hitRadius);
+  const points = flattenWaterPath(path);
+  if (points.length === 1) return distanceToSegment(point, points[0], points[0]) <= hitRadius;
+  for (let index = 1; index < points.length; index += 1) {
+    if (distanceToSegment(point, points[index - 1], points[index]) <= hitRadius) return true;
+  }
+  return false;
 }
 
 export function waterPathsOverlap(first, second) {
   const hitDistance = (first.width + second.width) / 2;
-  const bounds = (path) => path.points.reduce((box, point) => ({
+  const bounds = (path) => flattenWaterPath(path).reduce((box, point) => ({
     minX: Math.min(box.minX, point.x),
     maxX: Math.max(box.maxX, point.x),
     minY: Math.min(box.minY, point.y),
@@ -61,11 +133,20 @@ export function waterPathsOverlap(first, second) {
     || firstBounds.maxY + hitDistance < secondBounds.minY
     || secondBounds.maxY + hitDistance < firstBounds.minY
   ) return false;
-  const firstSegments = pathSegments(first);
-  const secondSegments = pathSegments(second);
-  return firstSegments.some(([a, b]) => (
-    secondSegments.some(([c, d]) => segmentDistance(a, b, c, d) <= hitDistance)
-  ));
+  const firstPoints = flattenWaterPath(first);
+  const secondPoints = flattenWaterPath(second);
+  const firstSegmentCount = Math.max(1, firstPoints.length - 1);
+  const secondSegmentCount = Math.max(1, secondPoints.length - 1);
+  for (let firstIndex = 0; firstIndex < firstSegmentCount; firstIndex += 1) {
+    const a = firstPoints[firstIndex];
+    const b = firstPoints[Math.min(firstPoints.length - 1, firstIndex + 1)];
+    for (let secondIndex = 0; secondIndex < secondSegmentCount; secondIndex += 1) {
+      const c = secondPoints[secondIndex];
+      const d = secondPoints[Math.min(secondPoints.length - 1, secondIndex + 1)];
+      if (segmentDistance(a, b, c, d) <= hitDistance) return true;
+    }
+  }
+  return false;
 }
 
 export function waterAreaTouchesPoint(area, point, radius = 0) {

@@ -1156,6 +1156,14 @@ async function assertServiceAdminCanEditMap() {
   );
   assert(Array.isArray(publicBefore.world?.props), "public map world did not include props");
   assert(Array.isArray(publicBefore.world?.water), "public map world did not include water strokes");
+  assert(typeof publicBefore.version === "string" && publicBefore.version.length > 0, "public map omitted its version");
+  const activityBefore = await fetch(`${HTTP_ORIGIN}/api/map/activity`).then((response) => response.json());
+  assert(activityBefore.version === publicBefore.version, "map activity returned a different structure version");
+  assert(activityBefore.sites.length === publicBefore.sites.length, "map activity omitted public sites");
+  assert(
+    activityBefore.sites.every((site) => Object.keys(site).sort().join(",") === "activeVisitors,siteKey"),
+    "map activity included more than lightweight presence data",
+  );
 
   const unauthorized = await postJson("/api/service-admin/map", { password: "wrong-map-password" });
   assert(unauthorized.response.status === 403, "map editor accepted an invalid service password");
@@ -1196,6 +1204,7 @@ async function assertServiceAdminCanEditMap() {
 
     const publicAfter = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
     assert(publicAfter.world.water.some((stroke) => stroke.type === "water"), "saved world was not public");
+    assert(publicAfter.version !== publicBefore.version, "map version did not change after editing the world");
 
     for (const world of [
       { ...edited, props: [{ type: "castle", x: 10, y: 10 }] },

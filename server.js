@@ -1300,14 +1300,41 @@ function ensureMapWorldGrown(siteCount = countVerifiedMapSites()) {
   });
 }
 
-function handleMap(req, res) {
+function buildPublicMapData() {
   const sites = Array.from(sitesByKey.values())
     .filter((site) => site.verifiedAt && !site.disabled && !site.hiddenFromMap)
     .map(publicMapSite);
 
   const coreMap = { sites, world: resolvedMapWorld() };
   const extendedMap = plugins.extend("extendMapData", coreMap);
-  sendJson(res, 200, isPlainObject(extendedMap) ? extendedMap : coreMap);
+  const map = isPlainObject(extendedMap) ? extendedMap : coreMap;
+  const structuralMap = {
+    ...map,
+    sites: Array.isArray(map.sites)
+      ? map.sites.map(({ activeVisitors: _activeVisitors, ...site }) => site)
+      : map.sites,
+  };
+  const version = crypto.createHash("sha256")
+    .update(JSON.stringify(structuralMap))
+    .digest("base64url")
+    .slice(0, 16);
+  return { map, version };
+}
+
+function handleMap(req, res) {
+  const { map, version } = buildPublicMapData();
+  sendJson(res, 200, { ...map, version });
+}
+
+function handleMapActivity(req, res) {
+  const { map, version } = buildPublicMapData();
+  const sites = Array.isArray(map.sites)
+    ? map.sites.map((site) => ({
+      siteKey: site.siteKey,
+      activeVisitors: Math.max(0, Number(site.activeVisitors) || 0),
+    }))
+    : [];
+  sendJson(res, 200, { version, sites });
 }
 
 function getPublicStats() {
@@ -3281,6 +3308,7 @@ function finalizeDisconnect(identity) {
 
 const HTTP_ROUTES = new Map([
   ["GET /api/map", handleMap],
+  ["GET /api/map/activity", handleMapActivity],
   ["GET /api/stats", handleStats],
   ["GET /api/site-presence", handleSitePresence],
   ["POST /api/sites", handleRegisterSite],

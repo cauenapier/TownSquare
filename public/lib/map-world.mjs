@@ -7,6 +7,7 @@ export const MAP_WORLD_GROWTH_REF_SITES = 25;
 export const MAX_MAP_PROPS = 2000;
 export const MAX_WATER_STROKES = 200;
 export const MAX_WATER_POINTS = 5000;
+export const MAX_MAP_HISTORY_ITEMS = 20_000;
 
 export const MAP_PROP_TYPES = Object.freeze({
   mountain: Object.freeze({ brushSpacing: 68 }),

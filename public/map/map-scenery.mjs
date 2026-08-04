@@ -2,26 +2,16 @@ import { createSvgElement } from "../lib/ui-common.mjs";
 import { mountainPath, treeCrownPath, treeTrunkPath } from "./map-glyphs.mjs";
 import { MAP_WATER_RIVER_STYLE_MAX_WIDTH } from "../lib/map-world.mjs";
 import { measureMapOperation } from "./map-performance.mjs";
-
-function smoothPath(points) {
-  if (points.length === 1) return `M${points[0].x} ${points[0].y} l0.01 0`;
-  if (points.length === 2) return `M${points[0].x} ${points[0].y} L${points[1].x} ${points[1].y}`;
-
-  let path = `M${points[0].x} ${points[0].y}`;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const previous = points[Math.max(0, index - 1)];
-    const current = points[index];
-    const next = points[index + 1];
-    const after = points[Math.min(points.length - 1, index + 2)];
-    const control1 = { x: current.x + (next.x - previous.x) / 6, y: current.y + (next.y - previous.y) / 6 };
-    const control2 = { x: next.x - (after.x - current.x) / 6, y: next.y - (after.y - current.y) / 6 };
-    path += ` C${control1.x} ${control1.y} ${control2.x} ${control2.y} ${next.x} ${next.y}`;
-  }
-  return path;
-}
+import { waterPathData } from "./map-water.mjs";
 
 function waterUsesRiverStyle(stroke) {
   return stroke.width <= MAP_WATER_RIVER_STYLE_MAX_WIDTH;
+}
+
+function cutoutPath(cutouts) {
+  return cutouts.map(({ x, y, radius }) => (
+    `M${x - radius} ${y}a${radius} ${radius} 0 1 0 ${radius * 2} 0a${radius} ${radius} 0 1 0 ${-radius * 2} 0`
+  )).join("");
 }
 
 function renderWater(world) {
@@ -35,15 +25,13 @@ function renderWater(world) {
         const maskId = `map-water-mask-${areaIndex}-${pathIndex}`;
         const mask = createSvgElement("mask", { id: maskId, maskUnits: "userSpaceOnUse" });
         mask.appendChild(createSvgElement("rect", { x: 0, y: 0, width: world.width, height: world.height, fill: "white" }));
-        for (const cutout of cutouts) {
-          mask.appendChild(createSvgElement("circle", { cx: cutout.x, cy: cutout.y, r: cutout.radius, fill: "black" }));
-        }
+        mask.appendChild(createSvgElement("path", { d: cutoutPath(cutouts), fill: "black" }));
         const definitions = createSvgElement("defs");
         definitions.appendChild(mask);
         group.appendChild(definitions);
         strokeGroup.setAttribute("mask", `url(#${maskId})`);
       }
-      const path = smoothPath(stroke.points);
+      const path = waterPathData(stroke);
       if (waterUsesRiverStyle(stroke)) {
         strokeGroup.append(
           createSvgElement("path", { class: "map-river__bank", d: path, "stroke-width": stroke.width + 6 }),

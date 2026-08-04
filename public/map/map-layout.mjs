@@ -8,7 +8,7 @@ const SITE_LAYOUT = {
   collisionPadding: 8,
   separationPasses: 140,
   waterPadding: 8,
-  waterSearchSteps: 96,
+  placementSearchSteps: 256,
 };
 
 const CITY_TIERS = [
@@ -92,22 +92,48 @@ function townTouchesWater(site, position, water) {
   return water.some((area) => waterAreaTouchesPoint(area, position, radius));
 }
 
-function landPosition(site, preferred, width, height, water) {
-  if (!water.length || !townTouchesWater(site, preferred, water)) return preferred;
+function townFootprintOverlaps(site, position, otherSite, otherPosition) {
+  return Boolean(collisionPush(site, otherSite, position, otherPosition));
+}
+
+function positionIsAvailable(site, position, water, placed) {
+  return !townTouchesWater(site, position, water)
+    && placed.every((entry) => !townFootprintOverlaps(site, position, entry.site, entry.position));
+}
+
+function availablePosition(site, preferred, width, height, water, placed = []) {
+  if (positionIsAvailable(site, preferred, water, placed)) return preferred;
 
   const hash = hashString(site.siteKey);
   const angleOffset = (hash % 6283) / 1000;
   const step = Math.max(20, Math.min(width, height) / 36);
-  for (let index = 1; index <= SITE_LAYOUT.waterSearchSteps; index += 1) {
+  for (let index = 1; index <= SITE_LAYOUT.placementSearchSteps; index += 1) {
     const ring = Math.ceil(index / 8);
     const angle = angleOffset + (index % 8) * Math.PI / 4;
     const candidate = clampPosition({
       x: preferred.x + Math.cos(angle) * ring * step,
       y: preferred.y + Math.sin(angle) * ring * step,
     }, width, height);
-    if (!townTouchesWater(site, candidate, water)) return candidate;
+    if (positionIsAvailable(site, candidate, water, placed)) return candidate;
   }
-  return preferred;
+
+  // The spiral is tuned for nearby corrections. If it cannot find room, scan
+  // the complete world deterministically before admitting an invalid layout.
+  const inset = edgeInset(width, height);
+  const gridStep = Math.max(24, Math.min(width, height) / 90);
+  const columns = Math.max(1, Math.floor((width - inset.x * 2) / gridStep) + 1);
+  const rows = Math.max(1, Math.floor((height - inset.y * 2) / gridStep) + 1);
+  const cellCount = columns * rows;
+  const start = hash % cellCount;
+  for (let offset = 0; offset < cellCount; offset += 1) {
+    const cell = (start + offset) % cellCount;
+    const candidate = {
+      x: Math.min(width - inset.x, inset.x + (cell % columns) * gridStep),
+      y: Math.min(height - inset.y, inset.y + Math.floor(cell / columns) * gridStep),
+    };
+    if (positionIsAvailable(site, candidate, water, placed)) return candidate;
+  }
+  return { ...preferred, unresolved: true };
 }
 
 function collisionPush(siteA, siteB, posA, posB) {
@@ -135,7 +161,7 @@ export function layoutMapSites(sites, width, height, world = {}) {
   const ranks = buildAgeRanks(sites);
   const positions = new Map(sites.map((site) => [
     site.siteKey,
-    landPosition(site, initialPosition(site, ranks.get(site.siteKey) ?? 0, width, height), width, height, water),
+    availablePosition(site, initialPosition(site, ranks.get(site.siteKey) ?? 0, width, height), width, height, water),
   ]));
   const anchors = new Map([...positions].map(([key, position]) => [key, { ...position }]));
 
@@ -158,8 +184,35 @@ export function layoutMapSites(sites, width, height, world = {}) {
       position.x += (anchor.x - position.x) * 0.05;
       position.y += (anchor.y - position.y) * 0.05;
       Object.assign(position, clampPosition(position, width, height));
-      Object.assign(position, landPosition(site, position, width, height, water));
     }
   }
+  const placed = [];
+  for (const site of sites) {
+    const position = positions.get(site.siteKey);
+    Object.assign(position, availablePosition(site, position, width, height, water, placed));
+    placed.push({ site, position });
+  }
   return positions;
+}
+
+export function mapLayoutViolations(sites, positions, world = {}) {
+  const water = Array.isArray(world.water) ? world.water : [];
+  const violations = { water: [], overlaps: [], unresolved: [] };
+  for (let index = 0; index < sites.length; index += 1) {
+    const site = sites[index];
+    const position = positions.get(site.siteKey);
+    if (!position) {
+      violations.unresolved.push(site.siteKey);
+      continue;
+    }
+    if (position.unresolved) violations.unresolved.push(site.siteKey);
+    if (townTouchesWater(site, position, water)) violations.water.push(site.siteKey);
+    for (let other = index + 1; other < sites.length; other += 1) {
+      const otherPosition = positions.get(sites[other].siteKey);
+      if (otherPosition && townFootprintOverlaps(site, position, sites[other], otherPosition)) {
+        violations.overlaps.push([site.siteKey, sites[other].siteKey]);
+      }
+    }
+  }
+  return violations;
 }

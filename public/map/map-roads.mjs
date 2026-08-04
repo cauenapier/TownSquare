@@ -1,6 +1,7 @@
 import { cityTier } from "./map-layout.mjs";
 import { mapEdgePath } from "./map-connections.mjs";
 import { measureMapOperation } from "./map-performance.mjs";
+import { flattenWaterPath } from "./map-water.mjs";
 
 const CELL_SIZE = 36;
 const LAND_COST = 1;
@@ -89,13 +90,14 @@ function createGrid(world, sites, positions) {
         continue;
       }
       const { path } = operation;
+      const points = flattenWaterPath(path);
       const radius = path.width / 2 + CELL_SIZE * 0.35;
-      if (path.points.length === 1) paintCircle(path.points[0], radius, 30);
-      for (let index = 1; index < path.points.length; index += 1) {
-        paintSegment(path.points[index - 1], path.points[index], radius, 30);
+      if (points.length === 1) paintCircle(points[0], radius, 30);
+      for (let index = 1; index < points.length; index += 1) {
+        paintSegment(points[index - 1], points[index], radius, 30);
       }
-      if (path.width <= 40 && path.points.length > 1) {
-        for (const ratio of [0.25, 0.5, 0.75]) paintCircle(pointAlong(path.points, ratio), CELL_SIZE * 0.72, LAND_COST, true);
+      if (path.width <= 40 && points.length > 1) {
+        for (const ratio of [0.25, 0.5, 0.75]) paintCircle(pointAlong(points, ratio), CELL_SIZE * 0.72, LAND_COST, true);
       }
     }
   }

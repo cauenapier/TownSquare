@@ -56,7 +56,9 @@ let mapEdges = [];
 let roadRoutes = new Map();
 let selectedSiteKey = "";
 let svg = null;
-let structureSnapshot = "";
+let structureVersion = "";
+let mapLoadFailed = false;
+let activityRefreshInFlight = false;
 const PAN_THRESHOLD_PX = 4;
 
 let isDragging = false;
@@ -68,13 +70,6 @@ let view = {
   y: 0,
   zoom: 1,
 };
-
-function structuralSnapshot(nextSites, nextWorld) {
-  return JSON.stringify({
-    sites: nextSites.map(({ activeVisitors: _activeVisitors, ...site }) => site),
-    world: nextWorld,
-  });
-}
 
 /**
  * Tell the server a visitor followed a town's website link from the map, so the
@@ -157,7 +152,9 @@ function buildMap() {
   root.replaceChildren(svg);
 
   if (sites.length === 0) {
-    statusEl.textContent = "No verified TownSquares are public yet.";
+    statusEl.textContent = mapLoadFailed
+      ? "Could not load the TownSquare map."
+      : "No verified TownSquares are public yet.";
     applyView();
     return;
   }
@@ -209,20 +206,22 @@ function renderSiteNode(site) {
 }
 
 async function refreshActivity() {
-  if (document.hidden) return;
+  if (document.hidden || activityRefreshInFlight) return;
+  activityRefreshInFlight = true;
 
   try {
-    const response = await fetch("/api/map");
+    const response = await fetch("/api/map/activity");
     const body = await response.json();
     if (!response.ok || !Array.isArray(body.sites)) return;
 
-    const nextWorld = normalizedMapWorld(body.world);
-    const nextStructureSnapshot = structuralSnapshot(body.sites, nextWorld);
-    if (nextStructureSnapshot !== structureSnapshot) {
-      mapWorld = nextWorld;
-      worldWidth = mapWorld.width;
-      worldHeight = mapWorld.height;
-      indexSites(body.sites);
+    if (body.version !== structureVersion) {
+      const mapResponse = await fetch("/api/map");
+      const mapBody = await mapResponse.json();
+      if (!mapResponse.ok || !Array.isArray(mapBody.sites)) return;
+      applyMapWorld(mapBody.world);
+      indexSites(mapBody.sites);
+      structureVersion = typeof mapBody.version === "string" ? mapBody.version : "";
+      mapLoadFailed = false;
 
       if (selectedSiteKey && !siteByKey.has(selectedSiteKey)) {
         closeDetail();
@@ -230,7 +229,6 @@ async function refreshActivity() {
         updateDetail(selectedSite());
       }
 
-      structureSnapshot = nextStructureSnapshot;
       buildMap();
       clampView();
       applyView();
@@ -248,6 +246,8 @@ async function refreshActivity() {
     }
   } catch {
     // Keep the last known activity state when a refresh fails.
+  } finally {
+    activityRefreshInFlight = false;
   }
 }
 
@@ -567,13 +567,14 @@ async function loadMap() {
     if (!response.ok || !Array.isArray(body.sites)) throw new Error(body.error || "Map request failed");
     applyMapWorld(body.world);
     indexSites(body.sites);
-    structureSnapshot = structuralSnapshot(sites, mapWorld);
+    structureVersion = typeof body.version === "string" ? body.version : "";
+    mapLoadFailed = false;
   } catch {
     applyMapWorld(null);
     sites = [];
     indexSites(sites);
-    structureSnapshot = structuralSnapshot(sites, mapWorld);
-    statusEl.textContent = "Could not load the TownSquare map.";
+    structureVersion = "";
+    mapLoadFailed = true;
   }
 
   buildMap();

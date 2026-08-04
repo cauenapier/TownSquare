@@ -4,18 +4,16 @@ import { layoutMapSites } from "../../map/map-layout.mjs";
 import { createCityMarker, renderMapEdge } from "../../map/map-render.mjs";
 import { routeMapRoads } from "../../map/map-roads.mjs";
 import { renderSceneryLayer } from "../../map/map-scenery.mjs";
-import {
-  mergeOverlappingWaterAreas,
-  waterAreaTouchesPoint,
-} from "../../map/map-water.mjs";
+import { mergeOverlappingWaterAreas } from "../../map/map-water.mjs";
 import {
   cloneMapWorld,
-  MAP_PROP_TYPES,
-  MAX_MAP_PROPS,
-  MAX_WATER_POINTS,
-  MAX_WATER_STROKES,
   validateMapWorld,
 } from "../../lib/map-world.mjs";
+import {
+  applyMapBrush,
+  createMapGesture,
+  trimMapHistory,
+} from "./map-editor-core.mjs";
 import {
   createAutoRefresh,
   createCredentialStore,
@@ -92,7 +90,6 @@ const trafficTooltipEl = document.getElementById("service-traffic-tooltip");
 const STORAGE_KEY = "townsquare-service-admin-password";
 const TABLE_PREFS_KEY = "townsquare-service-admin-table";
 const REFRESH_INTERVAL_MS = 5000;
-const MAX_MAP_HISTORY_ITEMS = 20_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const VERIFIED_CHART_DAYS = 7;
 
@@ -175,6 +172,7 @@ let tableHeadSignature = "";
 let savedMapWorld = null;
 let draftMapWorld = null;
 let mapEditorSvg = null;
+let mapEditorSceneryLayer = null;
 let mapEditorDirty = false;
 let mapEditorRenderFrame = null;
 let mapEditorRoadRoutes = new Map();
@@ -248,7 +246,8 @@ function renderMapEditor() {
     role: "img",
     "aria-label": "Editable map scenery with read-only TownSquare locations",
   });
-  svg.appendChild(renderSceneryLayer(draftMapWorld));
+  mapEditorSceneryLayer = renderSceneryLayer(draftMapWorld);
+  svg.appendChild(mapEditorSceneryLayer);
 
   const visibleSites = allSites.filter((site) => site.verifiedAt && !site.disabled && !site.hiddenFromMap);
   const positions = layoutMapSites(visibleSites, draftMapWorld.width, draftMapWorld.height, draftMapWorld);
@@ -276,15 +275,24 @@ function renderMapEditor() {
   updateMapEditorControls();
 }
 
-function queueMapEditorRender() {
-  if (mapEditorRenderFrame !== null) return;
-  mapEditorRenderFrame = requestAnimationFrame(renderMapEditor);
+function renderMapEditorScenery() {
+  mapEditorRenderFrame = null;
+  if (!draftMapWorld || !mapEditorSvg || !mapEditorSceneryLayer) return;
+  const nextScenery = renderSceneryLayer(draftMapWorld);
+  mapEditorSceneryLayer.replaceWith(nextScenery);
+  mapEditorSceneryLayer = nextScenery;
+  updateMapEditorControls();
 }
 
-function flushMapEditorRender() {
+function queueMapEditorRender() {
+  if (mapEditorRenderFrame !== null) return;
+  mapEditorRenderFrame = requestAnimationFrame(renderMapEditorScenery);
+}
+
+function cancelMapEditorRender() {
   if (mapEditorRenderFrame === null) return;
   cancelAnimationFrame(mapEditorRenderFrame);
-  renderMapEditor();
+  mapEditorRenderFrame = null;
 }
 
 function mapPoint(event) {
@@ -298,170 +306,22 @@ function mapPoint(event) {
   };
 }
 
-function eraseMapAt(point) {
-  const radius = mapBrushSize / 2;
-  const propCount = draftMapWorld.props.length;
-  draftMapWorld.props = draftMapWorld.props.filter(
-    (prop) => Math.hypot(prop.x - point.x, prop.y - point.y) > radius,
-  );
-  let erasedWater = false;
-  for (const area of draftMapWorld.water) {
-    if (!waterAreaTouchesPoint(area, point, radius)) continue;
-    if (area.cutouts.some((cutout) => Math.hypot(cutout.x - point.x, cutout.y - point.y) + radius <= cutout.radius)) continue;
-    if (mapGesture.waterPointCount >= MAX_WATER_POINTS) {
-      mapEditorMessage = `The map is limited to ${MAX_WATER_POINTS} water points.`;
-      break;
-    }
-    area.cutouts.push({
-      x: Math.round(point.x * 100) / 100,
-      y: Math.round(point.y * 100) / 100,
-      radius,
-      order: nextWaterOrder(),
-    });
-    mapGesture.waterPointCount += 1;
-    erasedWater = true;
-  }
-  return propCount !== draftMapWorld.props.length || erasedWater;
-}
-
-const TREE_SPACING = 24;
-
-function treeGridKey(x, y) {
-  return `${Math.floor(x / TREE_SPACING)},${Math.floor(y / TREE_SPACING)}`;
-}
-
-function getTreeGrid() {
-  if (mapGesture.treeGrid) return mapGesture.treeGrid;
-  const grid = new Map();
-  for (const prop of draftMapWorld.props) {
-    if (prop.type !== "tree") continue;
-    const key = treeGridKey(prop.x, prop.y);
-    const cell = grid.get(key) || [];
-    cell.push(prop);
-    grid.set(key, cell);
-  }
-  mapGesture.treeGrid = grid;
-  return grid;
-}
-
-function treeLocationIsCrowded(grid, candidate) {
-  const cellX = Math.floor(candidate.x / TREE_SPACING);
-  const cellY = Math.floor(candidate.y / TREE_SPACING);
-  for (let x = cellX - 1; x <= cellX + 1; x += 1) {
-    for (let y = cellY - 1; y <= cellY + 1; y += 1) {
-      const trees = grid.get(`${x},${y}`) || [];
-      if (trees.some((tree) => Math.hypot(tree.x - candidate.x, tree.y - candidate.y) < TREE_SPACING)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function paintTreeDab(point) {
-  const radius = mapBrushSize / 2;
-  if (mapGesture.lastPoint
-    && Math.hypot(mapGesture.lastPoint.x - point.x, mapGesture.lastPoint.y - point.y) < radius * 0.65) {
-    return false;
-  }
-  mapGesture.lastPoint = point;
-  const grid = getTreeGrid();
-  let changed = false;
-  for (let index = 0; index < mapTreeDensity && draftMapWorld.props.length < MAX_MAP_PROPS; index += 1) {
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.sqrt(Math.random()) * radius;
-      const candidate = {
-        type: "tree",
-        x: Math.round(Math.max(0, Math.min(draftMapWorld.width, point.x + Math.cos(angle) * distance)) * 100) / 100,
-        y: Math.round(Math.max(0, Math.min(draftMapWorld.height, point.y + Math.sin(angle) * distance)) * 100) / 100,
-      };
-      if (!treeLocationIsCrowded(grid, candidate)) {
-        draftMapWorld.props.push(candidate);
-        const key = treeGridKey(candidate.x, candidate.y);
-        const cell = grid.get(key) || [];
-        cell.push(candidate);
-        grid.set(key, cell);
-        changed = true;
-        break;
-      }
-    }
-  }
-  if (draftMapWorld.props.length >= MAX_MAP_PROPS) mapEditorMessage = `The map is limited to ${MAX_MAP_PROPS} props.`;
-  return changed;
-}
-
-function paintMountain(point) {
-  const spacing = MAP_PROP_TYPES.mountain.brushSpacing;
-  if (mapGesture.lastPoint && Math.hypot(mapGesture.lastPoint.x - point.x, mapGesture.lastPoint.y - point.y) < spacing) return false;
-  if (draftMapWorld.props.length >= MAX_MAP_PROPS) {
-    mapEditorMessage = `The map is limited to ${MAX_MAP_PROPS} props.`;
-    return false;
-  }
-  draftMapWorld.props.push({ type: "mountain", x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 });
-  mapGesture.lastPoint = point;
-  return true;
-}
-
-function countWaterPoints() {
-  return draftMapWorld.water.reduce((count, area) => (
-    count + area.cutouts.length + area.paths.reduce((pathCount, path) => pathCount + path.points.length, 0)
-  ), 0);
-}
-
-function countWaterPaths() {
-  return draftMapWorld.water.reduce((count, area) => count + area.paths.length, 0);
-}
-
-function nextWaterOrder() {
-  let order = 0;
-  for (const area of draftMapWorld.water) {
-    for (const path of area.paths) order = Math.max(order, path.order || 0);
-    for (const cutout of area.cutouts) order = Math.max(order, cutout.order || 0);
-  }
-  return order + 1;
-}
-
-function paintWater(point) {
-  if (mapGesture.waterPointCount >= MAX_WATER_POINTS) {
-    mapEditorMessage = `The map is limited to ${MAX_WATER_POINTS} water points.`;
-    updateMapEditorControls();
-    return false;
-  }
-  if (!mapGesture.waterPath) {
-    if (countWaterPaths() >= MAX_WATER_STROKES) {
-      mapEditorMessage = `The map is limited to ${MAX_WATER_STROKES} water paths.`;
-      updateMapEditorControls();
-      return false;
-    }
-    mapGesture.waterPath = { width: mapBrushSize, points: [], order: nextWaterOrder() };
-    draftMapWorld.water.push({ type: "water", paths: [mapGesture.waterPath], cutouts: [] });
-  }
-  const lastPoint = mapGesture.waterPath.points.at(-1);
-  const spacing = mapBrushSize <= 40 ? 14 : Math.max(10, mapBrushSize * 0.16);
-  if (lastPoint && Math.hypot(lastPoint.x - point.x, lastPoint.y - point.y) < spacing) return false;
-  mapGesture.waterPath.points.push({ x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 });
-  mapGesture.waterPointCount += 1;
-  return true;
-}
-
-function paintMapAt(point) {
-  if (mapTool === "erase") {
-    return eraseMapAt(point);
-  }
-  if (mapTool === "tree") return paintTreeDab(point);
-  if (mapTool === "mountain") return paintMountain(point);
-  if (mapTool === "water") return paintWater(point);
-  return false;
-}
-
 function applyMapGesture(event) {
   const point = mapPoint(event);
-  if (point && paintMapAt(point)) {
+  if (!point) return;
+  const result = applyMapBrush(draftMapWorld, mapGesture, {
+    tool: mapTool,
+    brushSize: mapBrushSize,
+    treeDensity: mapTreeDensity,
+  }, point);
+  if (result.message) mapEditorMessage = result.message;
+  if (result.changed) {
     mapGesture.changed = true;
     mapEditorDirty = true;
-    mapEditorMessage = "";
+    if (!result.message) mapEditorMessage = "";
     queueMapEditorRender();
+  } else if (result.message) {
+    updateMapEditorControls();
   }
 }
 
@@ -475,22 +335,9 @@ function finishMapGesture(event) {
   }
   if (changed && mapGesture.waterPath) draftMapWorld.water = mergeOverlappingWaterAreas(draftMapWorld.water);
   mapGesture = null;
-  if (mapEditorRenderFrame !== null) flushMapEditorRender();
-  else if (changed) renderMapEditor();
+  cancelMapEditorRender();
+  if (changed) renderMapEditor();
   else updateMapEditorControls();
-}
-
-function mapWorldItemCount(world) {
-  return world.props.length + world.water.reduce((count, area) => (
-    count + area.cutouts.length + area.paths.reduce((pathCount, path) => pathCount + path.points.length, 0)
-  ), 0);
-}
-
-function trimMapHistory(history) {
-  let itemCount = history.reduce((count, entry) => count + mapWorldItemCount(entry.world), 0);
-  while (history.length > 1 && itemCount > MAX_MAP_HISTORY_ITEMS) {
-    itemCount -= mapWorldItemCount(history.shift().world);
-  }
 }
 
 function restoreMapWorld(entry) {
@@ -1721,14 +1568,8 @@ mapEditorCanvasEl.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   mapEditorCanvasEl.setPointerCapture(event.pointerId);
   mapGesture = {
+    ...createMapGesture(draftMapWorld, mapEditorDirty),
     pointerId: event.pointerId,
-    before: cloneMapWorld(draftMapWorld),
-    beforeDirty: mapEditorDirty,
-    changed: false,
-    lastPoint: null,
-    waterPath: null,
-    treeGrid: null,
-    waterPointCount: countWaterPoints(),
   };
   updateMapEditorControls();
   applyMapGesture(event);

@@ -80,6 +80,47 @@ test("water cutouts are treated as dry land", async () => {
   assert.equal(waterAreaTouchesPoint(area, { x: 365, y: 300 }, 20), true);
 });
 
+test("water hit testing follows the same smoothed curve as the SVG", async () => {
+  const [, , , , { flattenWaterPath, waterPathData, waterPathTouchesPoint }] = await modulePromise;
+  const path = {
+    width: 10,
+    points: [{ x: 100, y: 100 }, { x: 300, y: 500 }, { x: 500, y: 100 }],
+    order: 0,
+  };
+  const curvePoint = flattenWaterPath(path).find((point) => point.x > 190 && point.x < 210);
+
+  assert.match(waterPathData(path), / C/);
+  assert.ok(curvePoint);
+  assert.equal(waterPathTouchesPoint(path, curvePoint), true);
+});
+
+test("final town layout has no water or town-footprint violations", async () => {
+  const [, , , , , { layoutMapSites, mapLayoutViolations }] = await modulePromise;
+  const sites = Array.from({ length: 32 }, (_, index) => ({
+    siteKey: `layout-${index}`,
+    name: `Town with a visible label ${index}`,
+    messageCount: index * 20,
+    verifiedAt: index + 1,
+  }));
+  const world = {
+    width: 1800,
+    height: 1200,
+    props: [],
+    water: [{
+      type: "water",
+      paths: [{ width: 300, points: [{ x: 900, y: 300 }, { x: 900, y: 900 }], order: 0 }],
+      cutouts: [],
+    }],
+  };
+  const positions = layoutMapSites(sites, world.width, world.height, world);
+
+  assert.deepEqual(mapLayoutViolations(sites, positions, world), {
+    water: [],
+    overlaps: [],
+    unresolved: [],
+  });
+});
+
 test("map world accepts 2,000 props as its safety limit", async () => {
   const [, , , { MAX_MAP_PROPS, validateMapWorld }] = await modulePromise;
   const props = Array.from({ length: MAX_MAP_PROPS }, (_, index) => ({
