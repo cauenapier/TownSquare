@@ -1272,6 +1272,7 @@ function publicMapSite(site) {
     lastSeenAt: site.lastSeenAt,
     messageCount: site.messageCount || 0,
     activeVisitors: scene ? countActiveVisitors(scene) : 0,
+    inactiveFor30Days: isInactiveVerifiedSite(site, visitorStats.getStats(site.siteKey).monthly),
     connections: getConnections(site),
     supporter: Boolean(site.supporter),
   };
@@ -1947,6 +1948,11 @@ function serviceAdminSite(site) {
   };
 }
 
+function isInactiveVerifiedSite(site, monthlyVisitors, now = Date.now()) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Boolean(site.verifiedAt && !site.disabled && now - site.verifiedAt > 30 * dayMs && monthlyVisitors === 0);
+}
+
 function buildServiceAdminPlatformStats(sites) {
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
@@ -1980,7 +1986,7 @@ function buildServiceAdminPlatformStats(sites) {
     visitorsMonthly += monthly;
     if (weekly > 0) activeSites7d += 1;
     if (monthly > 0) activeSites30d += 1;
-    if (site.verifiedAt && !site.disabled && now - site.verifiedAt > 30 * dayMs && monthly === 0) {
+    if (isInactiveVerifiedSite(site, monthly, now)) {
       inactiveVerifiedSites30d += 1;
     }
     if (site.lastMessageAt && now - site.lastMessageAt < 7 * dayMs) chattingThisWeek += 1;

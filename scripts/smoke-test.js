@@ -1133,6 +1133,10 @@ async function assertServiceAdminCanEditMap() {
     publicBefore.sites.every((site) => Number.isFinite(site.activeVisitors)),
     "public map sites did not include active visitor counts",
   );
+  assert(
+    publicBefore.sites.every((site) => typeof site.inactiveFor30Days === "boolean"),
+    "public map sites did not include 30-day inactivity state",
+  );
   assert(Array.isArray(publicBefore.world?.props), "public map world did not include props");
   assert(Array.isArray(publicBefore.world?.water), "public map world did not include water strokes");
 

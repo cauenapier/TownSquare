@@ -30,12 +30,14 @@ if (!(root instanceof HTMLElement) || !(statusEl instanceof HTMLElement) || !(de
 
 const detailTitle = detail.querySelector("h2");
 const detailOrigin = detail.querySelector(".map-detail__origin");
+const detailInactivity = detail.querySelector(".map-detail__inactivity");
 const detailVisit = detail.querySelector(".map-detail__visit");
 const detailClose = detail.querySelector(".map-detail__close");
 
 if (
   !(detailTitle instanceof HTMLElement)
   || !(detailOrigin instanceof HTMLAnchorElement)
+  || !(detailInactivity instanceof HTMLElement)
   || !(detailVisit instanceof HTMLAnchorElement)
   || !(detailClose instanceof HTMLButtonElement)
 ) {
@@ -99,7 +101,8 @@ function originLabel(origin) {
 function siteAriaLabel(site) {
   const visitors = Math.max(0, Number(site.activeVisitors) || 0);
   const supporter = site.supporter ? ", supporter" : "";
-  return `${site.name}, ${cityTier(site.messageCount).name}${supporter}, ${visitors} active visitor${visitors === 1 ? "" : "s"}, ${originLabel(site.origin)}`;
+  const inactive = site.inactiveFor30Days ? ", inactive for more than 30 days" : "";
+  return `${site.name}, ${cityTier(site.messageCount).name}${supporter}${inactive}, ${visitors} active visitor${visitors === 1 ? "" : "s"}, ${originLabel(site.origin)}`;
 }
 
 function renderActivity(site, tier) {
@@ -168,7 +171,7 @@ function renderSiteNode(site) {
   const { x, y } = positionsBySiteKey.get(site.siteKey) || { x: worldWidth / 2, y: worldHeight / 2 };
   const marker = createCityMarker(site);
   const group = createSvgElement("g", {
-    class: `map-node${site.siteKey === selectedSiteKey ? " is-selected" : ""}`,
+    class: `map-node${site.inactiveFor30Days ? " is-inactive" : ""}${site.siteKey === selectedSiteKey ? " is-selected" : ""}`,
     transform: `translate(${x} ${y})`,
     tabindex: "0",
     role: "button",
@@ -261,6 +264,7 @@ function updateDetail(site) {
   detailTitle.textContent = site.name;
   detailOrigin.textContent = site.origin;
   detailOrigin.href = site.origin;
+  detailInactivity.hidden = !site.inactiveFor30Days;
   detailVisit.href = site.origin;
 }
 

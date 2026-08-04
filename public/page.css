@@ -2882,6 +2882,10 @@ body {
   transition: stroke-width 120ms ease;
 }
 
+.map-node.is-inactive .map-node__dot {
+  fill: var(--ink-mute);
+}
+
 .map-node__activity {
   pointer-events: none;
 }
@@ -3024,6 +3028,13 @@ body {
   font-weight: 650;
   overflow-wrap: anywhere;
   text-decoration: none;
+}
+
+.map-detail__inactivity {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  font-weight: 650;
 }
 
 .map-detail__visit {
