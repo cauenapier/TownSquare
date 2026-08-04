@@ -2766,7 +2766,7 @@ body {
 }
 
 .map-world-boundary {
-  fill: var(--surface);
+  fill: none;
   stroke: var(--hair-2);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
