@@ -1,4 +1,5 @@
 import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH } from "../lib/map-world.mjs";
+import { waterAreaTouchesPoint } from "./map-water.mjs";
 
 const SITE_LAYOUT = {
   baseEdgeInset: 150,
@@ -6,6 +7,8 @@ const SITE_LAYOUT = {
   spread: 1.34,
   collisionPadding: 8,
   separationPasses: 140,
+  waterPadding: 8,
+  waterSearchSteps: 96,
 };
 
 const CITY_TIERS = [
@@ -84,6 +87,29 @@ function initialPosition(site, ageRank, width, height) {
   }, width, height);
 }
 
+function townTouchesWater(site, position, water) {
+  const radius = cityTier(site.messageCount).radius + SITE_LAYOUT.waterPadding;
+  return water.some((area) => waterAreaTouchesPoint(area, position, radius));
+}
+
+function landPosition(site, preferred, width, height, water) {
+  if (!water.length || !townTouchesWater(site, preferred, water)) return preferred;
+
+  const hash = hashString(site.siteKey);
+  const angleOffset = (hash % 6283) / 1000;
+  const step = Math.max(20, Math.min(width, height) / 36);
+  for (let index = 1; index <= SITE_LAYOUT.waterSearchSteps; index += 1) {
+    const ring = Math.ceil(index / 8);
+    const angle = angleOffset + (index % 8) * Math.PI / 4;
+    const candidate = clampPosition({
+      x: preferred.x + Math.cos(angle) * ring * step,
+      y: preferred.y + Math.sin(angle) * ring * step,
+    }, width, height);
+    if (!townTouchesWater(site, candidate, water)) return candidate;
+  }
+  return preferred;
+}
+
 function collisionPush(siteA, siteB, posA, posB) {
   const radiusA = cityTier(siteA.messageCount).radius;
   const radiusB = cityTier(siteB.messageCount).radius;
@@ -104,11 +130,12 @@ function collisionPush(siteA, siteB, posA, posB) {
   return { dx: (scale - 1) * dx / 2, dy: (scale - 1) * dy / 2 };
 }
 
-export function layoutMapSites(sites, width, height) {
+export function layoutMapSites(sites, width, height, world = {}) {
+  const water = Array.isArray(world.water) ? world.water : [];
   const ranks = buildAgeRanks(sites);
   const positions = new Map(sites.map((site) => [
     site.siteKey,
-    initialPosition(site, ranks.get(site.siteKey) ?? 0, width, height),
+    landPosition(site, initialPosition(site, ranks.get(site.siteKey) ?? 0, width, height), width, height, water),
   ]));
   const anchors = new Map([...positions].map(([key, position]) => [key, { ...position }]));
 
@@ -131,6 +158,7 @@ export function layoutMapSites(sites, width, height) {
       position.x += (anchor.x - position.x) * 0.05;
       position.y += (anchor.y - position.y) * 0.05;
       Object.assign(position, clampPosition(position, width, height));
+      Object.assign(position, landPosition(site, position, width, height, water));
     }
   }
   return positions;

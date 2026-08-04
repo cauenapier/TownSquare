@@ -251,7 +251,7 @@ function renderMapEditor() {
   svg.appendChild(renderSceneryLayer(draftMapWorld));
 
   const visibleSites = allSites.filter((site) => site.verifiedAt && !site.disabled);
-  const positions = layoutMapSites(visibleSites, draftMapWorld.width, draftMapWorld.height);
+  const positions = layoutMapSites(visibleSites, draftMapWorld.width, draftMapWorld.height, draftMapWorld);
   const edges = createSvgElement("g", { class: "map-edges", "aria-hidden": "true" });
   const mapEdges = buildMapEdges(visibleSites);
   if (!mapGesture) mapEditorRoadRoutes = routeMapRoads(mapEdges, visibleSites, positions, draftMapWorld);

@@ -6,7 +6,9 @@ import { routeMapRoads } from "./map-roads.mjs";
 import { renderSceneryLayer } from "./map-scenery.mjs";
 import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH, validateMapWorld } from "../lib/map-world.mjs";
 
-const MIN_ZOOM = 0.55;
+// At 1× the 3:2 map frame shows the complete world. Going lower only exposes
+// space outside that boundary, so it is intentionally not a valid map view.
+const MIN_ZOOM = 1;
 const MAX_ZOOM = 2.8;
 const ZOOM_STEP = 1.22;
 const WHEEL_ZOOM_SCALE = 0.0014;
@@ -127,7 +129,7 @@ function renderActivity(site, tier) {
 function indexSites(nextSites) {
   sites = nextSites;
   siteByKey = new Map(nextSites.map((site) => [site.siteKey, site]));
-  positionsBySiteKey = layoutMapSites(nextSites, worldWidth, worldHeight);
+  positionsBySiteKey = layoutMapSites(nextSites, worldWidth, worldHeight, mapWorld);
   mapEdges = buildMapEdges(nextSites);
   roadRoutes = routeMapRoads(mapEdges, nextSites, positionsBySiteKey, mapWorld);
 }
@@ -139,6 +141,13 @@ function buildMap() {
     "aria-label": "TownSquare network map",
   });
   const viewport = createSvgElement("g");
+  viewport.appendChild(createSvgElement("rect", {
+    class: "map-world-boundary",
+    x: 0,
+    y: 0,
+    width: worldWidth,
+    height: worldHeight,
+  }));
   viewport.appendChild(renderSceneryLayer(mapWorld));
 
   const edgeLayer = createSvgElement("g", { class: "map-edges", "aria-hidden": "true" });

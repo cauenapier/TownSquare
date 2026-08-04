@@ -7,6 +7,7 @@ const modulePromise = Promise.all([
   import("../public/map/map-scenery.mjs"),
   import("../public/lib/map-world.mjs"),
   import("../public/map/map-water.mjs"),
+  import("../public/map/map-layout.mjs"),
 ]);
 
 test("overlapping water paths merge into one area", async () => {
@@ -42,6 +43,41 @@ test("water validation migrates strokes and preserves local cutouts", async () =
     cutouts: [],
   });
   assert.deepEqual(result.world.water[1].cutouts, [{ x: 350, y: 300, radius: 20, order: 1 }]);
+});
+
+test("town layout chooses land when its deterministic position is in water", async () => {
+  const [, , , , { waterAreaTouchesPoint }, { layoutMapSites, cityTier }] = await modulePromise;
+  const sites = [{ siteKey: "waterside-town", name: "Waterside Town", messageCount: 20, verifiedAt: 1 }];
+  const width = 1800;
+  const height = 1200;
+  const withoutWater = layoutMapSites(sites, width, height);
+  const initial = withoutWater.get(sites[0].siteKey);
+  const world = {
+    width,
+    height,
+    props: [],
+    water: [{
+      type: "water",
+      paths: [{ width: 180, points: [initial], order: 0 }],
+      cutouts: [],
+    }],
+  };
+  const position = layoutMapSites(sites, width, height, world).get(sites[0].siteKey);
+
+  assert.notDeepEqual(position, initial);
+  assert.equal(waterAreaTouchesPoint(world.water[0], position, cityTier(sites[0].messageCount).radius + 8), false);
+});
+
+test("water cutouts are treated as dry land", async () => {
+  const [, , , , { waterAreaTouchesPoint }] = await modulePromise;
+  const area = {
+    type: "water",
+    paths: [{ width: 100, points: [{ x: 300, y: 300 }], order: 0 }],
+    cutouts: [{ x: 300, y: 300, radius: 80, order: 1 }],
+  };
+
+  assert.equal(waterAreaTouchesPoint(area, { x: 300, y: 300 }, 20), false);
+  assert.equal(waterAreaTouchesPoint(area, { x: 365, y: 300 }, 20), true);
 });
 
 test("map world accepts 2,000 props as its safety limit", async () => {

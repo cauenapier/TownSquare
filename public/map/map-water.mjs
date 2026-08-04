@@ -69,7 +69,13 @@ export function waterPathsOverlap(first, second) {
 }
 
 export function waterAreaTouchesPoint(area, point, radius = 0) {
-  return area.paths.some((path) => waterPathTouchesPoint(path, point, radius));
+  return area.paths.some((path) => {
+    if (!waterPathTouchesPoint(path, point, radius)) return false;
+    return !area.cutouts.some((cutout) => (
+      cutout.order > path.order
+      && Math.hypot(point.x - cutout.x, point.y - cutout.y) + radius <= cutout.radius
+    ));
+  });
 }
 
 function waterAreasOverlap(first, second) {
