@@ -1281,7 +1281,7 @@ function publicMapSite(site) {
 function countVerifiedMapSites() {
   let count = 0;
   for (const site of sitesByKey.values()) {
-    if (site.verifiedAt && !site.disabled) count += 1;
+    if (site.verifiedAt && !site.disabled && !site.hiddenFromMap) count += 1;
   }
   return count;
 }
@@ -1302,7 +1302,7 @@ function ensureMapWorldGrown(siteCount = countVerifiedMapSites()) {
 
 function handleMap(req, res) {
   const sites = Array.from(sitesByKey.values())
-    .filter((site) => site.verifiedAt && !site.disabled)
+    .filter((site) => site.verifiedAt && !site.disabled && !site.hiddenFromMap)
     .map(publicMapSite);
 
   const coreMap = { sites, world: resolvedMapWorld() };
@@ -1925,6 +1925,7 @@ function serviceAdminSite(site) {
 
   return {
     ...publicSite(site),
+    hiddenFromMap: Boolean(site.hiddenFromMap),
     updatedAt: site.updatedAt,
     activeVisitors: scene ? countActiveVisitors(scene) : 0,
     visitorStats: visitorStats.getStats(site.siteKey),
@@ -2141,6 +2142,11 @@ const SERVICE_ADMIN_ACTIONS = {
     if (site.disabled) {
       closeSiteScene(site.siteKey, 4003, CLOSE_REASON.SITE_DISABLED);
     }
+    return { site: serviceAdminSite(site) };
+  },
+  setSiteMapHidden(req, site, body) {
+    site.hiddenFromMap = Boolean(body.hidden);
+    touchSite(site);
     return { site: serviceAdminSite(site) };
   },
   setChatDisabled(req, site, body) {
@@ -2692,6 +2698,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       connections: sanitizeConnections(connections),
       messageBoard: sanitizeMessageBoard(messageBoard),
       disabled: false,
+      hiddenFromMap: false,
       chatDisabled: false,
       botProtection: true,
       // Marks that the on-by-default flip has already been applied, so the
@@ -2801,6 +2808,10 @@ function normalizeSiteRecord(site) {
   }
   if (typeof site.supporter !== "boolean") {
     site.supporter = false;
+    changed = true;
+  }
+  if (typeof site.hiddenFromMap !== "boolean") {
+    site.hiddenFromMap = false;
     changed = true;
   }
   if (site.botProtectionDefaulted !== true) {

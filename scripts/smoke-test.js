@@ -1024,6 +1024,23 @@ async function assertServiceAdminCanManageSites(hostedA, hostedB) {
   );
   assert(!JSON.stringify(allTraffic).includes("browserId"), "aggregate traffic leaked visitor identities");
 
+  const removedFromMap = await serviceAdminApi("/api/service-admin/action", {
+    action: "setSiteMapHidden",
+    siteKey: hostedB.site.siteKey,
+    hidden: true,
+  });
+  assert(removedFromMap.site.hiddenFromMap === true, "service admin did not hide the site from the map");
+  const mapWithoutB = await fetch(`${HTTP_ORIGIN}/api/map`).then((response) => response.json());
+  assert(
+    !mapWithoutB.sites.some((site) => site.siteKey === hostedB.site.siteKey),
+    "a map-hidden site was still included in the public map",
+  );
+  const listedAfterMapRemoval = await serviceAdminApi("/api/service-admin/sites");
+  assert(
+    listedAfterMapRemoval.sites.some((site) => site.siteKey === hostedB.site.siteKey),
+    "removing a site from the map removed its registration",
+  );
+
   const reset = await serviceAdminApi("/api/service-admin/action", {
     action: "resetAdminToken",
     siteKey: hostedB.site.siteKey,

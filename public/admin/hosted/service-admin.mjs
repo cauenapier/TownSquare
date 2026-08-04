@@ -250,7 +250,7 @@ function renderMapEditor() {
   });
   svg.appendChild(renderSceneryLayer(draftMapWorld));
 
-  const visibleSites = allSites.filter((site) => site.verifiedAt && !site.disabled);
+  const visibleSites = allSites.filter((site) => site.verifiedAt && !site.disabled && !site.hiddenFromMap);
   const positions = layoutMapSites(visibleSites, draftMapWorld.width, draftMapWorld.height, draftMapWorld);
   const edges = createSvgElement("g", { class: "map-edges", "aria-hidden": "true" });
   const mapEdges = buildMapEdges(visibleSites);
@@ -774,6 +774,14 @@ function createActionMenu(site) {
     void action("setChatDisabled", site.siteKey, { disabled: !site.chatDisabled });
   });
 
+  const toggleMap = document.createElement("button");
+  toggleMap.type = "button";
+  toggleMap.textContent = site.hiddenFromMap ? "Add to map" : "Remove from map";
+  toggleMap.addEventListener("click", () => {
+    menu.open = false;
+    void action("setSiteMapHidden", site.siteKey, { hidden: !site.hiddenFromMap });
+  });
+
   const reset = document.createElement("button");
   reset.type = "button";
   reset.textContent = "Reset token";
@@ -807,7 +815,7 @@ function createActionMenu(site) {
     void action("setSitePlus", site.siteKey, { plus: !site.plus });
   });
 
-  panel.append(toggleSite, toggleChat, toggleSupporter, togglePlus, reset, remove);
+  panel.append(toggleSite, toggleChat, toggleMap, toggleSupporter, togglePlus, reset, remove);
   menu.append(panel);
 
   menu.addEventListener("toggle", () => {
@@ -1581,6 +1589,7 @@ function renderSites(sites, platform = null) {
     name: site.name,
     verifiedAt: site.verifiedAt,
     disabled: site.disabled,
+    hiddenFromMap: site.hiddenFromMap,
     messageCount: site.messageCount,
     supporter: site.supporter,
   })));
