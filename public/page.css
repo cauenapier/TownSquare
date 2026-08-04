@@ -627,6 +627,60 @@ body {
   white-space: nowrap;
 }
 
+.hosted-contact-menu {
+  position: relative;
+}
+
+.hosted-contact-trigger {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.hosted-contact-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 14px 30px -18px rgba(42, 41, 38, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s;
+}
+
+.hosted-contact-menu:hover .hosted-contact-dropdown,
+.hosted-contact-menu:focus-within .hosted-contact-dropdown,
+.hosted-contact-dropdown.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.hosted-contact-option {
+  display: block;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 0.86rem var(--font);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.hosted-contact-option:hover,
+.hosted-contact-option:focus-visible {
+  background: var(--accent-soft);
+}
+
 .hosted-quiet-button {
   min-height: 34px;
   border: 0;

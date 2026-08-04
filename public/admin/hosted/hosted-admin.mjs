@@ -41,6 +41,9 @@ const rememberMeEl = document.getElementById("login-remember");
 const loginSubmitButton = document.getElementById("login-submit");
 const loginStatusEl = document.getElementById("login-status");
 const signOutButton = document.getElementById("sign-out");
+const contactTrigger = document.getElementById("contact-trigger");
+const contactDropdown = document.getElementById("contact-dropdown");
+const copyContactEmailButton = document.getElementById("copy-contact-email");
 const statusEl = document.getElementById("admin-status");
 const metaEl = document.getElementById("site-meta");
 const siteDetailsForm = document.getElementById("site-details-form");
@@ -1105,6 +1108,27 @@ counterForm.addEventListener("input", (event) => {
 bindCopy(copyCounterButton, { text: () => counterSnippetEl.value, source: counterSnippetEl });
 bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
 bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnippetEl });
+bindCopy(copyContactEmailButton, { text: () => "contact@cauenapier.com", copiedLabel: "Copied!" });
+
+contactTrigger?.addEventListener("click", () => {
+  const isOpen = contactDropdown.classList.toggle("is-open");
+  contactTrigger.setAttribute("aria-expanded", String(isOpen));
+});
+
+document.addEventListener("click", (event) => {
+  if (!contactDropdown?.classList.contains("is-open")) return;
+  if (event.target === contactTrigger || contactDropdown.contains(event.target)) return;
+  contactDropdown.classList.remove("is-open");
+  contactTrigger.setAttribute("aria-expanded", "false");
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && contactDropdown?.classList.contains("is-open")) {
+    contactDropdown.classList.remove("is-open");
+    contactTrigger.setAttribute("aria-expanded", "false");
+    contactTrigger.focus();
+  }
+});
 
 siteDetailsForm.addEventListener("input", () => {
   siteDetailsTouched = true;
