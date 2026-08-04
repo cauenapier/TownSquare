@@ -4,6 +4,7 @@ import { activityLevel, cityTier, layoutMapSites } from "./map-layout.mjs";
 import { createCityMarker, renderMapEdge, supporterStarSize } from "./map-render.mjs";
 import { routeMapRoads } from "./map-roads.mjs";
 import { renderSceneryLayer } from "./map-scenery.mjs";
+import { flattenWaterPath } from "./map-water.mjs";
 import { MAP_WORLD_MIN_HEIGHT, MAP_WORLD_MIN_WIDTH, validateMapWorld } from "../lib/map-world.mjs";
 
 // At 1× the 3:2 map frame shows the complete world. Going lower only exposes
@@ -389,6 +390,39 @@ function siteFootprint(site) {
   };
 }
 
+// Padding around a prop's glyph (mountain/tree) so its bounds include what's drawn there.
+const PROP_GLYPH_PADDING = 50;
+
+// Scenery (mountains, trees, water) the map operator has painted onto the world, so
+// reset/initial view never crops it out even where it extends past the towns.
+function sceneryBounds(world) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const prop of world.props) {
+    minX = Math.min(minX, prop.x - PROP_GLYPH_PADDING);
+    minY = Math.min(minY, prop.y - PROP_GLYPH_PADDING);
+    maxX = Math.max(maxX, prop.x + PROP_GLYPH_PADDING);
+    maxY = Math.max(maxY, prop.y + PROP_GLYPH_PADDING);
+  }
+
+  for (const area of world.water) {
+    for (const path of area.paths) {
+      const halfWidth = path.width / 2;
+      for (const point of flattenWaterPath(path)) {
+        minX = Math.min(minX, point.x - halfWidth);
+        minY = Math.min(minY, point.y - halfWidth);
+        maxX = Math.max(maxX, point.x + halfWidth);
+        maxY = Math.max(maxY, point.y + halfWidth);
+      }
+    }
+  }
+
+  return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+}
+
 function siteContentBounds() {
   let minX = Infinity;
   let minY = Infinity;
@@ -405,6 +439,14 @@ function siteContentBounds() {
     maxY = Math.max(maxY, position.y + below);
   }
 
+  const scenery = sceneryBounds(mapWorld);
+  if (scenery) {
+    minX = Math.min(minX, scenery.minX);
+    minY = Math.min(minY, scenery.minY);
+    maxX = Math.max(maxX, scenery.maxX);
+    maxY = Math.max(maxY, scenery.maxY);
+  }
+
   if (!Number.isFinite(minX)) {
     const inset = RESET_MARGIN * 2;
     return {
@@ -415,7 +457,12 @@ function siteContentBounds() {
     };
   }
 
-  return { minX, minY, maxX, maxY };
+  return {
+    minX: Math.max(0, minX),
+    minY: Math.max(0, minY),
+    maxX: Math.min(worldWidth, maxX),
+    maxY: Math.min(worldHeight, maxY),
+  };
 }
 
 function resetView() {
