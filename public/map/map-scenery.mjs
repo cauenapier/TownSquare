@@ -23,7 +23,18 @@ function renderWater(world) {
       const cutouts = area.cutouts.filter((cutout) => cutout.order > stroke.order);
       if (cutouts.length) {
         const maskId = `map-water-mask-${areaIndex}-${pathIndex}`;
-        const mask = createSvgElement("mask", { id: maskId, maskUnits: "userSpaceOnUse" });
+        // x/y/width/height must be explicit: the SVG default mask region (-10%/120%)
+        // resolves against the current viewBox, so it shrinks as the map zooms in and
+        // clips masked strokes to a blank rectangle once the region no longer covers
+        // the whole world.
+        const mask = createSvgElement("mask", {
+          id: maskId,
+          maskUnits: "userSpaceOnUse",
+          x: 0,
+          y: 0,
+          width: world.width,
+          height: world.height,
+        });
         mask.appendChild(createSvgElement("rect", { x: 0, y: 0, width: world.width, height: world.height, fill: "white" }));
         mask.appendChild(createSvgElement("path", { d: cutoutPath(cutouts), fill: "black" }));
         const definitions = createSvgElement("defs");
