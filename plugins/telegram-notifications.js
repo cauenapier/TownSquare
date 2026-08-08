@@ -19,6 +19,21 @@ function buildMessage({ site, visitor, message }) {
   ].join("\n");
 }
 
+function buildJoinMessage({ site, visitor, joinedAt }) {
+  const siteLabel = site ? `${site.name} (${site.origin})` : "default scene";
+  return [
+    "*TownSquare visitor joined*",
+    `Site: ${escapeMarkdown(siteLabel)}`,
+    `Visitor: ${escapeMarkdown(String(visitor.id))}`,
+    `Browser: ${escapeMarkdown(visitor.browserId)}`,
+    `At: ${escapeMarkdown(new Date(joinedAt).toISOString())}`,
+  ].join("\n");
+}
+
+function normalizeOrigin(origin) {
+  return String(origin || "").trim().toLowerCase();
+}
+
 function createNotificationBudget(maxPerMinute) {
   let windowStart = 0;
   let windowCount = 0;
@@ -35,23 +50,38 @@ function createNotificationBudget(maxPerMinute) {
   };
 }
 
-function createTelegramNotificationsPlugin({ botToken = "", chatId = "", maxPerMinute = 20 } = {}) {
+function createTelegramNotificationsPlugin({
+  botToken = "",
+  chatId = "",
+  maxPerMinute = 20,
+  joinOrigins = [],
+  joinMaxPerMinute = 20,
+} = {}) {
   const token = String(botToken).trim();
   const target = String(chatId).trim();
-  const allowNotification = createNotificationBudget(maxPerMinute);
+  const allowMessageNotification = createNotificationBudget(maxPerMinute);
+  const allowJoinNotification = createNotificationBudget(joinMaxPerMinute);
+  const joinOriginSet = new Set(joinOrigins.map(normalizeOrigin).filter(Boolean));
 
   return {
     name: "telegram-notifications",
     onMessage(event) {
       if (!token || !target) return;
       const at = event.message?.at;
-      if (!allowNotification(typeof at === "number" ? at : Date.now())) return;
-      void sendNotification(token, target, event);
+      if (!allowMessageNotification(typeof at === "number" ? at : Date.now())) return;
+      void sendNotification(token, target, buildMessage(event));
+    },
+    onVisitorJoin(event) {
+      if (!token || !target || joinOriginSet.size === 0) return;
+      if (!joinOriginSet.has(normalizeOrigin(event.site?.origin))) return;
+      const at = event.joinedAt;
+      if (!allowJoinNotification(typeof at === "number" ? at : Date.now())) return;
+      void sendNotification(token, target, buildJoinMessage(event));
     },
   };
 }
 
-async function sendNotification(token, chatId, event) {
+async function sendNotification(token, chatId, text) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TELEGRAM_API_TIMEOUT_MS);
 
@@ -61,7 +91,7 @@ async function sendNotification(token, chatId, event) {
       headers: { "content-type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         chat_id: chatId,
-        text: buildMessage(event),
+        text,
         parse_mode: "MarkdownV2",
         disable_web_page_preview: true,
       }),

@@ -10,6 +10,13 @@ function readLimit(name, fallback, env = process.env) {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
 }
 
+function readOrigins(name, env = process.env) {
+  return String(env[name] || "")
+    .split(/[,\s]+/)
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 function registerPublicPlugins(env = process.env, logger = console) {
   // Build each plugin lazily so a throw constructing one doesn't prevent the
   // others from registering. registerPlugin also throws on an invalid plugin
@@ -20,6 +27,8 @@ function registerPublicPlugins(env = process.env, logger = console) {
       botToken: env.TELEGRAM_BOT_TOKEN,
       chatId: env.TELEGRAM_CHAT_ID,
       maxPerMinute: readLimit("TELEGRAM_MAX_NOTIFICATIONS_PER_MIN", 20, env),
+      joinOrigins: readOrigins("TELEGRAM_JOIN_NOTIFY_ORIGINS", env),
+      joinMaxPerMinute: readLimit("TELEGRAM_JOIN_MAX_NOTIFICATIONS_PER_MIN", 20, env),
     }),
     () => createSoccerBallPlugin(),
     () => createWeatherPlugin(),
