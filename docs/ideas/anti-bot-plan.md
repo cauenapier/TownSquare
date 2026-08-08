@@ -15,6 +15,10 @@ Nginx examples, and `scripts/bot-replay-test.js`:
 - per-scene connection limits and optional reverse-proxy join limits;
 - optional per-site proof-of-work before joining;
 - a minimum human chat delay after joining;
+- a minimum connected duration before a join counts toward site activity
+  (`lastSeenAt`/`verifiedAt`, monthly visitor stats, `onVisitorJoin`), so a
+  bare handshake — a bot, or a crawler re-executing a stale page snapshot —
+  cannot keep an abandoned site looking active on the public map;
 - a global Telegram notification budget;
 - browser identity secrets, persisted site blocks, mutes, and hidden visitors.
 

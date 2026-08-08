@@ -232,6 +232,13 @@ Payload hooks are `extendSiteConfig`, `extendAdminPanel`, `extendMapData`, and
 `false` from `onMessage` or `onSocketMessage` stops the action. Plugin failures
 are logged and otherwise fail open so core self-hosted behavior continues.
 
+`onVisitorJoin` does not fire at connection time. It fires `MIN_VISIT_DURATION_MS`
+(default 3000ms) after an identity joins, and only if that identity is still
+connected then — a bare handshake from a bot or a stale crawler render never
+reaches it. Site activity (`lastSeenAt`/`verifiedAt`, monthly visitor stats)
+waits on the same gate. Presence, movement, and chat are unaffected; only this
+hook and site-activity bookkeeping are deferred.
+
 The real contract fixture is `server/fixtures/feature-plugin.js`; its API and
 WebSocket client is `scripts/plugin-smoke-test.js` (`npm run smoke:plugins`).
 That smoke test spawns its own server and injects the fixture via

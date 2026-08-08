@@ -136,6 +136,14 @@ const DEFAULT_CHAT_THROTTLE_MS = 500;
 const MAX_CHAT_THROTTLE_MS = 30000;
 const MAX_MODERATION_LOG = 50;
 const RECONNECT_GRACE_MS = 1500;
+// A bare join (handshake, then immediate disconnect) can come from a bot or a
+// stale crawler re-executing a page snapshot rather than a real visitor. Site
+// activity (lastSeenAt/verifiedAt, monthly visitor counts, the join
+// notification hook) is only credited once an identity has stayed connected
+// this long — comfortably above RECONNECT_GRACE_MS so a quick same-site page
+// navigation doesn't reset it. Presence itself (appearing to other visitors)
+// is unaffected; this only gates server-side "real visit" bookkeeping.
+const MIN_VISIT_DURATION_MS = readLimit("MIN_VISIT_DURATION_MS", 3000);
 const INACTIVE_DISCONNECT_MS = Number(process.env.INACTIVE_DISCONNECT_MS || 30 * 60 * 1000);
 const INACTIVE_CHECK_INTERVAL_MS = Number(process.env.INACTIVE_CHECK_INTERVAL_MS || 60000);
 const HEARTBEAT_INTERVAL_MS = 30000;
@@ -394,7 +402,7 @@ function syncClientSceneProps(client, message) {
   client.propsById = new Map(props.map((prop) => [prop.id, prop]));
 }
 
-/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,widgetVisible:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
+/** @returns {{id:number,browserId:string,browserSecret:string,x:number,pose:string|null,propId:string|null,displayName:string,color:string,readingLabel:string,readingUrl:string,readingActive:boolean,widgetVisible:boolean,isOwner:boolean,clients:Set<any>,joined:boolean,leaveTimer:any,visitConfirmTimer:any,inactiveKick:boolean,lastActivityAt:number,awaySince:number|null,messages:Array<{text:string,at:number}>}} */
 function createIdentity(id, browserId, x) {
   return {
     id,
@@ -414,6 +422,7 @@ function createIdentity(id, browserId, x) {
     clients: new Set(),
     joined: false,
     leaveTimer: null,
+    visitConfirmTimer: null,
     inactiveKick: false,
     lastActivityAt: 0,
     joinedAt: 0,
@@ -3294,6 +3303,10 @@ let nextConnectionId = 1;
 
 function finalizeDisconnect(identity) {
   if (identity.clients.size > 0) return;
+  if (identity.visitConfirmTimer) {
+    clearTimeout(identity.visitConfirmTimer);
+    identity.visitConfirmTimer = null;
+  }
   const scene = identity.scene;
   // The scene may have been torn down (site disabled/deleted) during the
   // reconnect-grace window; if so there's nothing left to remove or notify.
@@ -3585,6 +3598,26 @@ function handleInit(client, message) {
 
   logJoin(client, identity);
 
+  if (!isShadowBlocked(site, identity.browserId)) {
+    broadcastIdentity(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, identity, { exceptConnectionId: client.connectionId });
+  }
+  syncIdentityAwayState(identity, joinedAt);
+
+  identity.visitConfirmTimer = setTimeout(() => {
+    identity.visitConfirmTimer = null;
+    // The visitor may have already disconnected and be sitting in the
+    // reconnect-grace window (finalizeDisconnect hasn't run yet, so it hasn't
+    // cancelled this timer) — recheck liveness rather than trust that alone.
+    if (identity.clients.size === 0) return;
+    confirmVisit(site, identity, joinedAt);
+  }, MIN_VISIT_DURATION_MS);
+}
+
+// Credits a join as a real visit once an identity has stayed connected for at
+// least MIN_VISIT_DURATION_MS. finalizeDisconnect cancels this if the visitor
+// leaves first, so a bare handshake (bot, stale crawler render) never touches
+// site activity, map verification, or visitor stats.
+function confirmVisit(site, identity, joinedAt) {
   if (site) {
     const now = Date.now();
     const firstVerify = !site.verifiedAt;
@@ -3603,10 +3636,6 @@ function handleInit(client, message) {
     visitorStats.recordVisit(site.siteKey, identity.browserId, now);
   }
 
-  if (!isShadowBlocked(site, identity.browserId)) {
-    broadcastIdentity(scene, { type: MSG.JOIN, peer: snapshotIdentity(identity) }, identity, { exceptConnectionId: client.connectionId });
-  }
-  syncIdentityAwayState(identity, joinedAt);
   if (!isShadowBlocked(site, identity.browserId)) {
     plugins.run("onVisitorJoin", pluginContext(site, {
       visitor: pluginVisitor(identity),
