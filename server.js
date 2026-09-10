@@ -834,10 +834,17 @@ function buildEmbedSnippet(req, site) {
   // The style.css link serves site-specific palette tokens dynamically, so
   // appearance changes are live without requiring manual updates. See the admin
   // panel for options to override with custom CSS.
+  //
+  // The mount carries a `max-width` because the widget's scene and composer are
+  // tuned for a column, not a full-bleed content area: its compact layout keys
+  // off `@container (max-width: 460px)`, and past ~500px the stage flattens to a
+  // stripe and the composer stretches into a broken-looking bar. Hosts that want
+  // it wider (or narrower, or edge-to-edge) just edit or drop the style — the
+  // host page owns placement.
   return `<link rel="preconnect" href="${serverOrigin}" crossorigin />
 <link rel="stylesheet" href="${serverOrigin}/widget.css" />
 <link rel="stylesheet" href="${serverOrigin}/api/sites/${site.siteKey}/style.css" />
-<div id="townsquare-root"></div>
+<div id="townsquare-root" style="max-width:460px;margin-inline:auto"></div>
 <script type="module" async>
   import { mountTownSquare } from "${serverOrigin}/townsquare.mjs";
 

@@ -48,7 +48,7 @@ separate `TownSquare_landingpage` repository. See
 
 ```html
 <link rel="stylesheet" href="https://townsquare.example/widget.css" />
-<div id="townsquare-root"></div>
+<div id="townsquare-root" style="max-width:460px;margin-inline:auto"></div>
 <script type="module">
   import { mountTownSquare } from "https://townsquare.example/townsquare.mjs";
 
@@ -68,6 +68,13 @@ The host page owns placement. TownSquare owns everything inside
 `#townsquare-root`. Palette tokens can be overridden by host CSS; the supported
 tokens and defaults are defined in [`public/tokens.css`](public/tokens.css) and
 [`public/lib/site-config-core.mjs`](public/lib/site-config-core.mjs).
+
+Give the mount a `max-width` (the generated snippet uses `460px`, centered). The
+widget's scene and composer are tuned for a column: the compact layout keys off
+`@container (max-width: 460px)`, and in a full-width content area (much past
+~500px) the stage flattens to a thin stripe and the composer stretches into a
+broken-looking bar. Widen, narrow, or remove the constraint to taste — but set
+one.
 
 For a read-only presence pill, use `mountTownSquareCounter` from
 `/townsquare-counter.mjs`. Its option contract is documented next to the
