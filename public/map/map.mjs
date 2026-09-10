@@ -99,7 +99,7 @@ function originLabel(origin) {
 function siteAriaLabel(site) {
   const visitors = Math.max(0, Number(site.activeVisitors) || 0);
   const supporter = site.supporter ? ", supporter" : "";
-  const inactive = site.inactiveFor30Days ? ", inactive for more than 30 days" : "";
+  const inactive = site.inactiveFor30Days ? `, inactive for ${site.inactiveDays} days and fading from the map` : "";
   return `${site.name}, ${cityTier(site.messageCount).name}${supporter}${inactive}, ${visitors} active visitor${visitors === 1 ? "" : "s"}, ${originLabel(site.origin)}`;
 }
 
@@ -180,6 +180,7 @@ function renderSiteNode(site) {
   const group = createSvgElement("g", {
     class: `map-node${site.inactiveFor30Days ? " is-inactive" : ""}${site.siteKey === selectedSiteKey ? " is-selected" : ""}`,
     transform: `translate(${x} ${y})`,
+    style: `--map-inactivity: ${Math.max(0, Math.min(1, Number(site.inactivityProgress) || 0))}`,
     tabindex: "0",
     role: "button",
     "data-site-key": site.siteKey,
@@ -275,6 +276,9 @@ function updateDetail(site) {
   detailOrigin.textContent = site.origin;
   detailOrigin.href = site.origin;
   detailInactivity.hidden = !site.inactiveFor30Days;
+  detailInactivity.textContent = site.inactiveFor30Days
+    ? `Inactive for ${site.inactiveDays} days · fading from the map`
+    : "";
   detailVisit.href = site.origin;
 }
 

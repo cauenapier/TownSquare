@@ -1154,6 +1154,15 @@ async function assertServiceAdminCanEditMap() {
     publicBefore.sites.every((site) => typeof site.inactiveFor30Days === "boolean"),
     "public map sites did not include 30-day inactivity state",
   );
+  assert(
+    publicBefore.sites.every((site) => Number.isInteger(site.inactiveDays) && site.inactiveDays < 60),
+    "public map included a site outside the 60-day inactivity window",
+  );
+  assert(
+    publicBefore.sites.every((site) => Number.isFinite(site.inactivityProgress)
+      && site.inactivityProgress >= 0 && site.inactivityProgress < 1),
+    "public map sites did not include a valid inactivity fade value",
+  );
   assert(Array.isArray(publicBefore.world?.props), "public map world did not include props");
   assert(Array.isArray(publicBefore.world?.water), "public map world did not include water strokes");
   assert(typeof publicBefore.version === "string" && publicBefore.version.length > 0, "public map omitted its version");

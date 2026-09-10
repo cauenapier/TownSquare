@@ -2932,8 +2932,11 @@ body {
 }
 
 .map-node {
+  --map-inactivity: 0;
   cursor: pointer;
   outline: none;
+  opacity: calc(1 - var(--map-inactivity) * 0.88);
+  transition: opacity 180ms ease;
 }
 
 .map-node__dot {
@@ -2944,7 +2947,15 @@ body {
 }
 
 .map-node.is-inactive .map-node__dot {
-  fill: var(--ink-mute);
+  fill: color-mix(in oklab, var(--ink-mute) 68%, var(--page) 32%);
+  stroke: color-mix(in oklab, var(--ink-soft) 72%, var(--page) 28%);
+  stroke-dasharray: 8 4 2 5;
+  filter: grayscale(1) sepia(0.22);
+}
+
+.map-node.is-inactive .map-node__label,
+.map-node.is-inactive .map-node__supporter-star {
+  filter: grayscale(1) sepia(0.22);
 }
 
 .map-node__activity {

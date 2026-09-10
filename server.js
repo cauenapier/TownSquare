@@ -16,6 +16,7 @@ const { createPlausibleProxy } = require("./server/plausible");
 const { createStaticFiles } = require("./server/static-files");
 const { makeBucketStore } = require("./server/rate-limit");
 const { SITE_REGISTRY_VERSION, createSitesWriter } = require("./server/sites-store");
+const { mapSiteLifecycle } = require("./server/map-site-lifecycle");
 const {
   clampPosition,
   sanitizeBrowserId,
@@ -1273,8 +1274,9 @@ function handleRegisterSite(req, res) {
   });
 }
 
-function publicMapSite(site) {
+function publicMapSite(site, now = Date.now()) {
   const scene = scenes.get(site.siteKey);
+  const lifecycle = mapSiteLifecycle(site, now);
   return {
     siteKey: site.siteKey,
     name: site.name,
@@ -1283,25 +1285,36 @@ function publicMapSite(site) {
     lastSeenAt: site.lastSeenAt,
     messageCount: site.messageCount || 0,
     activeVisitors: scene ? countActiveVisitors(scene) : 0,
-    inactiveFor30Days: isInactiveVerifiedSite(site, visitorStats.getStats(site.siteKey).monthly),
+    inactiveDays: lifecycle.inactiveDays,
+    inactiveFor30Days: lifecycle.inactiveFor30Days,
+    inactivityProgress: lifecycle.fadeProgress,
     connections: getConnections(site),
     supporter: Boolean(site.supporter),
   };
 }
 
-function countVerifiedMapSites() {
+function isPublicMapSite(site, now = Date.now()) {
+  return Boolean(
+    site.verifiedAt
+    && !site.disabled
+    && !site.hiddenFromMap
+    && !mapSiteLifecycle(site, now).hiddenForInactivity
+  );
+}
+
+function countPublicMapSites(now = Date.now()) {
   let count = 0;
   for (const site of sitesByKey.values()) {
-    if (site.verifiedAt && !site.disabled && !site.hiddenFromMap) count += 1;
+    if (isPublicMapSite(site, now)) count += 1;
   }
   return count;
 }
 
-function resolvedMapWorld() {
-  return resolveMapWorld(mapWorld, countVerifiedMapSites());
+function resolvedMapWorld(now = Date.now()) {
+  return resolveMapWorld(mapWorld, countPublicMapSites(now));
 }
 
-function ensureMapWorldGrown(siteCount = countVerifiedMapSites()) {
+function ensureMapWorldGrown(siteCount = countPublicMapSites()) {
   const resolved = resolveMapWorld(mapWorld, siteCount);
   if (resolved.width <= mapWorld.width && resolved.height <= mapWorld.height) return;
   saveMapWorld({
@@ -1311,12 +1324,12 @@ function ensureMapWorldGrown(siteCount = countVerifiedMapSites()) {
   });
 }
 
-function buildPublicMapData() {
+function buildPublicMapData(now = Date.now()) {
   const sites = Array.from(sitesByKey.values())
-    .filter((site) => site.verifiedAt && !site.disabled && !site.hiddenFromMap)
-    .map(publicMapSite);
+    .filter((site) => isPublicMapSite(site, now))
+    .map((site) => publicMapSite(site, now));
 
-  const coreMap = { sites, world: resolvedMapWorld() };
+  const coreMap = { sites, world: resolvedMapWorld(now) };
   const extendedMap = plugins.extend("extendMapData", coreMap);
   const map = isPlainObject(extendedMap) ? extendedMap : coreMap;
   const structuralMap = {
