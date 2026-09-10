@@ -135,6 +135,17 @@ function createMessageStats(options = {}) {
     };
   }
 
+  /** Total messages across a caller-selected rolling window. */
+  function getCount(siteKey, windowDays, at = now()) {
+    const days = bySite.get(siteKey);
+    if (!days) return 0;
+    const boundedWindowDays = Math.min(
+      RETENTION_DAYS,
+      Math.max(1, Number.isInteger(windowDays) ? windowDays : DAILY_DAYS),
+    );
+    return sumOverWindow(days, dayIndex(at), boundedWindowDays);
+  }
+
   /** Build the serializable snapshot, pruning stale buckets as we go. */
   function snapshot(at = now()) {
     const today = dayIndex(at);
@@ -207,7 +218,7 @@ function createMessageStats(options = {}) {
   }
 
   return {
-    recordMessage, getStats, getDailySeries, getAggregateDailySeries, getAllDailyCounts, load, flush, start, stop,
+    recordMessage, getStats, getCount, getDailySeries, getAggregateDailySeries, getAllDailyCounts, load, flush, start, stop,
   };
 }
 

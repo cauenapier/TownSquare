@@ -1740,6 +1740,10 @@ body {
   gap: 12px;
 }
 
+.hosted-section-head {
+  margin-bottom: 12px;
+}
+
 .hosted-toggle {
   justify-content: flex-start;
   color: var(--ink-soft);
@@ -2563,6 +2567,12 @@ body {
 .service-stats-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.service-stats-controls {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 

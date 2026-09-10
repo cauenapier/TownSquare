@@ -27,6 +27,19 @@ test("counts messages per day, week, and month window", () => {
 
   const now = day(29, 23);
   assert.deepEqual(stats.getStats("site", now), { daily: 3, weekly: 4, monthly: 5 });
+  assert.equal(stats.getCount("site", 3, now), 3);
+  assert.equal(stats.getCount("site", 7, now), 4);
+  assert.equal(stats.getCount("site", 30, now), 5);
+});
+
+test("bounds custom message windows to retained data", () => {
+  const stats = createMessageStats();
+  stats.recordMessage("site", day(200));
+  stats.recordMessage("site", day(100));
+
+  assert.equal(stats.getCount("site", 0, day(200)), 1);
+  assert.equal(stats.getCount("site", RETENTION_DAYS + 20, day(200)), 2);
+  assert.equal(stats.getCount("missing", 30, day(200)), 0);
 });
 
 test("ignores empty site keys", () => {

@@ -1,7 +1,8 @@
 import { bindCopy } from "../../lib/ui-common.mjs";
-import { createStatusSetter, el, formatTime, safeLink } from "./hosted-common.mjs";
+import { createStatusSetter, el, formatTime, postJson, safeLink } from "./hosted-common.mjs";
 import { createAdminSession } from "./hosted-admin-session.mjs";
 import { createAdminPluginRuntime } from "./admin-plugins.mjs?v=6";
+import { buildVisitorActivityView } from "./visitor-activity-view.mjs?v=traffic-activity-v3";
 import {
   applyConfigToForm,
   applySceneConfigToForm,
@@ -102,6 +103,18 @@ const saveModerationButton = document.getElementById("save-moderation");
 const moderationStatusEl = document.getElementById("moderation-status");
 const moderationLog = document.getElementById("moderation-log");
 const pluginAddons = document.getElementById("plugin-addons");
+const statisticsTabButton = document.getElementById("statistics-tab");
+const statisticsRange = document.getElementById("statistics-range");
+const statisticsTimeZone = document.getElementById("statistics-time-zone");
+const statisticsTimeNote = document.getElementById("site-statistics-time-note");
+const statisticsStatusEl = document.getElementById("statistics-status");
+const statisticsCards = document.getElementById("site-statistics-cards");
+const statisticsMeta = document.getElementById("site-statistics-meta");
+const visitorTrendChart = document.getElementById("site-visitor-trend");
+const visitorTrendNote = document.getElementById("site-visitor-trend-note");
+const messageTrendChart = document.getElementById("site-message-trend");
+const trafficMeta = document.getElementById("site-traffic-meta");
+const trafficChart = document.getElementById("site-traffic-chart");
 const notificationsBanner = document.getElementById("notifications-banner");
 const notificationsClose = document.getElementById("notifications-close");
 const notificationsCount = document.getElementById("notifications-count");
@@ -112,6 +125,9 @@ bindStyleColorFields(customizationForm);
 bindSceneCountProse(customizationForm);
 
 let currentSite = null;
+let currentActiveVisitors = 0;
+let analyticsData = null;
+let analyticsRequestId = 0;
 let siteDetailsTouched = false;
 let siteDetailsBusy = false;
 let siteDetailsSavedMessage = "";
@@ -191,6 +207,7 @@ const tabPanels = Array.from(document.querySelectorAll(".hosted-tabpanel"));
 
 function setActiveTab(name) {
   if (!tabPanels.some((panel) => panel.dataset.tab === name)) return;
+  if (name === "statistics" && !currentSite?.plus) return;
   activeTab = name;
   adminView?.setAttribute("data-active-tab", name);
   for (const button of tabButtons) {
@@ -208,6 +225,7 @@ function setActiveTab(name) {
   } else {
     preview.destroy();
   }
+  if (name === "statistics" && currentSite) void loadSiteAnalytics();
 }
 
 for (const button of tabButtons) {
@@ -219,6 +237,168 @@ const setSiteDetailsStatus = createStatusSetter(siteDetailsStatusEl, { toggleHid
 const setCustomizationStatus = createStatusSetter(customizationStatusEl, { toggleHidden: true });
 const setConnectionsStatus = createStatusSetter(connectionsStatusEl, { toggleHidden: true });
 const setModerationStatus = createStatusSetter(moderationStatusEl, { toggleHidden: true });
+const setStatisticsStatus = createStatusSetter(statisticsStatusEl, { toggleHidden: true });
+
+const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+statisticsTimeZone.options[0].textContent = `Browser local (${browserTimeZone})`;
+
+function chartDate(dateKey) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function formatChartDay(dateKey) {
+  const date = chartDate(dateKey);
+  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function formatChartDayLabel(dateKey) {
+  const date = chartDate(dateKey);
+  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+  const calendarDay = date
+    .toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    .replace(/\s+/gu, "\u00a0");
+  return `${weekday}\n${calendarDay}`;
+}
+
+function renderStatsBarChart(container, series, label) {
+  container.replaceChildren();
+  const entries = Array.isArray(series) ? series : [];
+  const maxCount = Math.max(1, ...entries.map((entry) => Number(entry.count) || 0));
+  const labelEvery = entries.length <= 14 ? 1 : Math.ceil(entries.length / 7);
+  container.classList.toggle("service-stats-chart--scroll", entries.length > 7);
+  container.setAttribute(
+    "aria-label",
+    `${label}. ${entries.map((entry) => `${formatChartDay(entry.date)}: ${entry.count || 0}`).join(", ")}`,
+  );
+
+  for (const [index, entry] of entries.entries()) {
+    const count = Number(entry.count) || 0;
+    const labeled = index % labelEvery === 0 || index === entries.length - 1;
+    const wrap = document.createElement("div");
+    wrap.className = "service-stats-chart__bar-wrap";
+    wrap.title = `${formatChartDay(entry.date)}: ${count}`;
+
+    const value = document.createElement("span");
+    value.className = "service-stats-chart__value";
+    value.textContent = labeled ? String(count) : "";
+    const bar = document.createElement("div");
+    bar.className = "service-stats-chart__bar";
+    bar.style.height = `${Math.max(4, Math.round((count / maxCount) * 120))}px`;
+    const day = document.createElement("span");
+    day.className = "service-stats-chart__label";
+    day.textContent = labeled ? formatChartDayLabel(entry.date) : "";
+    wrap.append(value, bar, day);
+    container.append(wrap);
+  }
+}
+
+function formatVisitorAverage(value) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function renderTraffic(activity) {
+  trafficChart.replaceChildren();
+  const view = buildVisitorActivityView(activity);
+  trafficMeta.textContent = `Last ${view.windowDays} days · ${view.timeZone}. Bar height is relative to this site's busiest average hour.`;
+  if (view.peakAverage === 0) {
+    trafficChart.append(el("p", {
+      class: "hosted-note service-traffic-dialog__empty",
+      text: "No hourly visitor activity has been recorded in this range.",
+    }));
+    return;
+  }
+
+  const peak = view.rows
+    .flatMap((row) => row.hours.map((slot) => ({ ...slot, day: row.name })))
+    .find((slot) => slot.average === view.peakAverage);
+  const summary = el("p", {
+    class: "service-traffic-dialog__summary",
+    text: `Busiest: ${peak.day} at ${String(peak.hour).padStart(2, "0")}:00 ${view.timeZone} · ${formatVisitorAverage(peak.average)} average visitor${peak.average === 1 ? "" : "s"}.`,
+  });
+  const table = document.createElement("table");
+  table.className = "service-traffic-chart";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headRow.append(el("th", { text: "Day", scope: "col" }));
+  for (let hour = 0; hour < 24; hour += 1) {
+    headRow.append(el("th", { text: String(hour).padStart(2, "0"), scope: "col" }));
+  }
+  head.append(headRow);
+
+  const body = document.createElement("tbody");
+  for (const row of view.rows) {
+    const tableRow = document.createElement("tr");
+    const day = el("th", { text: row.name.slice(0, 3), scope: "row" });
+    day.title = `${row.name} · ${row.sampleDays} sampled day${row.sampleDays === 1 ? "" : "s"}`;
+    tableRow.append(day);
+    for (const slot of row.hours) {
+      const cell = document.createElement("td");
+      const average = formatVisitorAverage(slot.average);
+      cell.title = `${row.name} ${String(slot.hour).padStart(2, "0")}:00 ${view.timeZone}: ${average} average visitor${slot.average === 1 ? "" : "s"}`;
+      cell.setAttribute("aria-label", cell.title);
+      const track = document.createElement("span");
+      track.className = "service-traffic-chart__track";
+      track.setAttribute("aria-hidden", "true");
+      if (slot.average > 0) {
+        const bar = document.createElement("span");
+        bar.className = "service-traffic-chart__bar";
+        bar.style.height = `${slot.percentage}%`;
+        track.append(bar);
+      }
+      cell.append(track);
+      tableRow.append(cell);
+    }
+    body.append(tableRow);
+  }
+  table.append(head, body);
+  trafficChart.append(summary, table);
+}
+
+function renderSiteAnalytics() {
+  if (!analyticsData) return;
+  const rangeDays = analyticsData.rangeDays;
+  const visitorTimeZone = analyticsData.timeZone || "UTC";
+  const cards = [
+    { value: currentActiveVisitors, label: "Online now" },
+    { value: analyticsData.visitorsToday, label: "Seen today" },
+    { value: analyticsData.visitorsInRange, label: `Unique visitors (${rangeDays}d)` },
+    { value: analyticsData.messagesToday, label: "Messages today (UTC)" },
+    { value: analyticsData.messagesInRange, label: `Messages (${rangeDays}d, UTC)` },
+    { value: analyticsData.messagesAllTime, label: "Messages all time" },
+  ];
+  statisticsCards.replaceChildren(...cards.map((card) => el("article", { class: "service-stats-card" }, [
+    el("div", { class: "service-stats-card__value", text: String(card.value ?? 0) }),
+    el("div", { class: "service-stats-card__label", text: card.label }),
+  ])));
+  statisticsTimeNote.textContent = `Visitor days and hours use ${visitorTimeZone}. Message-day totals keep UTC boundaries for now.`;
+  visitorTrendNote.textContent = `Unique visitors per day in ${visitorTimeZone}.`;
+  statisticsMeta.textContent = `Last message: ${formatTime(analyticsData.lastMessageAt, "No messages yet")} · Refreshed ${formatTime(analyticsData.generatedAt)}.`;
+  renderStatsBarChart(visitorTrendChart, analyticsData.visitorDailySeries, `Daily unique visitors over the last ${rangeDays} days`);
+  renderStatsBarChart(messageTrendChart, analyticsData.messageDailySeries, `Daily messages over the last ${rangeDays} days`);
+  renderTraffic(analyticsData.activity);
+}
+
+async function loadSiteAnalytics() {
+  if (!currentSite?.plus) return;
+  const requestId = ++analyticsRequestId;
+  const siteKey = currentSite.siteKey;
+  const rangeDays = Number(statisticsRange.value) || 30;
+  const timeZone = statisticsTimeZone.value === "UTC" ? "UTC" : browserTimeZone;
+  setStatisticsStatus("Loading statistics...");
+  const result = await postJson("/api/admin/analytics", { siteKey, rangeDays, timeZone });
+  if (requestId !== analyticsRequestId || currentSite?.siteKey !== siteKey) return;
+  if (!result.ok) {
+    setStatisticsStatus(result.body.error || "Could not load site statistics.", true);
+    return;
+  }
+  analyticsData = result.body;
+  setStatisticsStatus("");
+  renderSiteAnalytics();
+}
+
+statisticsRange.addEventListener("change", () => void loadSiteAnalytics());
+statisticsTimeZone.addEventListener("change", () => void loadSiteAnalytics());
 
 const adminPlugins = createAdminPluginRuntime({
   container: pluginAddons,
@@ -243,6 +423,9 @@ const session = createAdminSession({
   onBeforeShowLogin: () => preview.destroy(),
   onClear: () => {
     currentSite = null;
+    currentActiveVisitors = 0;
+    analyticsData = null;
+    analyticsRequestId += 1;
     siteDetailsTouched = false;
     siteDetailsBusy = false;
     siteDetailsSavedMessage = "";
@@ -931,6 +1114,10 @@ function renderOwners(owners) {
 function render(data, { background = false } = {}) {
   currentSite = data.site;
   const scene = data.scene;
+  currentActiveVisitors = scene.activeVisitors;
+  statisticsTabButton.hidden = !currentSite.plus;
+  if (!currentSite.plus && activeTab === "statistics") setActiveTab("site");
+  if (currentSite.plus && analyticsData && activeTab === "statistics") renderSiteAnalytics();
 
   syncSiteDetailsFromServer();
 

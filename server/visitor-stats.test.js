@@ -27,6 +27,19 @@ test("counts unique visitors per day, week, and month window", () => {
 
   const now = day(29, 23);
   assert.deepEqual(stats.getStats("site", now), { daily: 2, weekly: 3, monthly: 4 });
+  assert.equal(stats.getUniqueCount("site", 3, now), 2);
+  assert.equal(stats.getUniqueCount("site", 7, now), 3);
+  assert.equal(stats.getUniqueCount("site", 30, now), 4);
+});
+
+test("bounds custom unique-visitor windows to retained data", () => {
+  const stats = createVisitorStats();
+  stats.recordVisit("site", "today", day(200));
+  stats.recordVisit("site", "older", day(100));
+
+  assert.equal(stats.getUniqueCount("site", 0, day(200)), 1);
+  assert.equal(stats.getUniqueCount("site", RETENTION_DAYS + 20, day(200)), 2);
+  assert.equal(stats.getUniqueCount("missing", 30, day(200)), 0);
 });
 
 test("ignores ephemeral and invalid browser ids", () => {
@@ -171,6 +184,52 @@ test("tracks each visitor once per UTC hour and aggregates by weekday", () => {
   assert.equal(activity.weekdays[0].hours[9], 2, "Sunday 09:00");
   assert.equal(activity.weekdays[0].hours[10], 1, "Sunday 10:00");
   assert.equal(activity.weekdays[1].hours[9], 1, "Monday 09:00");
+});
+
+test("re-buckets visitor days and hours into an IANA timezone", () => {
+  const stats = createVisitorStats();
+  stats.recordActivity("site", "evening-a", day(0, 23));
+  stats.recordActivity("site", "evening-b", day(1, 1));
+  stats.recordActivity("site", "morning", day(1, 6));
+
+  const analytics = stats.getZonedAnalytics("site", 2, "America/Toronto", day(1, 12));
+  assert.equal(analytics.timeZone, "America/Toronto");
+  assert.equal(analytics.visitorsToday, 1);
+  assert.equal(analytics.visitorsInRange, 3);
+  assert.deepEqual(analytics.dailySeries, [
+    { date: "2026-01-01", count: 2 },
+    { date: "2026-01-02", count: 1 },
+  ]);
+  assert.equal(analytics.activity.weekdays[4].hours[18], 1, "Thursday 18:00 local");
+  assert.equal(analytics.activity.weekdays[4].hours[20], 1, "Thursday 20:00 local");
+  assert.equal(analytics.activity.weekdays[5].hours[1], 1, "Friday 01:00 local");
+  assert.equal(analytics.activity.weekdays[4].sampleDays, 1);
+  assert.equal(analytics.activity.weekdays[5].sampleDays, 1);
+});
+
+test("timezone re-bucketing follows daylight-saving transitions", () => {
+  const stats = createVisitorStats();
+  const beforeJump = Date.UTC(2026, 2, 8, 6);
+  const afterJump = Date.UTC(2026, 2, 8, 7);
+  stats.recordActivity("site", "before", beforeJump);
+  stats.recordActivity("site", "after", afterJump);
+
+  const analytics = stats.getZonedAnalytics(
+    "site",
+    1,
+    "America/New_York",
+    Date.UTC(2026, 2, 8, 20),
+  );
+  const sunday = analytics.activity.weekdays[0];
+  assert.equal(sunday.hours[1], 1);
+  assert.equal(sunday.hours[2], 0, "spring-forward hour must remain absent");
+  assert.equal(sunday.hours[3], 1);
+  assert.deepEqual(analytics.dailySeries, [{ date: "2026-03-08", count: 2 }]);
+});
+
+test("timezone re-bucketing rejects unknown IANA zones", () => {
+  const stats = createVisitorStats();
+  assert.throws(() => stats.getZonedAnalytics("site", 7, "Not/A_Timezone"), RangeError);
 });
 
 test("bounds activity windows and excludes days before hourly tracking began", () => {

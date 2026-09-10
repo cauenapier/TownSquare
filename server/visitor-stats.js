@@ -49,6 +49,32 @@ function weekdayIndex(day) {
   return (day + 4) % 7;
 }
 
+function localDayIndex(parts) {
+  return dayIndex(Date.UTC(parts.year, parts.month - 1, parts.day));
+}
+
+function dayKey(day) {
+  return new Date(day * DAY_MS).toISOString().slice(0, 10);
+}
+
+function createZonedPartsReader(timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  });
+  return (at) => {
+    const values = {};
+    for (const part of formatter.formatToParts(new Date(at))) {
+      if (part.type !== "literal") values[part.type] = Number(part.value);
+    }
+    return values;
+  };
+}
+
 /** A browserId we can dedupe on: a non-empty string that is not ephemeral. */
 function isStableBrowserId(browserId) {
   return (
@@ -239,6 +265,97 @@ function createVisitorStats(options = {}) {
     return { timeZone: "UTC", windowDays: boundedWindowDays, weekdays };
   }
 
+  /**
+   * Re-bucket retained visitor-hour observations into an IANA timezone.
+   * Browser identities stay server-side; callers receive only daily counts and
+   * the same aggregate weekday/hour matrix as the UTC analytics view.
+   */
+  function getZonedAnalytics(siteKey, windowDays = MONTHLY_DAYS, timeZone = "UTC", at = now()) {
+    const readParts = createZonedPartsReader(timeZone);
+    const canonicalTimeZone = new Intl.DateTimeFormat("en", { timeZone }).resolvedOptions().timeZone;
+    const boundedWindowDays = Math.min(
+      RETENTION_DAYS,
+      Math.max(1, Number.isInteger(windowDays) ? windowDays : MONTHLY_DAYS),
+    );
+    const today = localDayIndex(readParts(at));
+    const oldest = today - (boundedWindowDays - 1);
+    const dailyVisitors = new Map();
+    const hourlyVisitors = new Map();
+    for (let day = oldest; day <= today; day += 1) {
+      dailyVisitors.set(day, new Set());
+      hourlyVisitors.set(day, Array.from({ length: HOURS_PER_DAY }, () => new Set()));
+    }
+
+    const days = bySite.get(siteKey);
+    if (days) {
+      for (const [utcDay, bucket] of days) {
+        for (const [browserId, mask] of bucket) {
+          // Version-1 entries have no hourly mask. Preserve their daily count
+          // by anchoring them at UTC noon, but omit them from the heatmap just
+          // as the UTC activity view does.
+          if (!mask) {
+            const localDay = localDayIndex(readParts(utcDay * DAY_MS + 12 * HOUR_MS));
+            dailyVisitors.get(localDay)?.add(browserId);
+            continue;
+          }
+          for (let hour = 0; hour < HOURS_PER_DAY; hour += 1) {
+            if (!(mask & (2 ** hour))) continue;
+            const parts = readParts(utcDay * DAY_MS + hour * HOUR_MS);
+            const localDay = localDayIndex(parts);
+            dailyVisitors.get(localDay)?.add(browserId);
+            hourlyVisitors.get(localDay)?.[parts.hour]?.add(browserId);
+          }
+        }
+      }
+    }
+
+    const activityStartedDay = activityStartedDays.get(siteKey);
+    let firstActivityAt = activityStartedDay === undefined ? null : activityStartedDay * DAY_MS;
+    const firstActivityBucket = activityStartedDay === undefined ? null : days?.get(activityStartedDay);
+    if (firstActivityBucket) {
+      const firstHour = Array.from(firstActivityBucket.values()).reduce((earliest, mask) => {
+        if (!mask) return earliest;
+        for (let hour = 0; hour < HOURS_PER_DAY; hour += 1) {
+          if (mask & (2 ** hour)) return Math.min(earliest, hour);
+        }
+        return earliest;
+      }, HOURS_PER_DAY);
+      if (firstHour < HOURS_PER_DAY) firstActivityAt += firstHour * HOUR_MS;
+    }
+    const firstLocalActivityDay = firstActivityAt === null
+      ? null
+      : localDayIndex(readParts(firstActivityAt));
+    const weekdays = Array.from({ length: 7 }, (_, weekday) => ({
+      weekday,
+      sampleDays: 0,
+      hours: Array(HOURS_PER_DAY).fill(0),
+    }));
+    const visitorsInRange = new Set();
+    const dailySeries = [];
+
+    for (let localDay = oldest; localDay <= today; localDay += 1) {
+      const daily = dailyVisitors.get(localDay);
+      for (const browserId of daily) visitorsInRange.add(browserId);
+      dailySeries.push({ date: dayKey(localDay), count: daily.size });
+
+      if (firstLocalActivityDay === null || localDay < firstLocalActivityDay) continue;
+      const weekday = weekdays[weekdayIndex(localDay)];
+      weekday.sampleDays += 1;
+      for (let hour = 0; hour < HOURS_PER_DAY; hour += 1) {
+        weekday.hours[hour] += hourlyVisitors.get(localDay)[hour].size;
+      }
+    }
+
+    return {
+      timeZone: canonicalTimeZone,
+      windowDays: boundedWindowDays,
+      visitorsToday: dailyVisitors.get(today).size,
+      visitorsInRange: visitorsInRange.size,
+      dailySeries,
+      activity: { timeZone: canonicalTimeZone, windowDays: boundedWindowDays, weekdays },
+    };
+  }
+
   /** @returns {{daily:number, weekly:number, monthly:number}} */
   function getStats(siteKey, at = now()) {
     const days = bySite.get(siteKey);
@@ -249,6 +366,17 @@ function createVisitorStats(options = {}) {
       weekly: uniqueOverWindow(days, today, WEEKLY_DAYS),
       monthly: uniqueOverWindow(days, today, MONTHLY_DAYS),
     };
+  }
+
+  /** Unique browserIds across a caller-selected rolling window. */
+  function getUniqueCount(siteKey, windowDays, at = now()) {
+    const days = bySite.get(siteKey);
+    if (!days) return 0;
+    const boundedWindowDays = Math.min(
+      RETENTION_DAYS,
+      Math.max(1, Number.isInteger(windowDays) ? windowDays : DAILY_DAYS),
+    );
+    return uniqueOverWindow(days, dayIndex(at), boundedWindowDays);
   }
 
   /** Build the serializable snapshot, pruning stale buckets as we go. */
@@ -352,11 +480,13 @@ function createVisitorStats(options = {}) {
     recordVisit,
     recordActivity,
     getStats,
+    getUniqueCount,
     getDailySeries,
     getAggregateDailySeries,
     getAllDailyCounts,
     getActiveSiteSeries,
     getActivityByWeekdayAndHour,
+    getZonedAnalytics,
     load,
     flush,
     start,

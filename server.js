@@ -1623,6 +1623,78 @@ function handleMarkAdminNotificationRead(req, res) {
   });
 }
 
+const ADMIN_ANALYTICS_RANGES = new Set([7, 30, 90, 180]);
+
+function normalizeAnalyticsTimeZone(value) {
+  const requested = String(value || "UTC").trim();
+  if (!requested || requested.length > 80) return null;
+  try {
+    return new Intl.DateTimeFormat("en", { timeZone: requested }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
+function utcDayDate(day) {
+  return new Date(day * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function handleAdminAnalytics(req, res) {
+  readJsonBody(req, res, (body) => {
+    const ip = getRequestIp(req);
+    if (!isAuthAttemptAllowed(adminAuthFailuresByIp, ip)) {
+      sendAuthThrottled(res);
+      return;
+    }
+
+    const presentedToken = String(body.adminToken || "").trim();
+    const resolved = resolveAdminRequest(req, body);
+    if (!resolved) {
+      if (presentedToken) recordAuthFailure(adminAuthFailuresByIp, ip);
+      sendJson(res, 403, { error: "Invalid site key or admin token." });
+      return;
+    }
+    if (resolved.tokenPresented) clearAuthFailures(adminAuthFailuresByIp, ip);
+
+    const site = resolved.site;
+    const headers = resolved.setCookie ? { "set-cookie": resolved.setCookie } : null;
+    if (!site.plus) {
+      sendJson(res, 403, { error: "Site statistics require Plus.", code: "plus_required" }, headers);
+      return;
+    }
+
+    const rangeDays = Number(body.rangeDays || 30);
+    if (!ADMIN_ANALYTICS_RANGES.has(rangeDays)) {
+      sendJson(res, 400, { error: "Choose a 7, 30, 90, or 180 day range." }, headers);
+      return;
+    }
+    const timeZone = normalizeAnalyticsTimeZone(body.timeZone);
+    if (!timeZone) {
+      sendJson(res, 400, { error: "Choose a valid browser timezone." }, headers);
+      return;
+    }
+
+    const scene = scenes.get(site.siteKey);
+    const visitorAnalytics = visitorStats.getZonedAnalytics(site.siteKey, rangeDays, timeZone);
+    sendJson(res, 200, {
+      rangeDays,
+      timeZone: visitorAnalytics.timeZone,
+      generatedAt: Date.now(),
+      activeVisitors: scene ? countActiveVisitors(scene) : 0,
+      visitorsToday: visitorAnalytics.visitorsToday,
+      visitorsInRange: visitorAnalytics.visitorsInRange,
+      messagesToday: messageStats.getCount(site.siteKey, 1),
+      messagesInRange: messageStats.getCount(site.siteKey, rangeDays),
+      messagesAllTime: Number(site.messageCount || 0),
+      lastMessageAt: Number(site.lastMessageAt || 0),
+      visitorDailySeries: visitorAnalytics.dailySeries,
+      messageDailySeries: messageStats.getDailySeries(site.siteKey, rangeDays)
+        .map((entry) => ({ date: utcDayDate(entry.day), count: entry.count })),
+      activity: visitorAnalytics.activity,
+    }, headers);
+  });
+}
+
 const ADMIN_ACTIONS = {
   updateSiteDetails(site, scene, body) {
     const originSettings = parseSiteOriginSettings(body, {
@@ -3362,6 +3434,7 @@ const HTTP_ROUTES = new Map([
   ["POST /api/admin/logout", handleAdminLogout],
   ["POST /api/admin/notifications", handleGetAdminNotifications],
   ["POST /api/admin/notification/read", handleMarkAdminNotificationRead],
+  ["POST /api/admin/analytics", handleAdminAnalytics],
   ["POST /api/admin/action", handleAdminAction],
   ["POST /api/service-admin/sites", handleServiceAdminSites],
   ["POST /api/service-admin/traffic", handleServiceAdminTraffic],

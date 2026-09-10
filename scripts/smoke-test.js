@@ -991,6 +991,14 @@ function assertAdminTokenStoredAsHash(siteKey, adminToken) {
 async function assertServiceAdminCanManageSites(hostedA, hostedB) {
   if (!SERVICE_ADMIN_PASSWORD) return;
 
+  const basicAnalytics = await postJson("/api/admin/analytics", {
+    siteKey: hostedA.site.siteKey,
+    adminToken: hostedA.adminToken,
+    rangeDays: 30,
+  });
+  assert(basicAnalytics.response.status === 403, "basic site unexpectedly received Plus analytics");
+  assert(basicAnalytics.body.code === "plus_required", "analytics entitlement failure was not explicit");
+
   const listed = await serviceAdminApi("/api/service-admin/sites");
   assert(
     listed.sites.some((site) => site.siteKey === hostedA.site.siteKey),
@@ -1023,6 +1031,31 @@ async function assertServiceAdminCanManageSites(hostedA, hostedB) {
     "service admin aggregate traffic did not include weekday activity",
   );
   assert(!JSON.stringify(allTraffic).includes("browserId"), "aggregate traffic leaked visitor identities");
+
+  const plus = await serviceAdminApi("/api/service-admin/action", {
+    action: "setSitePlus",
+    siteKey: hostedA.site.siteKey,
+    plus: true,
+  });
+  assert(plus.site.plus === true, "service admin did not enable Plus for analytics");
+
+  const plusAnalytics = await postJson("/api/admin/analytics", {
+    siteKey: hostedA.site.siteKey,
+    adminToken: hostedA.adminToken,
+    rangeDays: 90,
+    timeZone: "America/Toronto",
+  });
+  assert(plusAnalytics.response.ok, plusAnalytics.body.error || "Plus analytics request failed");
+  assert(plusAnalytics.body.rangeDays === 90, "Plus analytics returned the wrong range");
+  assert(plusAnalytics.body.timeZone === "America/Toronto", "Plus analytics returned the wrong timezone");
+  assert(plusAnalytics.body.visitorDailySeries.length === 90, "Plus analytics visitor series has the wrong length");
+  assert(plusAnalytics.body.messageDailySeries.length === 90, "Plus analytics message series has the wrong length");
+  assert(plusAnalytics.body.activity.weekdays.length === 7, "Plus analytics omitted weekdays");
+  assert(
+    plusAnalytics.body.activity.weekdays.every((weekday) => weekday.hours.length === 24),
+    "Plus analytics omitted hourly buckets",
+  );
+  assert(!JSON.stringify(plusAnalytics.body).includes("browserId"), "Plus analytics leaked visitor identities");
 
   const removedFromMap = await serviceAdminApi("/api/service-admin/action", {
     action: "setSiteMapHidden",

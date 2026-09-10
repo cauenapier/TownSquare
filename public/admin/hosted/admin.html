@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>TownSquare admin</title>
     <link rel="stylesheet" href="/widget.css" />
-    <link rel="stylesheet" href="/page.css?v=5" />
+    <link rel="stylesheet" href="/page.css?v=plus-statistics-v3" />
   </head>
   <body>
     <main class="hosted-shell">
@@ -77,6 +77,7 @@
 
         <nav class="hosted-tabs" id="admin-tabs" role="tablist" aria-label="Admin sections">
           <button type="button" class="hosted-tab is-active" data-tab="site" role="tab" aria-selected="true" aria-controls="tab-site">Site</button>
+          <button type="button" class="hosted-tab" id="statistics-tab" data-tab="statistics" role="tab" aria-selected="false" aria-controls="tab-statistics" hidden>Statistics</button>
           <button type="button" class="hosted-tab" data-tab="moderation" role="tab" aria-selected="false" aria-controls="tab-moderation">Moderation</button>
           <button type="button" class="hosted-tab" data-tab="appearance" role="tab" aria-selected="false" aria-controls="tab-appearance">Appearance</button>
           <button type="button" class="hosted-tab" data-tab="addons" role="tab" aria-selected="false" aria-controls="tab-addons">Add-ons</button>
@@ -158,6 +159,64 @@
 
         </div>
         <!-- /tab-site -->
+
+        <!-- Tab: Statistics — private aggregate analytics for Plus sites. -->
+        <div class="hosted-tabpanel" id="tab-statistics" role="tabpanel" data-tab="statistics" hidden>
+          <section class="hosted-section" aria-labelledby="site-statistics-title">
+            <div class="hosted-section-head">
+              <div>
+                <h2 id="site-statistics-title">Your TownSquare in numbers</h2>
+                <p class="hosted-note" id="site-statistics-time-note">Private, aggregate activity for this site.</p>
+              </div>
+              <div class="service-stats-controls">
+                <label class="service-stats-range">
+                  <span>Reporting range</span>
+                  <select id="statistics-range">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="180">Last 180 days</option>
+                  </select>
+                </label>
+                <label class="service-stats-range">
+                  <span>Visitor timezone</span>
+                  <select id="statistics-time-zone">
+                    <option value="browser" selected>Browser local</option>
+                    <option value="UTC">UTC</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <p class="hosted-status" id="statistics-status" role="status" hidden></p>
+            <div class="service-stats-cards" id="site-statistics-cards" aria-live="polite"></div>
+            <p class="hosted-note" id="site-statistics-meta"></p>
+          </section>
+
+          <section class="hosted-section" aria-labelledby="site-visitor-trend-title">
+            <div class="hosted-section-head">
+              <h2 id="site-visitor-trend-title">Daily visitors</h2>
+            </div>
+            <p class="hosted-note" id="site-visitor-trend-note">Unique visitors per day.</p>
+            <div class="service-stats-chart" id="site-visitor-trend" role="img"></div>
+          </section>
+
+          <section class="hosted-section" aria-labelledby="site-message-trend-title">
+            <div class="hosted-section-head">
+              <h2 id="site-message-trend-title">Daily messages</h2>
+            </div>
+            <p class="hosted-note">Accepted chat messages per UTC day. Visitor timezone changes do not re-bucket messages yet.</p>
+            <div class="service-stats-chart" id="site-message-trend" role="img"></div>
+          </section>
+
+          <section class="hosted-section" aria-labelledby="site-traffic-title">
+            <div class="hosted-section-head">
+              <h2 id="site-traffic-title">Traffic by weekday and hour</h2>
+            </div>
+            <p class="hosted-note" id="site-traffic-meta">Average unique visitors present in each UTC hour.</p>
+            <div class="service-traffic-chart-wrap" id="site-traffic-chart" aria-live="polite"></div>
+          </section>
+        </div>
+        <!-- /tab-statistics -->
 
         <!-- Tab: Moderation — chat controls, filtering, visitors. -->
         <div class="hosted-tabpanel" id="tab-moderation" role="tabpanel" data-tab="moderation" hidden>
@@ -451,6 +510,6 @@
       </section>
     </main>
 
-    <script type="module" src="/admin/hosted/hosted-admin.mjs?v=6"></script>
+    <script type="module" src="/admin/hosted/hosted-admin.mjs?v=8"></script>
   </body>
 </html>
