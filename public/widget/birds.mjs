@@ -25,6 +25,14 @@ const BIRD_PERCHED_SVG = `
   </svg>
 `;
 
+const FEEDING_VISIT_MS = 8500;
+const CRUMB_OFFSETS = [-8, -4, -1, 3, 7, 10];
+const FEEDING_BIRDS = [
+  { from: -0.08, offset: -0.035, delay: 0 },
+  { from: 1.08, offset: 0.004, delay: 180 },
+  { from: -0.08, offset: 0.043, delay: 360 },
+];
+
 /**
  * @param {BirdView} bird
  */
@@ -67,7 +75,73 @@ export function mountBirdLayer(stage) {
  */
 export function initBirds(ctx) {
   ctx.birds = new Map();
+  ctx.birdFeedingTimers = new Set();
   ctx.birdLayer = mountBirdLayer(ctx.stage);
+}
+
+/**
+ * The ambient bird layer normally mounts with the live scene. Preview mode has
+ * no ambient birds, but its action controls should still demonstrate feeding.
+ *
+ * @param {BirdsContext} ctx
+ * @returns {HTMLElement}
+ */
+function ensureBirdLayer(ctx) {
+  if (!ctx.birdLayer) ctx.birdLayer = mountBirdLayer(ctx.stage);
+  if (!ctx.birdFeedingTimers) ctx.birdFeedingTimers = new Set();
+  return ctx.birdLayer;
+}
+
+/**
+ * Paint one transient crumb toss and feeding visit at a normalized stage
+ * position. CSS owns the motion; the timer only removes the finished DOM.
+ *
+ * @param {BirdsContext} ctx
+ * @param {number} x
+ */
+export function showBirdFeeding(ctx, x) {
+  if (!Number.isFinite(x) || ctx.disposed || ctx.quiet) return;
+
+  const targetX = Math.min(MAX_X, Math.max(MIN_X, x));
+  const visit = document.createElement("div");
+  visit.className = "bird-feeding";
+  visit.style.setProperty("--feed-x", String(targetX));
+
+  const crumbs = document.createElement("div");
+  crumbs.className = "bird-feeding__crumbs";
+  crumbs.setAttribute("aria-hidden", "true");
+  for (const [index, offset] of CRUMB_OFFSETS.entries()) {
+    const crumb = document.createElement("i");
+    crumb.style.setProperty("--crumb-dx", `${offset}px`);
+    crumb.style.setProperty("--crumb-mid-dx", `${offset * 0.45}px`);
+    crumb.style.setProperty("--crumb-delay", `${index * 35}ms`);
+    crumbs.appendChild(crumb);
+  }
+  visit.appendChild(crumbs);
+
+  for (const [index, config] of FEEDING_BIRDS.entries()) {
+    const bird = document.createElement("div");
+    bird.className = "bird bird--feeding";
+    bird.style.setProperty("--bird-from", String(config.from));
+    bird.style.setProperty("--bird-to", String(Math.min(MAX_X, Math.max(MIN_X, targetX + config.offset))));
+    bird.style.setProperty("--bird-hop-to", String(Math.min(MAX_X, Math.max(MIN_X, targetX + config.offset + 0.012))));
+    bird.style.setProperty("--bird-delay", `${config.delay}ms`);
+    bird.style.setProperty("--bird-facing", config.from < targetX ? "1" : "-1");
+    bird.style.setProperty("--bird-exit", config.from < targetX ? "1.08" : "-0.08");
+    bird.style.setProperty("--peck-phase", `${index * -170}ms`);
+    bird.innerHTML = `
+      <span class="bird-feeding__flying">${BIRD_FLYING_SVG}</span>
+      <span class="bird-feeding__perched">${BIRD_PERCHED_SVG}</span>
+    `;
+    visit.appendChild(bird);
+  }
+
+  ensureBirdLayer(ctx).appendChild(visit);
+  const timer = setTimeout(() => {
+    ctx.birdFeedingTimers?.delete(timer);
+    visit.remove();
+  }, FEEDING_VISIT_MS);
+  ctx.birdFeedingTimers?.add(timer);
 }
 
 /**
@@ -267,6 +341,10 @@ export function applyBirdFlee(ctx, message) {
  * @param {BirdsContext} ctx
  */
 export function destroyBirds(ctx) {
+  if (ctx.birdFeedingTimers) {
+    for (const timer of ctx.birdFeedingTimers) clearTimeout(timer);
+    ctx.birdFeedingTimers.clear();
+  }
   if (ctx.birds) {
     for (const bird of ctx.birds.values()) {
       removeBirdElement(bird);

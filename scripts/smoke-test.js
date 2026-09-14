@@ -1609,6 +1609,29 @@ async function main() {
   const joinBroadcast = first.seen.find((message) => message.type === "join" && message.peer?.id === third.id);
   assert(joinBroadcast && !Object.hasOwn(joinBroadcast.peer, "browserId"), "join broadcast leaked browserId");
 
+  await delay(600);
+  third.ws.send(JSON.stringify({ type: "action", action: "feed-birds", x: 0.05 }));
+  await delay(100);
+  const birdFeedingAction = findLast(
+    first.seen,
+    (message) => message.type === "action" && message.id === third.id && message.action === "feed-birds",
+  );
+  assert(birdFeedingAction?.x === 0.62, "bird-feeding action did not use the trusted visitor position");
+  assert(
+    secondSameBrowser.seen.some((message) => message.type === "action" && message.id === third.id && message.action === "feed-birds"),
+    "bird-feeding action did not propagate to another visitor tab",
+  );
+  const feedingBroadcasts = first.seen.filter(
+    (message) => message.type === "action" && message.id === third.id && message.action === "feed-birds",
+  ).length;
+  await delay(600);
+  third.ws.send(JSON.stringify({ type: "action", action: "feed-birds" }));
+  await delay(100);
+  assert(
+    first.seen.filter((message) => message.type === "action" && message.id === third.id && message.action === "feed-birds").length === feedingBroadcasts,
+    "bird-feeding cooldown allowed a repeated action",
+  );
+
   const impersonator = await connect({ x: 0.8, browserId: "browser-a", ip: "192.0.2.60" });
   assert(impersonator.id !== first.id, "stolen browserId reused victim visitor id");
   assert(impersonator.hello.displayName !== "Ada Lovelace", "stolen browserId hijacked victim profile");

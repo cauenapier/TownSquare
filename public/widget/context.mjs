@@ -21,6 +21,7 @@
  * @property {number} lastSayAt
  * @property {number} lastJumpAt
  * @property {number} lastHighFiveAt
+ * @property {number} lastFeedBirdsAt
  * @property {string | null} pose
  * @property {string | null} propId
  * @property {string} displayName
@@ -89,6 +90,7 @@
  * @property {HTMLElement} statusEl
  * @property {HTMLInputElement} enableToggle
  * @property {HTMLButtonElement} expandButton
+ * @property {HTMLButtonElement} feedBirdsButton
  * @property {SelfState} self
  * @property {WebSocket} socket
  * @property {boolean} quiet
@@ -105,6 +107,7 @@
  * @property {(event: MouseEvent) => void} onStageClick
  * @property {Map<number, import("./birds.mjs").BirdView>} [birds]
  * @property {HTMLElement} [birdLayer]
+ * @property {Set<ReturnType<typeof setTimeout>>} [birdFeedingTimers]
  * @property {HTMLElement} [cloudLayer]
  * @property {HTMLElement} [weatherLayer]
  * @property {string} [weather] Active ambient weather kind ("clear" | "rain" | "storm" | "snow").

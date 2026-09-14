@@ -145,7 +145,7 @@
   height: 16px;
 }
 
-/* Medium buttons: 42×42 (jump, high-five actions) */
+/* Medium buttons: 42×42 (jump, high-five, and bird-feeding actions) */
 .townsquare__button--md {
   width: 42px;
   height: 42px;
@@ -240,7 +240,7 @@
   background: var(--action-zone-fill, var(--page));
 }
 
-/* Action buttons: jump and high-five (desktop floating position, hide on touch). */
+/* Action buttons (desktop floating position, docked into the toolbar on touch). */
 .townsquare__actions {
   position: absolute;
   z-index: var(--ts-z-ui);
@@ -1287,6 +1287,185 @@
     bottom: calc(var(--ts-ground-level) + var(--bird-lift, 0px) + 42px);
     opacity: 0;
   }
+}
+
+/* A visitor-triggered crumb toss. Unlike ambient birds, these birds are
+   transient and gather on the ground instead of occupying scene perches. */
+.bird-feeding {
+  position: absolute;
+  inset: 0;
+}
+
+.bird-feeding__crumbs {
+  position: absolute;
+  left: calc(var(--feed-x) * 100%);
+  bottom: calc(var(--ts-ground-level) - 2px);
+  width: 1px;
+  height: 1px;
+}
+
+.bird-feeding__crumbs i {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--tree-trunk) 78%, var(--surface));
+  opacity: 0;
+  animation: bird-crumb-toss 7s var(--crumb-delay) ease-out both;
+}
+
+.bird--feeding {
+  --bird-lift: -1px;
+  opacity: 0;
+  animation: bird-feed-visit 8s var(--bird-delay) ease-in-out both;
+}
+
+.bird-feeding__flying,
+.bird-feeding__perched {
+  position: absolute;
+  inset: 0;
+}
+
+.bird-feeding__flying {
+  animation: bird-feed-flying-art 8s var(--bird-delay) linear both;
+}
+
+.bird-feeding__flying svg {
+  transform: scaleX(var(--bird-facing, 1));
+}
+
+.bird-feeding__flying .bird-wing {
+  transform-box: fill-box;
+  animation: bird-wing-left 0.16s ease-in-out infinite alternate;
+}
+
+.bird-feeding__flying .bird-wing--left {
+  transform-origin: 100% 0%;
+}
+
+.bird-feeding__flying .bird-wing--right {
+  transform-origin: 0% 0%;
+  animation-name: bird-wing-right;
+}
+
+.bird-feeding__perched {
+  width: 16px;
+  height: 11px;
+  opacity: 0;
+  animation: bird-feed-perched-art 8s var(--bird-delay) linear both;
+}
+
+.bird-feeding__perched svg {
+  transform: scaleX(var(--bird-facing, 1));
+  transform-origin: 50% 100%;
+  animation: bird-feed-peck 620ms var(--peck-phase) ease-in-out infinite;
+}
+
+@keyframes bird-crumb-toss {
+  0% {
+    transform: translate(-50%, -16px) scale(0.4);
+    opacity: 0;
+  }
+
+  5% { opacity: 0.8; }
+
+  10% {
+    transform: translate(calc(-50% + var(--crumb-mid-dx)), -28px) scale(1);
+    opacity: 0.8;
+  }
+
+  18%, 78% {
+    transform: translate(calc(-50% + var(--crumb-dx)), 0) scale(1);
+    opacity: 0.72;
+  }
+
+  100% {
+    transform: translate(calc(-50% + var(--crumb-dx)), 0) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes bird-feed-visit {
+  0% {
+    left: calc(var(--bird-from) * 100%);
+    bottom: calc(var(--ts-ground-level) + 42px);
+    opacity: 0;
+  }
+
+  5% { opacity: 0.45; }
+
+  18% {
+    left: calc(var(--bird-to) * 100%);
+    bottom: calc(var(--ts-ground-level) - 1px);
+    opacity: 0.55;
+  }
+
+  28%, 34%, 46%, 52%, 64%, 70% {
+    left: calc(var(--bird-to) * 100%);
+    bottom: calc(var(--ts-ground-level) - 1px);
+    opacity: 0.55;
+  }
+
+  31%, 49%, 67% {
+    left: calc(var(--bird-hop-to) * 100%);
+    bottom: calc(var(--ts-ground-level) + 3px);
+    opacity: 0.55;
+  }
+
+  82% {
+    left: calc(var(--bird-to) * 100%);
+    bottom: calc(var(--ts-ground-level) - 1px);
+    opacity: 0.55;
+  }
+
+  100% {
+    left: calc(var(--bird-exit) * 100%);
+    bottom: calc(var(--ts-ground-level) + 48px);
+    opacity: 0;
+  }
+}
+
+@keyframes bird-feed-flying-art {
+  0%, 17% { opacity: 1; }
+  18%, 81% { opacity: 0; }
+  82%, 100% { opacity: 1; }
+}
+
+@keyframes bird-feed-perched-art {
+  0%, 17%, 82%, 100% { opacity: 0; }
+  18%, 81% { opacity: 1; }
+}
+
+@keyframes bird-feed-peck {
+  0%, 45%, 100% { transform: scaleX(var(--bird-facing, 1)) rotate(0deg); }
+  62%, 82% { transform: scaleX(var(--bird-facing, 1)) rotate(13deg) translateY(1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bird-feeding__crumbs i {
+    transform: translate(calc(-50% + var(--crumb-dx)), 0);
+    animation: bird-feed-fade 5s ease both;
+  }
+
+  .bird--feeding {
+    left: calc(var(--bird-to) * 100%);
+    bottom: calc(var(--ts-ground-level) - 1px);
+    animation: bird-feed-fade 5s var(--bird-delay) ease both;
+  }
+
+  .bird-feeding__flying { display: none; }
+
+  .bird-feeding__perched {
+    opacity: 1;
+    animation: none;
+  }
+
+  .bird-feeding__perched svg { animation: none; }
+}
+
+@keyframes bird-feed-fade {
+  0%, 100% { opacity: 0; }
+  12%, 82% { opacity: 0.55; }
 }
 
 .townsquare-avatar {

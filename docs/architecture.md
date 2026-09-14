@@ -31,6 +31,12 @@ The public embed URLs `/townsquare.mjs` and `/widget.css`, and the WebSocket
 message types in `public/lib/protocol.mjs`, are compatibility boundaries. Internal
 files may move when their imports and tests move with them.
 
+Visitor gestures, including the bird-feeding action, travel as validated
+`action` messages. The initiating widget starts its animation immediately; the
+server adds the trusted visitor position and relays the action to other clients.
+The crumbs and feeding flock are transient client-side visuals rather than
+persistent scene state, while ambient perched birds remain server-owned.
+
 Hosted site configuration has two delivery paths:
 
 - the site-specific stylesheet endpoint provides palette tokens;

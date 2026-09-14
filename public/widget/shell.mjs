@@ -20,6 +20,17 @@ const JUMP_ICON = `
   </svg>
 `;
 
+const CRUMBS_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M5 15c3.5-3.8 6.8-4.9 10-3.2l2.8 1.5"></path>
+    <path d="M5 15l4 3.2c1.2.9 2.8 1 4 .2l2-1.3"></path>
+    <circle cx="17.8" cy="8.2" r=".8" fill="currentColor" stroke="none"></circle>
+    <circle cx="20.5" cy="11" r=".65" fill="currentColor" stroke="none"></circle>
+    <circle cx="15.2" cy="5.7" r=".6" fill="currentColor" stroke="none"></circle>
+  </svg>
+`;
+
 const TOWNSQUARE_URL = "https://townsquare.cauenapier.com/";
 const MAP_URL = "https://townsquare.cauenapier.com/map";
 
@@ -27,7 +38,7 @@ const MAP_URL = "https://townsquare.cauenapier.com/map";
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, enableToggle: HTMLInputElement, enableToggleLabel: HTMLLabelElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement, toolbar: HTMLElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, enableToggle: HTMLInputElement, enableToggleLabel: HTMLLabelElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement, feedBirdsButton: HTMLButtonElement, toolbar: HTMLElement }}
  */
 export function renderShell(container) {
   const element = document.createElement("section");
@@ -89,7 +100,7 @@ export function renderShell(container) {
 
   const instructions = document.createElement("p");
   instructions.textContent =
-    "Move with the arrow keys, tap where you want to walk, or swipe left and right on touch screens. Press J to jump and H to show a high-five; on touch, use the action buttons. Press T or tap your nameplate to chat, and tap a character to see their recent messages.";
+    "Move with the arrow keys, tap where you want to walk, or swipe left and right on touch screens. Press J to jump, H to show a high-five, and B to throw crumbs for the birds; on touch, use the action buttons. Press T or tap your nameplate to chat, and tap a character to see their recent messages.";
 
   const links = document.createElement("p");
   links.className = "townsquare__help-links";
@@ -134,7 +145,14 @@ export function renderShell(container) {
   highFiveButton.setAttribute("aria-label", "High five");
   highFiveButton.title = "High five";
 
-  actions.append(jumpButton, highFiveButton);
+  const feedBirdsButton = document.createElement("button");
+  feedBirdsButton.className = "townsquare__button townsquare__button--md";
+  feedBirdsButton.type = "button";
+  feedBirdsButton.innerHTML = CRUMBS_ICON;
+  feedBirdsButton.setAttribute("aria-label", "Throw crumbs for the birds");
+  feedBirdsButton.title = "Feed the birds";
+
+  actions.append(jumpButton, highFiveButton, feedBirdsButton);
 
   const statusRow = document.createElement("div");
   statusRow.className = "townsquare__status";
@@ -177,6 +195,7 @@ export function renderShell(container) {
     helpPanel,
     jumpButton,
     highFiveButton,
+    feedBirdsButton,
     toolbar,
     actionZone,
   };

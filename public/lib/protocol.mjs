@@ -38,6 +38,7 @@ export const GESTURE = Object.freeze({
   JUMP: "jump",
   RAISE_HAND: "raise-hand",
   HIGH_FIVE: "high-five",
+  FEED_BIRDS: "feed-birds",
 });
 
 /** `bird`-message verbs. */

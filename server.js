@@ -135,6 +135,7 @@ const IP_EVENT_WINDOW_MS = 10 * 1000;
 const LAST_SEEN_SAVE_INTERVAL_MS = 60000;
 const MOVE_THROTTLE_MS = 40;
 const ACTION_THROTTLE_MS = 560;
+const FEED_BIRDS_COOLDOWN_MS = 8000;
 const DEFAULT_CHAT_THROTTLE_MS = 500;
 const MAX_CHAT_THROTTLE_MS = 30000;
 const MAX_MODERATION_LOG = 50;
@@ -167,7 +168,7 @@ const POW_DIFFICULTY_BITS = readLimit("POW_DIFFICULTY_BITS", 15);
 // from server logs. On by default; set LOG_JOINS=0 to silence.
 const LOG_JOINS = process.env.LOG_JOINS !== "0";
 const BIRD_FLEE_RADIUS = 0.07;
-const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five"]);
+const VALID_ACTIONS = new Set(["jump", "raise-hand", "high-five", "feed-birds"]);
 const BIRD_SPAWN_MIN_MS = Number(process.env.BIRD_SPAWN_MIN_MS || 12000);
 const BIRD_SPAWN_MAX_MS = Number(process.env.BIRD_SPAWN_MAX_MS || 22000);
 const BIRD_FIRST_SPAWN_MS = Number(process.env.BIRD_FIRST_SPAWN_MS || 500);
@@ -324,7 +325,7 @@ const MESSAGE_HANDLERS = {
   typing: handleTyping,
 };
 
-/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,initialized:boolean,spectator:boolean,readingActive:boolean,widgetVisible:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastChatAt:number}} */
+/** @returns {{connectionId:number,ws:any,scene:any,site:any,origin:string,ip:string,propsById:Map<string, any>,identity:any,joined:boolean,initialized:boolean,spectator:boolean,readingActive:boolean,widgetVisible:boolean,typing:boolean,lastMoveAt:number,lastActionAt:number,lastFeedBirdsAt:number,lastChatAt:number}} */
 function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown", spectator = false) {
   return {
     connectionId,
@@ -345,6 +346,7 @@ function createClient(connectionId, ws, scene, site, origin = "", ip = "unknown"
     widgetVisible: false,
     lastMoveAt: 0,
     lastActionAt: 0,
+    lastFeedBirdsAt: 0,
     lastChatAt: 0,
     typing: false,
     challenge: null,
@@ -3793,6 +3795,7 @@ function handleAction(client, message) {
 
   const now = Date.now();
   if (now - client.lastActionAt < ACTION_THROTTLE_MS) return;
+  if (message.action === GESTURE.FEED_BIRDS && now - client.lastFeedBirdsAt < FEED_BIRDS_COOLDOWN_MS) return;
 
   let targetId = null;
   let target = null;
@@ -3806,7 +3809,8 @@ function handleAction(client, message) {
   if (!allowSynchronizedAction(client, message.action, now)) return;
 
   client.lastActionAt = now;
-  clearPose(client.identity);
+  if (message.action === GESTURE.FEED_BIRDS) client.lastFeedBirdsAt = now;
+  if (message.action !== GESTURE.FEED_BIRDS) clearPose(client.identity);
   if (target) clearPose(target);
   touchIdentityActivity(client.identity, now);
   const action = {
@@ -3814,6 +3818,7 @@ function handleAction(client, message) {
     id: client.identity.id,
     action: message.action,
   };
+  if (message.action === GESTURE.FEED_BIRDS) action.x = client.identity.x;
   if (targetId !== null) action.targetId = targetId;
   broadcastIdentity(client.scene, action, client.identity, { exceptConnectionId: client.connectionId });
 }

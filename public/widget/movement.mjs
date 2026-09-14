@@ -9,6 +9,7 @@ import { findSettleProp } from "../lib/scene-prop-geometry.mjs";
 import { MSG, GESTURE } from "../lib/protocol.mjs";
 import { clamp } from "./math.mjs";
 import { sendToServer } from "./protocol.mjs";
+import { showBirdFeeding } from "./birds.mjs";
 import { isTypingTarget } from "./utils.mjs";
 import {
   clearPresencePose,
@@ -131,6 +132,7 @@ export function maybeSendMove(ctx, now) {
 // Block re-jumping until the current jump animation finishes.
 const JUMP_COOLDOWN_MS = JUMP_MS;
 const HIGH_FIVE_COOLDOWN_MS = 360;
+const FEED_BIRDS_COOLDOWN_MS = 8000;
 const SWIPE_THRESHOLD_PX = 12;
 const SWIPE_CLICK_SUPPRESSION_MS = 500;
 
@@ -198,6 +200,31 @@ export function triggerHighFive(ctx) {
   clearSelfPoseForAction(ctx);
   playRaisedHand(ctx.self.avatar);
   sendToServer(ctx, MSG.ACTION, { action: GESTURE.RAISE_HAND });
+}
+
+/**
+ * Scatter crumbs at the visitor's feet and summon a short-lived feeding flock.
+ * The local view starts immediately; the server relays the same position to
+ * the other visitors in the square.
+ *
+ * @param {WidgetContext} ctx
+ */
+export function triggerFeedBirds(ctx) {
+  if (ctx.quiet) return;
+
+  const now = Date.now();
+  if (now - ctx.self.lastFeedBirdsAt < FEED_BIRDS_COOLDOWN_MS) return;
+  ctx.self.lastFeedBirdsAt = now;
+
+  showBirdFeeding(ctx, ctx.self.x);
+  sendToServer(ctx, MSG.ACTION, { action: GESTURE.FEED_BIRDS });
+
+  ctx.feedBirdsButton.disabled = true;
+  const timer = setTimeout(() => {
+    ctx.birdFeedingTimers?.delete(timer);
+    if (!ctx.disposed) ctx.feedBirdsButton.disabled = false;
+  }, FEED_BIRDS_COOLDOWN_MS);
+  ctx.birdFeedingTimers?.add(timer);
 }
 
 /**
@@ -334,6 +361,7 @@ export function wireGameLoop(ctx) {
 const KEY_SHORTCUTS = {
   j: (ctx) => triggerJump(ctx),
   h: (ctx) => triggerHighFive(ctx),
+  b: (ctx) => triggerFeedBirds(ctx),
   t: (ctx, event) => {
     // The keystroke would otherwise land in the input we're about to focus.
     event.preventDefault();

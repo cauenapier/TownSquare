@@ -30,6 +30,7 @@ import {
   closeTrays,
   wireGameLoop,
   triggerHighFive,
+  triggerFeedBirds,
   triggerJump,
   unwireKeyboard,
   unwireStagePointer,
@@ -263,6 +264,7 @@ export function mountTownSquare(root, options = {}) {
     helpPanel,
     jumpButton,
     highFiveButton,
+    feedBirdsButton,
     toolbar,
   } = renderShell(root);
 
@@ -291,6 +293,7 @@ export function mountTownSquare(root, options = {}) {
     statusEl,
     enableToggle,
     expandButton,
+    feedBirdsButton,
     // Chat cooldown (slow mode); the server sends the live value in `hello` and
     // again whenever an owner changes it.
     chatThrottleMs: DEFAULT_CHAT_THROTTLE_MS,
@@ -305,6 +308,7 @@ export function mountTownSquare(root, options = {}) {
       lastSayAt: 0,
       lastJumpAt: 0,
       lastHighFiveAt: 0,
+      lastFeedBirdsAt: 0,
       pose: null,
       propId: null,
       displayName: profile.displayName,
@@ -398,25 +402,28 @@ export function mountTownSquare(root, options = {}) {
 
   const onJumpClick = () => triggerJump(ctx);
   const onHighFiveClick = () => triggerHighFive(ctx);
+  const onFeedBirdsClick = () => triggerFeedBirds(ctx);
   jumpButton.addEventListener("click", onJumpClick);
   highFiveButton.addEventListener("click", onHighFiveClick);
+  feedBirdsButton.addEventListener("click", onFeedBirdsClick);
   disposers.push(() => jumpButton.removeEventListener("click", onJumpClick));
   disposers.push(() => highFiveButton.removeEventListener("click", onHighFiveClick));
+  disposers.push(() => feedBirdsButton.removeEventListener("click", onFeedBirdsClick));
   // Gather the action buttons into the bottom toolbar beside the docked composer.
   // The rename pencil now belongs to the self name tag. Moving the nodes keeps
-  // their click listeners intact. Final bar order: input, jump, hi5.
-  toolbar.append(jumpButton, highFiveButton);
+  // their click listeners intact. Final bar order: input, jump, hi5, crumbs.
+  toolbar.append(jumpButton, highFiveButton, feedBirdsButton);
   const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel);
   disposers.push(unwireHelpPanel);
 
   const unwatchPage = watchCurrentPage(ctx);
   disposers.push(unwatchPage);
 
+  initBirds(ctx);
+  disposers.push(() => destroyBirds(ctx));
   if (!preview) {
-    initBirds(ctx);
     initClouds(ctx);
     if (!serverDrivenScene || options.weather || options.weatherConfig) initWeather(ctx);
-    disposers.push(() => destroyBirds(ctx));
     disposers.push(() => destroyClouds(ctx));
     disposers.push(() => destroyWeather(ctx));
   }

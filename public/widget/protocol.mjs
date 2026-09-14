@@ -3,7 +3,7 @@
  */
 
 import { recordMessage, sayMessage, setHistory } from "./chat.mjs";
-import { applyBirdFlee, applyBirdSpawn, syncBirdsFromHello } from "./birds.mjs";
+import { applyBirdFlee, applyBirdSpawn, showBirdFeeding, syncBirdsFromHello } from "./birds.mjs";
 import { clearPresencePose, needsStandUp, playHighFivePair, playJump, playRaisedHand, setWalking } from "./gestures.mjs";
 import {
   applyPeerState,
@@ -225,6 +225,8 @@ function handleAction(ctx, _socket, message) {
     applyRaiseHand(ctx, message.id);
   } else if (message.action === GESTURE.HIGH_FIVE) {
     applyHighFive(ctx, message.id, message.targetId);
+  } else if (message.action === GESTURE.FEED_BIRDS && typeof message.x === "number") {
+    showBirdFeeding(ctx, message.x);
   }
 }
 
