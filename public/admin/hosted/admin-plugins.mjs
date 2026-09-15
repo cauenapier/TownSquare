@@ -79,8 +79,8 @@ export function createAdminPluginRuntime({ container, action, setEnabled }) {
           "These extra touches are available to TownSquare supporters. ",
           Object.assign(document.createElement("a"), {
             className: "addon-group__plus-cta",
-            href: "https://buymeacoffee.com/cauenapier",
-            textContent: "Buy me a coffee →",
+            href: "/support",
+            textContent: "Compare support options →",
           }),
           " If you’ve already chipped in, send me a note and I’ll switch it on for your site.",
         );
