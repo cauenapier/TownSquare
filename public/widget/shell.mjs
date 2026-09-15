@@ -31,16 +31,30 @@ const CRUMBS_ICON = `
   </svg>
 `;
 
+const COMPASS_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="8.25"></circle>
+    <path d="m15.1 8.9-1.8 4.4-4.4 1.8 1.8-4.4 4.4-1.8Z"></path>
+    <circle cx="12" cy="12" r=".65" fill="currentColor" stroke="none"></circle>
+  </svg>
+`;
+
 const TOWNSQUARE_URL = "https://townsquare.cauenapier.com/";
 const MAP_URL = "https://townsquare.cauenapier.com/map";
+const BUILD_URL = "https://townsquare.cauenapier.com/register";
+
+let nextShellId = 1;
 
 /**
  * Mount the widget shell into the host root.
  *
  * @param {HTMLElement} container
- * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, enableToggle: HTMLInputElement, enableToggleLabel: HTMLLabelElement, expandButton: HTMLButtonElement, helpButton: HTMLButtonElement, helpScrim: HTMLElement, helpPanel: HTMLElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement, feedBirdsButton: HTMLButtonElement, toolbar: HTMLElement }}
+ * @returns {{ app: HTMLElement, stage: HTMLElement, statusRow: HTMLElement, status: HTMLElement, enableToggle: HTMLInputElement, enableToggleLabel: HTMLLabelElement, expandButton: HTMLButtonElement, discoveryButton: HTMLButtonElement, discoveryPopover: HTMLElement, randomTownLink: HTMLAnchorElement, randomTownStatus: HTMLElement, buildLink: HTMLAnchorElement, mapLink: HTMLAnchorElement, aboutLink: HTMLAnchorElement, jumpButton: HTMLButtonElement, highFiveButton: HTMLButtonElement, feedBirdsButton: HTMLButtonElement, toolbar: HTMLElement }}
  */
 export function renderShell(container) {
+  const shellId = nextShellId;
+  nextShellId += 1;
   const element = document.createElement("section");
   element.className = "townsquare";
 
@@ -71,62 +85,89 @@ export function renderShell(container) {
 
   enableToggleLabel.append(enableToggle, enableToggleTrack);
 
-  const helpButton = document.createElement("button");
-  helpButton.className = "townsquare__button townsquare__button--sm townsquare__help-button";
-  helpButton.type = "button";
-  helpButton.setAttribute("aria-label", "About TownSquare");
-  helpButton.setAttribute("aria-expanded", "false");
-  helpButton.setAttribute("aria-controls", "townsquare-help-panel");
-  helpButton.title = "About TownSquare";
-  helpButton.textContent = "?";
+  const discoveryButton = document.createElement("button");
+  discoveryButton.className = "townsquare__button townsquare__button--sm townsquare__discovery-button";
+  discoveryButton.type = "button";
+  discoveryButton.innerHTML = COMPASS_ICON;
+  discoveryButton.setAttribute("aria-label", "Explore TownSquare");
+  discoveryButton.setAttribute("aria-haspopup", "dialog");
+  discoveryButton.setAttribute("aria-expanded", "false");
+  discoveryButton.setAttribute("aria-controls", `townsquare-discovery-${shellId}`);
+  discoveryButton.title = "Explore TownSquare";
 
-  const helpScrim = document.createElement("div");
-  helpScrim.className = "townsquare__help-scrim";
-  helpScrim.hidden = true;
+  const discoveryPopover = document.createElement("div");
+  discoveryPopover.className = "townsquare__discovery-popover";
+  discoveryPopover.id = `townsquare-discovery-${shellId}`;
+  discoveryPopover.hidden = true;
+  discoveryPopover.setAttribute("role", "dialog");
+  discoveryPopover.setAttribute("aria-labelledby", `townsquare-discovery-title-${shellId}`);
 
-  const helpPanel = document.createElement("div");
-  helpPanel.className = "townsquare__help-panel";
-  helpPanel.id = "townsquare-help-panel";
-  helpPanel.setAttribute("role", "dialog");
-  helpPanel.setAttribute("aria-modal", "true");
-  helpPanel.setAttribute("aria-labelledby", "townsquare-help-title");
+  const discoveryTitle = document.createElement("strong");
+  discoveryTitle.className = "townsquare__discovery-title";
+  discoveryTitle.id = `townsquare-discovery-title-${shellId}`;
+  discoveryTitle.textContent = "TownSquare";
 
-  const helpTitle = document.createElement("strong");
-  helpTitle.id = "townsquare-help-title";
-  helpTitle.textContent = "TownSquare";
+  const discoveryActions = document.createElement("div");
+  discoveryActions.className = "townsquare__discovery-actions";
 
-  const description = document.createElement("p");
-  description.textContent = "A tiny shared place for people visiting this site.";
+  const randomTownLink = document.createElement("a");
+  randomTownLink.className = "townsquare__discovery-action";
+  randomTownLink.target = "_blank";
+  randomTownLink.rel = "noopener noreferrer";
+  randomTownLink.tabIndex = 0;
+  randomTownLink.setAttribute("role", "link");
+  randomTownLink.setAttribute("aria-disabled", "true");
 
-  const instructions = document.createElement("p");
-  instructions.textContent =
-    "Move with the arrow keys, tap where you want to walk, or swipe left and right on touch screens. Press J to jump, H to show a high-five, and B to throw crumbs for the birds; on touch, use the action buttons. Press T or tap your nameplate to chat, and tap a character to see their recent messages.";
+  const randomTownLabel = document.createElement("span");
+  randomTownLabel.className = "townsquare__discovery-action-label";
+  randomTownLabel.textContent = "🎲 Visit another town";
 
-  const links = document.createElement("p");
-  links.className = "townsquare__help-links";
+  const randomTownStatus = document.createElement("span");
+  randomTownStatus.className = "townsquare__discovery-action-subtitle";
+  randomTownStatus.setAttribute("aria-live", "polite");
+  randomTownStatus.textContent = "See where the compass points";
+  randomTownLink.append(randomTownLabel, randomTownStatus);
+
+  const buildLink = document.createElement("a");
+  buildLink.className = "townsquare__discovery-action";
+  buildLink.href = BUILD_URL;
+  buildLink.target = "_blank";
+  buildLink.rel = "noopener noreferrer";
+
+  const buildLabel = document.createElement("span");
+  buildLabel.className = "townsquare__discovery-action-label";
+  buildLabel.textContent = "✨ Build your own TownSquare";
+
+  const buildSubtitle = document.createElement("span");
+  buildSubtitle.className = "townsquare__discovery-action-subtitle";
+  buildSubtitle.textContent = "Free & open source";
+  buildLink.append(buildLabel, buildSubtitle);
+  discoveryActions.append(randomTownLink, buildLink);
+
+  const discoveryLinks = document.createElement("nav");
+  discoveryLinks.className = "townsquare__discovery-links";
+  discoveryLinks.setAttribute("aria-label", "More about TownSquare");
 
   const mapLink = document.createElement("a");
   mapLink.href = MAP_URL;
   mapLink.target = "_blank";
   mapLink.rel = "noopener noreferrer";
-  mapLink.textContent = "map";
+  mapLink.textContent = "🗺 View the map";
 
-  const homeLink = document.createElement("a");
-  homeLink.href = TOWNSQUARE_URL;
-  homeLink.target = "_blank";
-  homeLink.rel = "noopener noreferrer";
-  homeLink.textContent = "townsquare.cauenapier.com";
+  const aboutLink = document.createElement("a");
+  aboutLink.href = TOWNSQUARE_URL;
+  aboutLink.target = "_blank";
+  aboutLink.rel = "noopener noreferrer";
+  aboutLink.textContent = "? What is TownSquare?";
+  discoveryLinks.append(mapLink, aboutLink);
 
-  links.append(
-    "View the world of Town Squares and its active cities on the ", mapLink, ".",
-    document.createElement("br"),
-    "Learn more and add your own Town Square at ", homeLink, "."
-  );
+  const help = document.createElement("p");
+  help.className = "townsquare__discovery-help";
+  help.textContent = "Walk with ← →, tap, or swipe · J jump · H high-five · B feed birds · T or tap your name to chat · Tap a visitor for recent messages";
 
-  helpPanel.append(helpTitle, description, instructions, links);
-  helpScrim.appendChild(helpPanel);
+  discoveryPopover.append(discoveryTitle, discoveryActions, discoveryLinks, help);
 
-  controls.append(expandButton, enableToggleLabel, helpButton);
+  controls.append(expandButton, enableToggleLabel, discoveryButton);
 
   const actions = document.createElement("div");
   actions.className = "townsquare__actions";
@@ -181,7 +222,7 @@ export function renderShell(container) {
 
   // Three independent zones: stage (sky) / ground / action-zone
   element.append(controls, statusRow, stageEl, ground, actionZone);
-  container.append(element, helpScrim);
+  container.append(element, discoveryPopover);
   return {
     app: element,
     stage: stageEl,
@@ -190,9 +231,13 @@ export function renderShell(container) {
     enableToggle,
     enableToggleLabel,
     expandButton,
-    helpButton,
-    helpScrim,
-    helpPanel,
+    discoveryButton,
+    discoveryPopover,
+    randomTownLink,
+    randomTownStatus,
+    buildLink,
+    mapLink,
+    aboutLink,
     jumpButton,
     highFiveButton,
     feedBirdsButton,
@@ -202,37 +247,163 @@ export function renderShell(container) {
 }
 
 /**
- * Toggle the About panel from the help button; closes on outside click.
+ * Wire the anchored discovery popover, its random destination, and anonymous
+ * aggregate click events.
  *
- * @param {HTMLButtonElement} helpButton
- * @param {HTMLElement} helpScrim
- * @param {HTMLElement} helpPanel
- * @param {HTMLElement} enableToggleLabel
+ * @param {{ discoveryButton: HTMLButtonElement, discoveryPopover: HTMLElement, randomTownLink: HTMLAnchorElement, randomTownStatus: HTMLElement, buildLink: HTMLAnchorElement, mapLink: HTMLAnchorElement, aboutLink: HTMLAnchorElement, serverOrigin: string, siteKey?: string }} options
  * @returns {() => void}
  */
-export function wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel) {
-  const setHelpOpen = (open) => {
-    helpScrim.hidden = !open;
-    helpButton.setAttribute("aria-expanded", String(open));
+export function wireDiscoveryPopover({
+  discoveryButton,
+  discoveryPopover,
+  randomTownLink,
+  randomTownStatus,
+  buildLink,
+  mapLink,
+  aboutLink,
+  serverOrigin,
+  siteKey = "",
+}) {
+  let randomRequestId = 0;
+
+  const reportEvent = (event) => {
+    if (!siteKey || typeof navigator?.sendBeacon !== "function") return;
+    try {
+      const payload = new Blob([JSON.stringify({ siteKey, event })], { type: "text/plain" });
+      navigator.sendBeacon(`${serverOrigin}/api/discovery/event`, payload);
+    } catch {
+      // Aggregate analytics are best-effort and never block an interaction.
+    }
   };
 
-  const onHelpClick = () => setHelpOpen(helpScrim.hidden);
-  const onHelpPointerDown = (event) => {
-    if (helpScrim.hidden) return;
+  const positionPopover = () => {
+    if (discoveryPopover.hidden) return;
+    const margin = 8;
+    const gap = 7;
+    const viewport = window.visualViewport;
+    const viewportLeft = viewport?.offsetLeft || 0;
+    const viewportTop = viewport?.offsetTop || 0;
+    const viewportWidth = viewport?.width || window.innerWidth;
+    const viewportHeight = viewport?.height || window.innerHeight;
+    const buttonRect = discoveryButton.getBoundingClientRect();
+    discoveryPopover.style.removeProperty("max-height");
+    const popoverRect = discoveryPopover.getBoundingClientRect();
+    const left = Math.min(
+      viewportLeft + viewportWidth - popoverRect.width - margin,
+      Math.max(viewportLeft + margin, buttonRect.right - popoverRect.width),
+    );
+    const below = buttonRect.bottom + gap;
+    const availableBelow = viewportTop + viewportHeight - margin - below;
+    const availableAbove = buttonRect.top - gap - viewportTop - margin;
+    const placeBelow = popoverRect.height <= availableBelow || availableBelow >= availableAbove;
+    const availableHeight = Math.max(1, placeBelow ? availableBelow : availableAbove);
+    discoveryPopover.style.maxHeight = `${Math.floor(availableHeight)}px`;
+    const fittedHeight = discoveryPopover.getBoundingClientRect().height;
+    const top = placeBelow ? below : buttonRect.top - fittedHeight - gap;
+    discoveryPopover.style.left = `${Math.round(left)}px`;
+    discoveryPopover.style.top = `${Math.round(top)}px`;
+    discoveryPopover.removeAttribute("data-positioning");
+  };
+
+  const loadRandomTown = async () => {
+    const requestId = ++randomRequestId;
+    randomTownLink.removeAttribute("href");
+    randomTownLink.setAttribute("aria-disabled", "true");
+    randomTownLink.setAttribute("aria-busy", "true");
+    randomTownStatus.textContent = "Finding a town…";
+    try {
+      const url = new URL("/api/discovery/random", serverOrigin);
+      if (siteKey) url.searchParams.set("siteKey", siteKey);
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      const body = await response.json();
+      if (requestId !== randomRequestId) return;
+      const destination = new URL(body?.town?.url || "");
+      if (!response.ok || !["http:", "https:"].includes(destination.protocol)) throw new Error("unavailable");
+      randomTownLink.href = destination.href;
+      randomTownLink.setAttribute("aria-disabled", "false");
+      randomTownStatus.textContent = body.town.name ? `Visit ${body.town.name}` : "See where the compass points";
+    } catch {
+      if (requestId !== randomRequestId) return;
+      randomTownStatus.textContent = "No other towns available right now";
+    } finally {
+      if (requestId === randomRequestId) randomTownLink.removeAttribute("aria-busy");
+    }
+  };
+
+  const setOpen = (open, { returnFocus = false } = {}) => {
+    if (open === !discoveryPopover.hidden) return;
+    discoveryPopover.hidden = !open;
+    discoveryButton.setAttribute("aria-expanded", String(open));
+    discoveryButton.classList.toggle("townsquare__button--active", open);
+    if (open) {
+      discoveryPopover.setAttribute("data-positioning", "");
+      positionPopover();
+      reportEvent("discovery_menu_opened");
+      void loadRandomTown();
+      randomTownLink.focus({ preventScroll: true });
+    } else if (returnFocus) {
+      discoveryButton.focus({ preventScroll: true });
+    }
+  };
+
+  const onDiscoveryClick = () => setOpen(discoveryPopover.hidden);
+  const onDocumentPointerDown = (event) => {
+    if (discoveryPopover.hidden) return;
     const target = event.target;
     if (
       target instanceof Node
-      && (helpButton.contains(target) || helpPanel.contains(target) || enableToggleLabel.contains(target))
+      && (discoveryButton.contains(target) || discoveryPopover.contains(target))
     ) return;
-    setHelpOpen(false);
+    setOpen(false);
+  };
+  const onDocumentKeyDown = (event) => {
+    if (event.key !== "Escape" || discoveryPopover.hidden) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(false, { returnFocus: true });
+  };
+  const onRandomClick = (event) => {
+    if (randomTownLink.getAttribute("aria-disabled") === "true") {
+      event.preventDefault();
+      return;
+    }
+    reportEvent("random_town_clicked");
+    setOpen(false);
+  };
+  const wireTrackedLink = (link, eventName) => {
+    const listener = () => {
+      reportEvent(eventName);
+      setOpen(false);
+    };
+    link.addEventListener("click", listener);
+    return () => link.removeEventListener("click", listener);
   };
 
-  helpButton.addEventListener("click", onHelpClick);
-  document.addEventListener("pointerdown", onHelpPointerDown, true);
+  discoveryButton.addEventListener("click", onDiscoveryClick);
+  randomTownLink.addEventListener("click", onRandomClick);
+  document.addEventListener("pointerdown", onDocumentPointerDown, true);
+  document.addEventListener("keydown", onDocumentKeyDown, true);
+  window.addEventListener("resize", positionPopover);
+  window.addEventListener("scroll", positionPopover, true);
+  window.visualViewport?.addEventListener("resize", positionPopover);
+  window.visualViewport?.addEventListener("scroll", positionPopover);
+  const unwireBuild = wireTrackedLink(buildLink, "build_townsquare_clicked");
+  const unwireMap = wireTrackedLink(mapLink, "map_clicked");
+  const unwireAbout = wireTrackedLink(aboutLink, "about_clicked");
 
   return () => {
-    helpButton.removeEventListener("click", onHelpClick);
-    document.removeEventListener("pointerdown", onHelpPointerDown, true);
-    setHelpOpen(false);
+    randomRequestId += 1;
+    discoveryButton.removeEventListener("click", onDiscoveryClick);
+    randomTownLink.removeEventListener("click", onRandomClick);
+    document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+    document.removeEventListener("keydown", onDocumentKeyDown, true);
+    window.removeEventListener("resize", positionPopover);
+    window.removeEventListener("scroll", positionPopover, true);
+    window.visualViewport?.removeEventListener("resize", positionPopover);
+    window.visualViewport?.removeEventListener("scroll", positionPopover);
+    unwireBuild();
+    unwireMap();
+    unwireAbout();
+    setOpen(false);
   };
 }

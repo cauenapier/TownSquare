@@ -87,7 +87,10 @@ implementation in [`public/townsquare-counter.mjs`](public/townsquare-counter.mj
   identity, moderation, and plugins.
 - `/service-admin` manages the service registry, aggregate activity, global map,
   and operator notifications when `SERVICE_ADMIN_PASSWORD` is set.
-- `/map` displays verified, enabled sites.
+- `/map` displays verified, enabled sites. The widget compass uses the same
+  directory eligibility rules to offer one random town at a time, excluding the
+  current installation; its five discovery interactions are retained only as
+  per-site aggregate counts and timestamps.
 
 Registered sites are stored under `DATA_DIR` (`.data` by default). Admin tokens
 are stored as hashes. Runtime visitor and message state remains in memory.
@@ -130,8 +133,8 @@ npm run test:all          # all of the above
 
 The integration tests allocate their own ports and temporary data directories;
 no manually started server is required. Browser-based geometry checks are
-available as `test:ground-line`, `test:widget-color`, and
-`test:scene-alignment` when Playwright browsers are installed.
+available as `test:ground-line`, `test:widget-color`, `test:scene-alignment`, and
+`test:discovery` when Playwright browsers are installed.
 
 ## License
 

@@ -18,6 +18,7 @@
     "test:ground-line": "node scripts/ground-line-test.mjs",
     "test:widget-color": "node scripts/widget-color-test.mjs",
     "test:scene-alignment": "node scripts/scene-alignment-test.mjs",
+    "test:discovery": "node scripts/discovery-widget-test.mjs",
     "bot-replay": "node scripts/bot-replay-test.js"
   },
   "dependencies": {

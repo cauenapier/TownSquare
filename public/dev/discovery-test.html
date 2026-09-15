@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare — discovery test fixture</title>
+    <link rel="stylesheet" href="/widget.css" />
+    <link rel="stylesheet" href="/page.css" />
+    <style>
+      body { min-height: 900px; }
+      .discovery-test-host { width: min(460px, calc(100% - 20px)); margin: 12px auto; }
+    </style>
+  </head>
+  <body class="dev-page">
+    <main class="discovery-test-host">
+      <div id="townsquare-root"></div>
+    </main>
+    <script type="module">
+      import { mountTownSquare } from "/townsquare.mjs";
+
+      mountTownSquare(document.getElementById("townsquare-root"), {
+        serverOrigin: window.location.origin,
+        siteKey: "source-site",
+        preview: true,
+        style: {},
+        scene: { benches: 0, trees: 0, lamps: 0, birds: 0 },
+      });
+    </script>
+  </body>
+</html>

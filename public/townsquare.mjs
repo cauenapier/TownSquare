@@ -25,7 +25,7 @@ import {
 } from "./widget/gestures.mjs";
 import { watchCurrentPage } from "./widget/page-watch.mjs";
 import { createWidgetPluginRuntime } from "./widget/plugins.mjs";
-import { renderShell, wireHelpPanel } from "./widget/shell.mjs";
+import { renderShell, wireDiscoveryPopover } from "./widget/shell.mjs";
 import {
   closeTrays,
   wireGameLoop,
@@ -257,11 +257,14 @@ export function mountTownSquare(root, options = {}) {
     statusRow,
     status: statusEl,
     enableToggle,
-    enableToggleLabel,
     expandButton,
-    helpButton,
-    helpScrim,
-    helpPanel,
+    discoveryButton,
+    discoveryPopover,
+    randomTownLink,
+    randomTownStatus,
+    buildLink,
+    mapLink,
+    aboutLink,
     jumpButton,
     highFiveButton,
     feedBirdsButton,
@@ -413,8 +416,18 @@ export function mountTownSquare(root, options = {}) {
   // The rename pencil now belongs to the self name tag. Moving the nodes keeps
   // their click listeners intact. Final bar order: input, jump, hi5, crumbs.
   toolbar.append(jumpButton, highFiveButton, feedBirdsButton);
-  const unwireHelpPanel = wireHelpPanel(helpButton, helpScrim, helpPanel, enableToggleLabel);
-  disposers.push(unwireHelpPanel);
+  const unwireDiscoveryPopover = wireDiscoveryPopover({
+    discoveryButton,
+    discoveryPopover,
+    randomTownLink,
+    randomTownStatus,
+    buildLink,
+    mapLink,
+    aboutLink,
+    serverOrigin,
+    siteKey,
+  });
+  disposers.push(unwireDiscoveryPopover);
 
   const unwatchPage = watchCurrentPage(ctx);
   disposers.push(unwatchPage);

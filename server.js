@@ -17,6 +17,7 @@ const { createStaticFiles } = require("./server/static-files");
 const { makeBucketStore } = require("./server/rate-limit");
 const { SITE_REGISTRY_VERSION, createSitesWriter } = require("./server/sites-store");
 const { mapSiteLifecycle } = require("./server/map-site-lifecycle");
+const { selectRandomTown } = require("./server/discovery");
 const {
   clampPosition,
   sanitizeBrowserId,
@@ -1207,9 +1208,13 @@ function isPlausibleEventAllowed(ip) {
 const connectionClicksByIp = makeBucketStore();
 const mapClicksByIp = makeBucketStore();
 const sitePresenceReadsByIp = makeBucketStore();
+const discoveryReadsByIp = makeBucketStore();
+const discoveryEventsByIp = makeBucketStore();
 const CONNECTION_CLICKS_PER_HOUR = readLimit("CONNECTION_CLICKS_PER_HOUR", 600);
 const MAP_CLICKS_PER_HOUR = readLimit("MAP_CLICKS_PER_HOUR", 600);
 const SITE_PRESENCE_READS_PER_HOUR = readLimit("SITE_PRESENCE_READS_PER_HOUR", 600);
+const DISCOVERY_READS_PER_HOUR = readLimit("DISCOVERY_READS_PER_HOUR", 600);
+const DISCOVERY_EVENTS_PER_HOUR = readLimit("DISCOVERY_EVENTS_PER_HOUR", 600);
 
 function isConnectionClickAllowed(ip) {
   return connectionClicksByIp.take(ip, CONNECTION_CLICKS_PER_HOUR);
@@ -1221,6 +1226,14 @@ function isMapClickAllowed(ip) {
 
 function isSitePresenceReadAllowed(ip) {
   return sitePresenceReadsByIp.take(ip, SITE_PRESENCE_READS_PER_HOUR);
+}
+
+function isDiscoveryReadAllowed(ip) {
+  return discoveryReadsByIp.take(ip, DISCOVERY_READS_PER_HOUR);
+}
+
+function isDiscoveryEventAllowed(ip) {
+  return discoveryEventsByIp.take(ip, DISCOVERY_EVENTS_PER_HOUR);
 }
 
 const plausible = createPlausibleProxy({
@@ -1368,6 +1381,25 @@ function handleMapActivity(req, res) {
     }))
     : [];
   sendJson(res, 200, { version, sites });
+}
+
+function handleRandomTown(req, res) {
+  if (!isDiscoveryReadAllowed(getRequestIp(req))) {
+    sendPublicJson(res, 429, { error: "rate limited" });
+    return;
+  }
+
+  const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+  const currentSiteKey = String(url.searchParams.get("siteKey") || "").slice(0, 128);
+  const { map } = buildPublicMapData();
+  const town = selectRandomTown(map.sites, { excludeSiteKey: currentSiteKey });
+
+  if (!town) {
+    sendPublicJson(res, 404, { error: "No other public towns are available right now." });
+    return;
+  }
+
+  sendPublicJson(res, 200, { town });
 }
 
 function getPublicStats() {
@@ -2051,6 +2083,7 @@ function serviceAdminSite(site) {
   const scene = scenes.get(site.siteKey);
   const connectionClicks = isPlainObject(site.connectionClicks) ? site.connectionClicks : {};
   const mapClicks = isPlainObject(site.mapClicks) ? site.mapClicks : {};
+  const discoveryEvents = isPlainObject(site.discoveryEvents) ? site.discoveryEvents : {};
   const adminAccess = isPlainObject(site.adminAccess) ? site.adminAccess : {};
   const overlayUsage = isPlainObject(site.overlayUsage) ? site.overlayUsage : {};
   const weatherActivation = isPlainObject(site.weatherActivation) ? site.weatherActivation : {};
@@ -2069,6 +2102,7 @@ function serviceAdminSite(site) {
     ),
     mapClickTotal: Number(mapClicks.count || 0),
     mapClickLastAt: Number(mapClicks.lastAt || 0),
+    discoveryEvents,
     adminAccessCount: Number(adminAccess.count || 0),
     adminAccessLastAt: Number(adminAccess.lastAt || 0),
     overlayUseCount: Number(overlayUsage.count || 0),
@@ -2852,6 +2886,7 @@ function createSiteRecord({ name, origin, allowedOrigins, email, sceneConfig, st
       lastMessageAt: null,
       connectionClicks: {},
       mapClicks: { count: 0, lastAt: 0 },
+      discoveryEvents: {},
       overlayUsage: { count: 0, lastAt: 0 },
       adminAccess: { count: 0, lastAt: 0 },
       createdAt: now,
@@ -2909,6 +2944,7 @@ function normalizeSiteRecord(site) {
   ensureObject("pluginsEnabled");
   ensureObject("connectionClicks");
   ensureObject("mapClicks", { count: 0, lastAt: 0 });
+  ensureObject("discoveryEvents");
   ensureObject("adminAccess", { count: 0, lastAt: 0 });
   ensureObject("weatherActivation", { attempts: 0, firstAttemptAt: 0, lastAttemptAt: 0 });
   if (ensurePluginData(site)) changed = true;
@@ -3069,6 +3105,7 @@ function saveNotifications() {
 // for traffic analytics.
 let lastConnectionClicksSaveAt = 0;
 let lastMapClicksSaveAt = 0;
+let lastDiscoveryEventsSaveAt = 0;
 
 // lastSeenUrl is refreshed on every navigation across every connected visitor.
 // Throttle the full sites.json rewrite the same way lastSeenAt is throttled so a
@@ -3162,6 +3199,56 @@ function handleMapClick(req, res) {
 
     if (now - lastMapClicksSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
       lastMapClicksSaveAt = now;
+      saveSites();
+    }
+
+    respond(204);
+  });
+}
+
+const DISCOVERY_EVENT_NAMES = new Set([
+  "discovery_menu_opened",
+  "random_town_clicked",
+  "build_townsquare_clicked",
+  "map_clicked",
+  "about_clicked",
+]);
+
+/**
+ * Store only per-site aggregate discovery counts and timestamps. No visitor
+ * identifier, destination, referrer, or page URL is collected.
+ */
+function handleDiscoveryEvent(req, res) {
+  const respond = (status) => {
+    res.writeHead(status, {
+      "access-control-allow-origin": "*",
+      "cache-control": "no-store",
+    });
+    res.end();
+  };
+
+  if (!isDiscoveryEventAllowed(getRequestIp(req))) {
+    respond(429);
+    return;
+  }
+
+  readJsonBody(req, res, (body) => {
+    const siteKey = typeof body.siteKey === "string" ? body.siteKey : "";
+    const event = typeof body.event === "string" ? body.event : "";
+    const site = sitesByKey.get(siteKey);
+    if (!site || site.disabled || !DISCOVERY_EVENT_NAMES.has(event)) {
+      respond(204);
+      return;
+    }
+
+    const now = Date.now();
+    const events = isPlainObject(site.discoveryEvents) ? site.discoveryEvents : (site.discoveryEvents = {});
+    const entry = isPlainObject(events[event]) ? events[event] : (events[event] = { count: 0, lastAt: 0 });
+    entry.count = (Number(entry.count) || 0) + 1;
+    entry.lastAt = now;
+
+    if (now - lastDiscoveryEventsSaveAt > LAST_SEEN_SAVE_INTERVAL_MS) {
+      lastDiscoveryEventsSaveAt = now;
       saveSites();
     }
 
@@ -3426,11 +3513,13 @@ function finalizeDisconnect(identity) {
 const HTTP_ROUTES = new Map([
   ["GET /api/map", handleMap],
   ["GET /api/map/activity", handleMapActivity],
+  ["GET /api/discovery/random", handleRandomTown],
   ["GET /api/stats", handleStats],
   ["GET /api/site-presence", handleSitePresence],
   ["POST /api/sites", handleRegisterSite],
   ["POST /api/connection-click", handleConnectionClick],
   ["POST /api/map-click", handleMapClick],
+  ["POST /api/discovery/event", handleDiscoveryEvent],
   ["POST /api/admin/site", handlePostAdminSite],
   ["POST /api/admin/login", handleAdminLogin],
   ["POST /api/admin/logout", handleAdminLogout],
