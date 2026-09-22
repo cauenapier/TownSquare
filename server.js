@@ -1367,9 +1367,12 @@ function buildPublicMapData(now = Date.now()) {
   return { map, version };
 }
 
+// Public map data: also fetched cross-origin by the homepage's embedded map
+// (a separate static site sharing this hostname through path-based routing
+// in production, but a different origin in local dev), so this needs CORS.
 function handleMap(req, res) {
   const { map, version } = buildPublicMapData();
-  sendJson(res, 200, { ...map, version });
+  sendPublicJson(res, 200, { ...map, version });
 }
 
 function handleMapActivity(req, res) {
@@ -1380,7 +1383,7 @@ function handleMapActivity(req, res) {
       activeVisitors: Math.max(0, Number(site.activeVisitors) || 0),
     }))
     : [];
-  sendJson(res, 200, { version, sites });
+  sendPublicJson(res, 200, { version, sites });
 }
 
 function handleRandomTown(req, res) {

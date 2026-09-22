@@ -19,6 +19,7 @@
     "test:widget-color": "node scripts/widget-color-test.mjs",
     "test:scene-alignment": "node scripts/scene-alignment-test.mjs",
     "test:discovery": "node scripts/discovery-widget-test.mjs",
+    "test:map-embed": "node scripts/map-embed-test.mjs",
     "bot-replay": "node scripts/bot-replay-test.js"
   },
   "dependencies": {

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TownSquare — map embed sandbox</title>
+    <link rel="stylesheet" href="/page.css" />
+    <style>
+      /* Mimics the homepage: lots of scrollable content above and below the
+         map, so a test can assert the page still scrolls normally through it. */
+      body { min-height: 2400px; }
+      .embed-sandbox-host {
+        width: min(620px, calc(100% - 32px));
+        margin: 900px auto 0;
+      }
+      .embed-sandbox-canvas {
+        aspect-ratio: 3 / 2;
+        border: 1px solid var(--hair-2);
+        border-radius: var(--r-card);
+        overflow: hidden;
+      }
+      .embed-sandbox-actions { margin-top: 12px; }
+    </style>
+  </head>
+  <body class="dev-page">
+    <main class="embed-sandbox-host">
+      <p id="embed-sandbox-status" role="status"></p>
+      <p id="embed-sandbox-stats"></p>
+
+      <div class="embed-sandbox-canvas">
+        <div id="embed-sandbox-map" class="map-canvas" tabindex="0" aria-label="TownSquare network map preview"></div>
+      </div>
+
+      <div id="embed-sandbox-detail" class="map-embed-detail" hidden>
+        <p class="map-embed-detail__eyebrow">Town</p>
+        <p class="map-embed-detail__name" data-detail-name></p>
+        <a class="map-embed-detail__origin" data-detail-origin target="_blank" rel="noopener noreferrer"></a>
+        <p class="map-embed-detail__visitors" data-detail-visitors></p>
+        <div class="map-embed-detail__row">
+          <a class="map-embed-detail__visit" data-detail-visit target="_blank" rel="noopener noreferrer">Visit site</a>
+          <button type="button" class="map-embed-detail__close" data-detail-close aria-label="Close">×</button>
+        </div>
+      </div>
+
+      <div class="embed-sandbox-actions">
+        <button type="button" id="embed-sandbox-random" class="map-action">🎲 Visit another town</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import { mountTownSquareMapEmbed } from "/map/map-embed.mjs";
+
+      const statusEl = document.getElementById("embed-sandbox-status");
+      const statsEl = document.getElementById("embed-sandbox-stats");
+      const randomLink = document.getElementById("embed-sandbox-random");
+
+      const map = mountTownSquareMapEmbed({
+        root: document.getElementById("embed-sandbox-map"),
+        detailPanel: document.getElementById("embed-sandbox-detail"),
+        onStatus: (text) => { statusEl.textContent = text; },
+        onStats: (stats) => {
+          statsEl.textContent = `${stats.towns} towns · ${stats.activeLast30d} active in the last 30 days · ${stats.visitorsNow} visiting now`;
+        },
+      });
+
+      window.__mapEmbed = map;
+
+      randomLink.addEventListener("click", async () => {
+        randomLink.setAttribute("aria-busy", "true");
+        const town = await map.visitRandomTown();
+        randomLink.removeAttribute("aria-busy");
+        if (!town) return;
+        randomLink.dataset.resolvedTown = town.siteKey;
+        window.open(town.url, "_blank", "noopener,noreferrer");
+      });
+    </script>
+  </body>
+</html>
