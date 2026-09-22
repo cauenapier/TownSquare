@@ -309,6 +309,26 @@
   box-shadow: var(--bshadow);
 }
 
+/* Transient "hold Ctrl/Cmd to zoom" hint (embedded map only), shown briefly
+   when the visitor scrolls the map without the modifier held. */
+.map-wheel-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  margin: 0;
+  padding: 10px 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--ink) 82%, transparent);
+  color: var(--cream, #fff);
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .map-network-stats {
   margin: 0;
   text-align: center;

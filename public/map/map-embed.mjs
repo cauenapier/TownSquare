@@ -7,8 +7,11 @@ import { createTownSquareMap, fetchRandomTown } from "./map-engine.mjs";
  * so it takes no DOM ids and instead wires up whatever elements it is given.
  *
  * Unlike the full /map page, the embedded map:
- *  - always shows the whole world (no pan/zoom UI, nothing to get "lost" in)
- *  - never hijacks wheel or touch scrolling, so normal page scroll is untouched
+ *  - starts out showing the whole world, no toolbar, nothing to get "lost" in
+ *  - never hijacks a plain wheel scroll or touch drag, so normal page scroll
+ *    stays untouched; holding Ctrl/Cmd while scrolling zooms instead (the
+ *    same gesture a trackpad pinch already sends as a wheel event), matching
+ *    the familiar "hold Ctrl/Cmd to zoom the map" pattern of embedded maps
  *  - shows an inline detail panel next to the map instead of a modal dialog
  *  - hides lower-priority town labels until hover/focus/selection
  *
@@ -18,6 +21,8 @@ import { createTownSquareMap, fetchRandomTown } from "./map-engine.mjs";
  *   given, it is populated/shown/hidden automatically; pass `onSelect`
  *   instead (or as well) to fully own the detail UI.
  * @param {HTMLElement} [options.statusEl]
+ * @param {HTMLElement} [options.hintEl] Shown briefly (its text is set for
+ *   you) when the visitor scrolls the map without holding Ctrl/Cmd.
  * @param {string} [options.fetchBase] Origin to fetch `/api/map*` and
  *   `/api/discovery/random` against — required cross-origin (e.g. the
  *   landing page in local dev, where it is not the same origin as the
@@ -30,6 +35,7 @@ export function mountTownSquareMapEmbed({
   root,
   detailPanel = null,
   statusEl = null,
+  hintEl = null,
   fetchBase = "",
   onSelect,
   onStats = () => {},
@@ -37,6 +43,20 @@ export function mountTownSquareMapEmbed({
 } = {}) {
   if (!(root instanceof HTMLElement)) throw new Error("mountTownSquareMapEmbed requires a root element");
   root.classList.add("map-canvas--embedded");
+
+  const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
+  const hintText = `Hold ${isMac ? "⌘" : "Ctrl"} and scroll to zoom the map`;
+  let hintTimer = null;
+
+  function showWheelHint() {
+    if (!(hintEl instanceof HTMLElement)) return;
+    hintEl.textContent = hintText;
+    hintEl.hidden = false;
+    window.clearTimeout(hintTimer);
+    hintTimer = window.setTimeout(() => {
+      hintEl.hidden = true;
+    }, 1600);
+  }
 
   let detailNameEl = null;
   let detailOriginEl = null;
@@ -83,7 +103,9 @@ export function mountTownSquareMapEmbed({
     root,
     mode: "embedded",
     interactivePanZoom: false,
-    wheelZoom: false,
+    wheelZoom: true,
+    wheelZoomRequiresModifier: true,
+    onWheelHint: showWheelHint,
     fetchBase,
     onStatus,
     onStats,
@@ -110,6 +132,10 @@ export function mountTownSquareMapEmbed({
       if (!town) return null;
       map.reportVisit(town.siteKey);
       return town;
+    },
+    destroy() {
+      window.clearTimeout(hintTimer);
+      map.destroy();
     },
   };
 }

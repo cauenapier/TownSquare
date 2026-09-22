@@ -14,6 +14,7 @@
         margin: 900px auto 0;
       }
       .embed-sandbox-canvas {
+        position: relative;
         aspect-ratio: 3 / 2;
         border: 1px solid var(--hair-2);
         border-radius: var(--r-card);
@@ -29,6 +30,7 @@
 
       <div class="embed-sandbox-canvas">
         <div id="embed-sandbox-map" class="map-canvas" tabindex="0" aria-label="TownSquare network map preview"></div>
+        <p id="embed-sandbox-hint" class="map-wheel-hint" hidden></p>
       </div>
 
       <div id="embed-sandbox-detail" class="map-embed-detail" hidden>
@@ -57,6 +59,7 @@
       const map = mountTownSquareMapEmbed({
         root: document.getElementById("embed-sandbox-map"),
         detailPanel: document.getElementById("embed-sandbox-detail"),
+        hintEl: document.getElementById("embed-sandbox-hint"),
         onStatus: (text) => { statusEl.textContent = text; },
         onStats: (stats) => {
           statsEl.textContent = `${stats.towns} towns · ${stats.activeLast30d} active in the last 30 days · ${stats.visitorsNow} visiting now`;

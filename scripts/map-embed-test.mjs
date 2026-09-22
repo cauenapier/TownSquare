@@ -1,7 +1,7 @@
 // Browser regression coverage for the embedded (homepage) TownSquare map:
 // mounting, site selection/detail interaction, keyboard access, the random
-// town action, activity updates, and — critically — that it never traps
-// normal touch/wheel page scrolling.
+// town action, activity updates, Ctrl/Cmd+wheel zoom, and — critically —
+// that a plain wheel/touch scroll is never trapped by the map.
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { startManagedServer } from "./lib/widget-shot-helpers.mjs";
@@ -103,6 +103,36 @@ async function main() {
     assert.equal(popup.url(), "https://harbor.example/");
     await popup.close();
     assert.equal(await randomButton.getAttribute("data-resolved-town"), "town-b");
+
+    // --- Ctrl/Cmd + wheel zooms; a plain wheel leaves the map alone and shows a hint ---
+    const svgViewBox = () => page.evaluate(() => document.querySelector("#embed-sandbox-map .map-svg")?.getAttribute("viewBox"));
+    const mapCanvasBox = await page.locator("#embed-sandbox-map").boundingBox();
+    assert.ok(mapCanvasBox, "embedded map canvas not found");
+    await page.mouse.move(mapCanvasBox.x + mapCanvasBox.width / 2, mapCanvasBox.y + mapCanvasBox.height / 2);
+
+    const viewBoxBeforeWheel = await svgViewBox();
+    await page.mouse.wheel(0, -240);
+    assert.equal(await svgViewBox(), viewBoxBeforeWheel, "an unmodified wheel scroll must not zoom the embedded map");
+    await page.locator("#embed-sandbox-hint").waitFor({ state: "visible" });
+    assert.match(await page.locator("#embed-sandbox-hint").textContent(), /to zoom the map/);
+
+    // Playwright's mouse.wheel() does not carry currently-held modifier keys
+    // onto the synthesized wheel event, so dispatch one directly with
+    // ctrlKey set — this still exercises the real listener and its real
+    // preventDefault/zoom logic, just without relying on OS-level modifier
+    // plumbing the test runner can't control.
+    await page.evaluate(() => {
+      document.getElementById("embed-sandbox-map").dispatchEvent(new WheelEvent("wheel", {
+        deltaY: -240,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+    await page.waitForFunction(
+      (prev) => document.querySelector("#embed-sandbox-map .map-svg")?.getAttribute("viewBox") !== prev,
+      viewBoxBeforeWheel,
+    );
 
     // --- activity updates ---
     await routeMapApi(page, {

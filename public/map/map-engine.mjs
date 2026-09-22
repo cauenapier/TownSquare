@@ -135,9 +135,17 @@ export async function fetchRandomTown(currentSiteKey = "", fetchBase = "") {
  * @param {"full"|"embedded"} [options.mode]
  * @param {boolean} [options.interactivePanZoom] Wire pointer-drag panning and
  *   the toolbar's zoom/reset buttons. Defaults to `mode === "full"`.
- * @param {boolean} [options.wheelZoom] Hijack wheel scroll for zoom. Defaults
- *   to `interactivePanZoom`; embedded mode must never enable this so page
- *   scroll (mouse wheel and touch) stays untouched.
+ * @param {boolean} [options.wheelZoom] Attach a wheel listener for zoom.
+ *   Defaults to `interactivePanZoom`. Combine with
+ *   `wheelZoomRequiresModifier` for a surface embedded in a scrolling page,
+ *   where an unmodified wheel event must keep scrolling the page.
+ * @param {boolean} [options.wheelZoomRequiresModifier] When true, a wheel
+ *   event only zooms (and is only prevented) while Ctrl/Cmd is held;
+ *   otherwise the event is left alone so normal page scroll (mouse wheel and
+ *   touch) is never hijacked. Embedded mode defaults this to true.
+ * @param {() => void} [options.onWheelHint] Called when the visitor scrolls
+ *   the map without the modifier held (`wheelZoomRequiresModifier: true`), so
+ *   the caller can show a brief "hold ⌘/Ctrl to zoom" hint.
  * @param {number} [options.activityRefreshMs]
  * @param {string} [options.fetchBase] Origin to fetch `/api/map*` against;
  *   "" for same-origin, or an absolute origin for a cross-origin embed.
@@ -153,6 +161,8 @@ export function createTownSquareMap({
   mode = "full",
   interactivePanZoom = mode === "full",
   wheelZoom = interactivePanZoom,
+  wheelZoomRequiresModifier = mode === "embedded",
+  onWheelHint = noop,
   activityRefreshMs = DEFAULT_ACTIVITY_REFRESH_MS,
   fetchBase = "",
   onSelect = noop,
@@ -163,6 +173,11 @@ export function createTownSquareMap({
   resetButton = null,
 } = {}) {
   if (!(root instanceof HTMLElement)) throw new Error("createTownSquareMap requires a root element");
+
+  // Whenever the visitor can move away from the "whole world" view (drag-pan
+  // or any form of wheel zoom), a resize or a structural data refresh should
+  // preserve that view rather than snapping back to fit-everything.
+  const preservesView = interactivePanZoom || wheelZoom;
 
   let worldWidth = MAP_WORLD_MIN_WIDTH;
   let worldHeight = MAP_WORLD_MIN_HEIGHT;
@@ -303,7 +318,7 @@ export function createTownSquareMap({
         }
 
         buildMap();
-        if (interactivePanZoom) {
+        if (preservesView) {
           clampView();
           applyView();
         } else {
@@ -581,7 +596,7 @@ export function createTownSquareMap({
   }
 
   const onWindowResize = () => {
-    if (interactivePanZoom) {
+    if (preservesView) {
       clampView();
       applyView();
     } else {
@@ -623,6 +638,14 @@ export function createTownSquareMap({
   };
 
   const onWheel = (event) => {
+    // A trackpad pinch gesture is delivered as a wheel event with ctrlKey
+    // set, so this also gives embedded surfaces pinch-to-zoom for free.
+    if (wheelZoomRequiresModifier && !(event.ctrlKey || event.metaKey)) {
+      onWheelHint();
+      return; // Leave the event alone so the page scrolls normally.
+    }
+    // Ctrl/Cmd+wheel is also the browser's page-zoom shortcut; prevent it
+    // only once we've decided this wheel event is ours to consume.
     event.preventDefault();
     const multiplier = wheelZoomMultiplier(event.deltaY, event.deltaMode);
     if (Math.abs(multiplier - 1) < 0.0005) return;
