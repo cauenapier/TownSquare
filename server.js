@@ -14,6 +14,7 @@ const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require(
 const { createAdminSessionStore, parseCookies } = require("./server/admin-sessions");
 const { createPlausibleProxy } = require("./server/plausible");
 const { createStaticFiles } = require("./server/static-files");
+const { createWidgetAssetTransform } = require("./server/widget-assets");
 const { makeBucketStore } = require("./server/rate-limit");
 const { SITE_REGISTRY_VERSION, createSitesWriter } = require("./server/sites-store");
 const { mapSiteLifecycle } = require("./server/map-site-lifecycle");
@@ -1252,6 +1253,7 @@ const staticFiles = createStaticFiles({
   stagingPageEnabled: STAGING_PAGE_ENABLED,
   shouldInjectHtml: (filePath) => plausible.shouldInject(filePath),
   injectHtml: (html) => plausible.injectIntoHtml(html),
+  transformAsset: createWidgetAssetTransform(PUBLIC_DIR),
 });
 
 function handleRegisterSite(req, res) {

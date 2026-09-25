@@ -172,6 +172,7 @@ function isStagingPageRequest(pathname) {
  * @param {boolean} options.stagingPageEnabled
  * @param {(filePath: string) => boolean} options.shouldInjectHtml
  * @param {(html: string) => string} options.injectHtml
+ * @param {(filePath: string, body: Buffer) => Buffer} [options.transformAsset]
  */
 function createStaticFiles({
   publicDir,
@@ -180,6 +181,7 @@ function createStaticFiles({
   stagingPageEnabled,
   shouldInjectHtml,
   injectHtml,
+  transformAsset,
 }) {
   function resolvePublicFile(requestUrl, hostHeader) {
     const url = new URL(requestUrl, `http://${hostHeader}`);
@@ -224,6 +226,8 @@ function createStaticFiles({
       let body = data;
       if (ext === ".html" && shouldInjectHtml(filePath)) {
         body = Buffer.from(injectHtml(data.toString("utf8")), "utf8");
+      } else if (transformAsset) {
+        body = transformAsset(filePath, body);
       }
 
       const headers = getStaticHeaders(filePath);

@@ -1299,6 +1299,28 @@ async function assertEmbeddableAssetsAreCrossOriginLoadable() {
     response.headers.get("access-control-allow-origin") === "*",
     "townsquare module is missing cross-origin embed headers",
   );
+  const moduleSource = await response.text();
+  assert(moduleSource.includes("mountTownSquare"), "townsquare module lost its public mount export");
+  assert(moduleSource.length < 140_000, "townsquare module is no longer compactly bundled");
+  assert(!moduleSource.includes('from "./widget/'), "townsquare module still loads the static widget graph");
+
+  const stylesheet = await fetch(`${HTTP_ORIGIN}/widget.css`);
+  assert(stylesheet.ok, "widget stylesheet was not served");
+  const css = await stylesheet.text();
+  assert(css.includes("--scene:"), "widget tokens are missing from the combined stylesheet");
+  assert(!css.includes('@import url("./tokens.css")'), "widget stylesheet still imports tokens serially");
+
+  const etag = response.headers.get("etag");
+  assert(etag, "townsquare module has no cache validator");
+  const cached = await fetch(`${HTTP_ORIGIN}/townsquare.mjs`, {
+    headers: { "if-none-match": etag },
+  });
+  assert(cached.status === 304, "townsquare bundle did not support conditional requests");
+
+  const compressed = await fetch(`${HTTP_ORIGIN}/townsquare.mjs`, {
+    headers: { "accept-encoding": "br" },
+  });
+  assert(compressed.headers.get("content-encoding") === "br", "townsquare bundle was not Brotli-compressed");
 }
 
 async function assertPublicStatsEndpoint({ minRegistered = 0, minVerified = 0, minMessages = 0 } = {}) {

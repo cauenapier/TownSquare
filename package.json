@@ -23,6 +23,7 @@
     "bot-replay": "node scripts/bot-replay-test.js"
   },
   "dependencies": {
+    "esbuild": "^0.28.2",
     "ws": "^8.18.3"
   },
   "engines": {
