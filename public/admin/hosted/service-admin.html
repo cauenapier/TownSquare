@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TownSquare service admin</title>
-    <link rel="stylesheet" href="/page.css?v=statistics-range-v5" />
+    <link rel="stylesheet" href="/page.css?v=verified-cohorts-v1" />
   </head>
   <body>
     <main class="hosted-shell hosted-shell--wide">
@@ -164,6 +164,17 @@
           <div class="service-stats-cards" id="platform-stats-cards" aria-live="polite"></div>
         </section>
 
+        <section class="hosted-section" aria-labelledby="verified-cohort-title">
+          <div class="hosted-section-head">
+            <div>
+              <h2 id="verified-cohort-title">Verified-site retention by cohort</h2>
+              <p class="hosted-note">Enabled sites grouped by verification month. Active means at least one unique visitor in the last 30 days; quiet sites up to 30 days old are kept separate.</p>
+            </div>
+          </div>
+          <div class="service-cohort-summary" id="verified-cohort-summary" aria-live="polite"></div>
+          <div class="service-cohort-chart" id="verified-cohort-chart" aria-live="polite"></div>
+        </section>
+
         <section class="hosted-section" aria-labelledby="active-sites-trend-title">
           <div class="hosted-section-head">
             <div>
@@ -300,6 +311,6 @@
       <div class="service-traffic-tooltip" id="service-traffic-tooltip" role="tooltip" hidden></div>
     </dialog>
 
-    <script type="module" src="/admin/hosted/service-admin.mjs?v=statistics-history-v6"></script>
+    <script type="module" src="/admin/hosted/service-admin.mjs?v=verified-cohorts-v1"></script>
   </body>
 </html>

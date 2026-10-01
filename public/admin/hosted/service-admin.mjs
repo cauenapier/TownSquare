@@ -22,6 +22,7 @@ import {
   postJson,
 } from "./hosted-common.mjs";
 import { createServiceAdminNotifications } from "./service-admin-notifications.mjs";
+import { buildVerifiedSiteCohorts } from "./service-admin-cohorts.mjs?v=verified-cohorts-v1";
 import {
   buildStackedVisitorActivityView,
   buildVisitorActivityView,
@@ -58,6 +59,8 @@ const messageTrendChartEl = document.getElementById("message-trend-chart");
 const messageTrendTitleEl = document.getElementById("message-trend-title");
 const verifiedTrendChartEl = document.getElementById("verified-trend-chart");
 const verifiedTrendTitleEl = document.getElementById("verified-trend-title");
+const verifiedCohortSummaryEl = document.getElementById("verified-cohort-summary");
+const verifiedCohortChartEl = document.getElementById("verified-cohort-chart");
 const topSitesListEl = document.getElementById("top-sites-list");
 const dormantSitesListEl = document.getElementById("dormant-sites-list");
 const ownerActivityListEl = document.getElementById("owner-activity-list");
@@ -1274,6 +1277,108 @@ function renderVerifiedSitesChart(sites, rangeDays = VERIFIED_CHART_DAYS) {
   });
 }
 
+function formatCohortMonth(cohort) {
+  if (cohort.key === "earlier") return "Earlier";
+  return new Date(cohort.startAt).toLocaleDateString(undefined, {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function retentionLabel(active, inactive) {
+  const matureTotal = active + inactive;
+  return matureTotal > 0 ? `${Math.round((active / matureTotal) * 100)}% active` : "Too new to judge";
+}
+
+function cohortLegendItem(label, value, tone) {
+  const item = document.createElement("span");
+  item.className = "service-cohort-legend__item";
+
+  const swatch = document.createElement("span");
+  swatch.className = `service-cohort-legend__swatch service-cohort-legend__swatch--${tone}`;
+  swatch.setAttribute("aria-hidden", "true");
+
+  const text = document.createElement("span");
+  text.textContent = `${value} ${label}`;
+  item.append(swatch, text);
+  return item;
+}
+
+function renderVerifiedSiteCohorts(sites) {
+  if (!verifiedCohortSummaryEl || !verifiedCohortChartEl) return;
+  const analysis = buildVerifiedSiteCohorts(sites);
+  const { totals } = analysis;
+  verifiedCohortSummaryEl.replaceChildren();
+  verifiedCohortChartEl.replaceChildren();
+
+  if (totals.total === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hosted-note";
+    empty.textContent = "No enabled verified websites yet.";
+    verifiedCohortChartEl.append(empty);
+    verifiedCohortChartEl.setAttribute("aria-label", empty.textContent);
+    return;
+  }
+
+  const retention = document.createElement("p");
+  retention.className = "service-cohort-summary__retention";
+  retention.textContent = analysis.retentionRate === null
+    ? "Retention pending"
+    : `${Math.round(analysis.retentionRate * 100)}% currently active (new quiet sites excluded)`;
+
+  const legend = document.createElement("div");
+  legend.className = "service-cohort-legend";
+  legend.append(
+    cohortLegendItem("active", totals.active, "active"),
+    cohortLegendItem("inactive 30d+", totals.inactive, "inactive"),
+    cohortLegendItem("too new to judge", totals.new, "new"),
+  );
+  verifiedCohortSummaryEl.append(retention, legend);
+
+  const maxTotal = Math.max(...analysis.cohorts.map((cohort) => cohort.total));
+  const ariaRows = [];
+  for (const cohort of analysis.cohorts) {
+    const labelText = formatCohortMonth(cohort);
+    const row = document.createElement("div");
+    row.className = "service-cohort-row";
+
+    const label = document.createElement("span");
+    label.className = "service-cohort-row__label";
+    label.textContent = labelText;
+
+    const plot = document.createElement("div");
+    plot.className = "service-cohort-row__plot";
+    const bar = document.createElement("div");
+    bar.className = "service-cohort-row__bar";
+    bar.style.width = `${Math.max(8, (cohort.total / maxTotal) * 100)}%`;
+
+    for (const [tone, count] of [
+      ["active", cohort.active],
+      ["inactive", cohort.inactive],
+      ["new", cohort.new],
+    ]) {
+      if (count === 0) continue;
+      const segment = document.createElement("span");
+      segment.className = `service-cohort-row__segment service-cohort-row__segment--${tone}`;
+      segment.style.flexGrow = String(count);
+      segment.title = `${count} ${tone === "new" ? "too new to judge" : tone}`;
+      bar.append(segment);
+    }
+    plot.append(bar);
+
+    const detail = document.createElement("span");
+    detail.className = "service-cohort-row__detail";
+    detail.textContent = `${cohort.active}/${cohort.total} · ${retentionLabel(cohort.active, cohort.inactive)}`;
+
+    row.append(label, plot, detail);
+    verifiedCohortChartEl.append(row);
+    ariaRows.push(`${labelText}: ${cohort.active} active, ${cohort.inactive} inactive, ${cohort.new} too new to judge`);
+  }
+  verifiedCohortChartEl.setAttribute("role", "img");
+  verifiedCohortChartEl.setAttribute("aria-label", `Verified-site retention. ${ariaRows.join(". ")}.`);
+}
+
 function renderRangedStatistics(sites, stats) {
   const rangeDays = Number(statisticsRangeEl?.value) || 7;
   const activeSitesSeries = stats.activeSitesSeriesByRange?.[rangeDays] || [];
@@ -1418,6 +1523,7 @@ function renderStatistics(sites, platform = null) {
   const stats = buildPlatformStats(sites, platform);
   platformStats = stats;
   renderRangedStatistics(sites, stats);
+  renderVerifiedSiteCohorts(sites);
   renderSiteHealthLists(sites);
   renderOwnerActivityList(sites);
 }

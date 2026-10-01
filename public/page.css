@@ -2675,6 +2675,101 @@ body {
   white-space: pre-line;
 }
 
+.service-cohort-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 18px;
+}
+
+.service-cohort-summary__retention {
+  font: 700 1rem var(--font);
+  color: var(--ink);
+}
+
+.service-cohort-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.service-cohort-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.service-cohort-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hair-2);
+}
+
+.service-cohort-legend__swatch--active,
+.service-cohort-row__segment--active {
+  background: var(--you-deep);
+}
+
+.service-cohort-legend__swatch--inactive,
+.service-cohort-row__segment--inactive {
+  background: var(--ink-mute);
+}
+
+.service-cohort-legend__swatch--new,
+.service-cohort-row__segment--new {
+  background: var(--accent-soft);
+}
+
+.service-cohort-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.service-cohort-row {
+  display: grid;
+  grid-template-columns: minmax(74px, 0.7fr) minmax(150px, 3fr) minmax(132px, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.service-cohort-row__label,
+.service-cohort-row__detail {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.service-cohort-row__plot {
+  min-width: 0;
+}
+
+.service-cohort-row__bar {
+  display: flex;
+  height: 24px;
+  min-width: 28px;
+  overflow: hidden;
+  border: 1px solid var(--hair-2);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.service-cohort-row__segment {
+  display: block;
+  min-width: 2px;
+}
+
+.service-cohort-row__segment + .service-cohort-row__segment {
+  border-left: 1px solid color-mix(in oklab, var(--surface) 72%, transparent);
+}
+
 .service-stats-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2896,6 +2991,14 @@ body {
   }
   .service-stats-columns {
     grid-template-columns: 1fr;
+  }
+  .service-cohort-row {
+    grid-template-columns: 76px minmax(110px, 1fr);
+    gap: 8px 10px;
+  }
+  .service-cohort-row__detail {
+    grid-column: 2;
+    margin-top: -5px;
   }
   .service-traffic-dialog {
     width: calc(100% - 16px);
