@@ -1,12 +1,10 @@
 # TownSquare
 
-TownSquare is an embeddable presence layer for websites: visitors share a small
-scene, walk around, chat, and see who else is there. It runs as a single Node.js
-process and supports both a self-hosted scene and isolated scenes for registered
-sites.
+TownSquare is an embeddable presence layer for websites. Visitors share a small
+scene, walk around, chat, and see who else is there. A single Node.js process can
+run one self-hosted scene or isolated scenes for registered sites.
 
-The product contract lives in [`spec.md`](spec.md). Current sequencing lives in
-[`roadmap.md`](roadmap.md).
+The product contract lives in [`spec.md`](spec.md).
 
 ## Run locally
 
@@ -69,12 +67,9 @@ The host page owns placement. TownSquare owns everything inside
 tokens and defaults are defined in [`public/tokens.css`](public/tokens.css) and
 [`public/lib/site-config-core.mjs`](public/lib/site-config-core.mjs).
 
-Give the mount a `max-width` (the generated snippet uses `460px`, centered). The
-widget's scene and composer are tuned for a column: the compact layout keys off
-`@container (max-width: 460px)`, and in a full-width content area (much past
-~500px) the stage flattens to a thin stripe and the composer stretches into a
-broken-looking bar. Widen, narrow, or remove the constraint to taste — but set
-one.
+The generated snippet gives the mount a centered `max-width: 460px`, which is a
+good default for the widget's column layout. Hosts can choose another width;
+test the installed page at its intended desktop and mobile sizes.
 
 For a read-only presence pill, use `mountTownSquareCounter` from
 `/townsquare-counter.mjs`. Its option contract is documented next to the
@@ -84,13 +79,11 @@ implementation in [`public/townsquare-counter.mjs`](public/townsquare-counter.mj
 
 - `/register` creates a site key, install snippet, and private admin token.
 - `/admin` manages a registered site's scene, appearance, connections, owner
-  identity, moderation, and plugins.
+  identity, moderation, counter, overlay, and enabled add-ons.
 - `/service-admin` manages the service registry, aggregate activity, global map,
   and operator notifications when `SERVICE_ADMIN_PASSWORD` is set.
-- `/map` displays verified, enabled sites. The widget compass uses the same
-  directory eligibility rules to offer one random town at a time, excluding the
-  current installation; its five discovery interactions are retained only as
-  per-site aggregate counts and timestamps.
+- `/map` displays verified, enabled sites. The widget can also offer eligible
+  sites as discovery destinations without exposing individual visitor activity.
 
 Registered sites are stored under `DATA_DIR` (`.data` by default). Admin tokens
 are stored as hashes. Runtime visitor and message state remains in memory.
