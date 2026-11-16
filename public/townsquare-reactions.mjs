@@ -22,56 +22,67 @@ const STORAGE_PREFIX = "townsquare-reactions:";
 export const REACTION_KEYS = Object.freeze(Object.keys(REACTIONS));
 const DEFAULT_REACTIONS = Object.freeze(["heart", "thumbs-up", "clap"]);
 
-// Every visible value is a CSS custom property so a host can restyle the bar by
-// overriding these on `.ts-reactions`.
+// Styling contract (documented in docs/embed-styling.md), the same as the
+// presence counter's:
+// - Every rule except `[hidden]` is wrapped in :where(), so any host selector
+//   overrides it regardless of stylesheet order.
+// - Public `--ts-reactions-*` variables are inputs the embed never declares, so
+//   a host may set them on the bar, any ancestor, or :root. Defaults live in
+//   private `--_ts-reactions-*` variables underneath.
 const STYLES = `
-.ts-reactions {
-  --ts-reactions-accent: #2faa4f;
-  --ts-reactions-bg: color-mix(in oklab, Canvas 92%, CanvasText 8%);
-  --ts-reactions-ink: CanvasText;
-  --ts-reactions-radius: 999px;
-  --ts-reactions-font-size: 0.875rem;
-  --ts-reactions-gap: 0.4em;
+:where(.ts-reactions) {
+  --_ts-reactions-accent: var(--ts-reactions-accent, #2faa4f);
+  --_ts-reactions-bg: var(--ts-reactions-bg, color-mix(in oklab, Canvas 92%, CanvasText 8%));
+  --_ts-reactions-ink: var(--ts-reactions-ink, CanvasText);
   display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--ts-reactions-gap);
+  gap: var(--ts-reactions-gap, 0.4em);
   margin: 0;
-  font-size: var(--ts-reactions-font-size);
+  font-size: var(--ts-reactions-font-size, 0.875rem);
 }
-.ts-reactions[hidden] {
-  display: none;
-}
-.ts-reactions__button {
+:where(.ts-reactions__button) {
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
+  gap: var(--ts-reactions-button-gap, 0.4em);
   margin: 0;
-  padding: 0.35em 0.7em;
-  border: 1px solid transparent;
-  border-radius: var(--ts-reactions-radius);
+  padding: var(--ts-reactions-pad-y, 0.35em) var(--ts-reactions-pad-x, 0.7em);
+  border: var(--ts-reactions-border-width, 1px) solid var(--ts-reactions-border-color, transparent);
+  border-radius: var(--ts-reactions-radius, 999px);
   font: inherit;
   line-height: 1.2;
-  color: var(--ts-reactions-ink);
-  background: var(--ts-reactions-bg);
+  color: var(--_ts-reactions-ink);
+  background: var(--_ts-reactions-bg);
+  box-shadow: var(--ts-reactions-shadow, none);
   cursor: pointer;
 }
-.ts-reactions__button:hover {
+:where(.ts-reactions__button:hover) {
   filter: brightness(1.04);
 }
-.ts-reactions__button:focus-visible {
-  outline: 2px solid var(--ts-reactions-accent);
+:where(.ts-reactions__button:focus-visible) {
+  outline: 2px solid var(--ts-reactions-focus-color, var(--_ts-reactions-accent));
   outline-offset: 2px;
 }
-.ts-reactions__button[aria-pressed="true"] {
-  border-color: var(--ts-reactions-accent);
-  background: color-mix(in oklab, var(--ts-reactions-accent) 16%, var(--ts-reactions-bg));
+:where(.ts-reactions__button[aria-pressed="true"]) {
+  color: var(--ts-reactions-pressed-ink, var(--_ts-reactions-ink));
+  border-color: var(--ts-reactions-pressed-border-color, var(--_ts-reactions-accent));
+  background: var(--ts-reactions-pressed-bg, color-mix(in oklab, var(--_ts-reactions-accent) 16%, var(--_ts-reactions-bg)));
 }
-.ts-reactions__count {
+:where(.ts-reactions__emoji) {
+  font-size: var(--ts-reactions-emoji-size, 1em);
+  line-height: 1;
+}
+:where(.ts-reactions__count) {
   font-variant-numeric: tabular-nums;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .ts-reactions__button { transition: transform 120ms ease, background-color 160ms ease; }
-  .ts-reactions__button:active { transform: scale(0.94); }
+  :where(.ts-reactions__button) { transition: transform 120ms ease, background-color 160ms ease; }
+  :where(.ts-reactions__button:active) { transform: scale(0.94); }
+}
+
+/* Normal specificity on purpose: a hidden bar stays hidden even when the host
+   sets its own display. */
+.ts-reactions[hidden] {
+  display: none;
 }
 `;
 
@@ -107,7 +118,7 @@ function writeReacted(storageKey, reacted) {
  * @property {string} [siteKey] Hosted site key. Omit for a self-hosted server.
  * @property {string} [page] Which page the counts belong to. Defaults to `location.pathname`; set it to share counts across URLs (e.g. a post id).
  * @property {string[]} [reactions] Subset of {@link REACTION_KEYS} to show, in order. Defaults to heart, thumbs-up, clap.
- * @property {string} [accent] Accent color for the focus ring and selected state (`--ts-reactions-accent`).
+ * @property {string} [accent] Accent color for the focus ring and selected state. Written inline as `--ts-reactions-accent`; omit to keep the default or a value the host sets in CSS.
  */
 
 /**
@@ -162,6 +173,7 @@ export function mountTownSquareReactions(root, options = {}) {
     button.className = "ts-reactions__button";
     button.dataset.reaction = key;
     const emoji = document.createElement("span");
+    emoji.className = "ts-reactions__emoji";
     emoji.setAttribute("aria-hidden", "true");
     emoji.textContent = REACTIONS[key];
     const count = document.createElement("span");

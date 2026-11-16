@@ -486,7 +486,7 @@
             <button type="button" id="copy-counter">Copy snippet</button>
           </div>
           <p class="hosted-note hosted-footnote">
-            Want full control of the look? Every value is a CSS variable — override <code>--ts-counter-accent</code>, <code>--ts-counter-bg</code>, <code>--ts-counter-ink</code>, <code>--ts-counter-radius</code>, and more on the <code>.ts-counter</code> element in your own stylesheet.
+            Want full control of the look? Any rule in your own stylesheet wins. Set variables like <code>--ts-counter-accent</code>, <code>--ts-counter-bg</code>, <code>--ts-counter-ink</code> and <code>--ts-counter-radius</code> on <code>.ts-counter</code> (or on <code>:root</code> for every counter), or style <code>.ts-counter__dot</code> and <code>.ts-counter__label</code> directly. All classes and variables are listed in the <a href="https://github.com/cauenapier/TownSquare/blob/main/docs/embed-styling.md" target="_blank" rel="noopener">styling guide</a>.
           </p>
         </section>
 
@@ -520,7 +520,7 @@
             <button type="button" id="copy-reactions">Copy snippet</button>
           </div>
           <p class="hosted-note hosted-footnote">
-            Counts follow the page's path by default. To share counts across URLs (or keep them stable if a URL changes), add <code>page: "your-post-id"</code> to the options. Restyle with <code>--ts-reactions-accent</code>, <code>--ts-reactions-bg</code>, <code>--ts-reactions-ink</code>, and <code>--ts-reactions-radius</code> on <code>.ts-reactions</code>.
+            Counts follow the page's path by default. To share counts across URLs (or keep them stable if a URL changes), add <code>page: "your-post-id"</code> to the options. Restyle from your own stylesheet with variables like <code>--ts-reactions-accent</code>, <code>--ts-reactions-bg</code>, <code>--ts-reactions-radius</code> and <code>--ts-reactions-emoji-size</code>, or target <code>.ts-reactions__button</code>, <code>[data-reaction="heart"]</code> and <code>[aria-pressed="true"]</code> directly. See the <a href="https://github.com/cauenapier/TownSquare/blob/main/docs/embed-styling.md" target="_blank" rel="noopener">styling guide</a> for everything you can change.
           </p>
         </section>
 

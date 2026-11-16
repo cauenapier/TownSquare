@@ -83,6 +83,10 @@ documented in [`public/townsquare-reactions.mjs`](public/townsquare-reactions.mj
 Writes are accepted only from the site's allowed origins (or, self-hosted,
 `ALLOWED_ORIGINS`) and counts are stored in `DATA_DIR/reactions.json`.
 
+Both embeds can be restyled from the host page's CSS: class names, state
+attributes, CSS variables, and recipes are in
+[`docs/embed-styling.md`](docs/embed-styling.md).
+
 ## Hosted operation
 
 - `/register` creates a site key, install snippet, and private admin token.
