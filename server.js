@@ -277,6 +277,7 @@ let validateMapWorld;
 let resolveMapWorld = (storedWorld) => storedWorld;
 let mapWorld;
 let normalizeOrigin;
+let normalizeWebsiteInput;
 let buildAllowedOrigins = (origin) => (origin ? [origin] : []);
 let getMatchingWwwOrigin = () => null;
 let buildNeighbourhood;
@@ -800,9 +801,9 @@ function siteUsesMatchingWwwOrigin(site) {
 }
 
 function parseSiteOriginSettings(body, { defaultIncludeMatchingWww = true } = {}) {
-  const origin = normalizeOrigin(String(body.origin || "").slice(0, MAX_ORIGIN_LEN));
+  const origin = normalizeWebsiteInput(String(body.origin || "").slice(0, MAX_ORIGIN_LEN));
   if (!origin) {
-    return { error: "Enter a valid website origin, like https://example.com." };
+    return { error: "Enter a valid website address, like example.com." };
   }
 
   const includeMatchingWww = body.includeMatchingWww === undefined
@@ -4534,6 +4535,7 @@ async function loadSharedModules() {
   validateMapWorld = mapWorldModule.validateMapWorld;
   resolveMapWorld = mapWorldModule.resolveMapWorld;
   normalizeOrigin = urlModule.normalizeAbsoluteOrigin;
+  normalizeWebsiteInput = urlModule.normalizeWebsiteInput;
   buildAllowedOrigins = urlModule.buildAllowedOrigins;
   getMatchingWwwOrigin = urlModule.getMatchingWwwOrigin;
   buildNeighbourhood = neighbourhoodModule.buildNeighbourhood;

@@ -14,6 +14,29 @@ export function normalizeAbsoluteOrigin(value) {
   }
 }
 
+/**
+ * Accepts what a person would type for their site: "test.com", "www.test.com",
+ * or a full "https://test.com/page". Bare domains default to https://.
+ * Returns an origin, or null when it is not a plausible website address.
+ */
+export function normalizeWebsiteInput(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const origin = normalizeAbsoluteOrigin(withScheme);
+  if (!origin) return null;
+  try {
+    const url = new URL(origin);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    const host = url.hostname;
+    const plausible = host === "localhost" || isIpHostname(host) || /^[^.]+(\.[^.]+)+$/.test(host);
+    return plausible ? origin : null;
+  } catch {
+    return null;
+  }
+}
+
 function isIpHostname(hostname) {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
 }

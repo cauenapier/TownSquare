@@ -106,6 +106,7 @@ const TABLE_COLUMNS = [
   { key: "supporter", label: "Supporter", render: (site) => (site.supporter ? "Yes" : "No") },
   { key: "plus", label: "Plus", render: (site) => (site.plus ? "Yes" : "No") },
   { key: "overlayLastAt", label: "Overlay used", render: (site) => site.overlayUseCount ? `${site.overlayUseCount} · ${formatTime(site.overlayLastAt)}` : "Never" },
+  { key: "createdAt", label: "Registered", render: (site) => formatTime(site.createdAt) },
   { key: "verifiedAt", label: "Verified", render: (site) => formatTime(site.verifiedAt) },
   { key: "lastSeenAt", label: "Last seen", render: (site) => formatTime(site.lastSeenAt) },
   { key: "lastSeenUrl", label: "Last URL", link: true, render: (site) => site.lastSeenUrl || "" },
@@ -154,6 +155,9 @@ let visibleColumnKeys = new Set(
 );
 if (storedVisibleColumnKeys?.length > 0 && !visibleColumnKeys.has("overlayLastAt")) {
   visibleColumnKeys.add("overlayLastAt");
+}
+if (storedVisibleColumnKeys?.length > 0 && !visibleColumnKeys.has("createdAt")) {
+  visibleColumnKeys.add("createdAt");
 }
 let verifiedOnly = typeof tablePrefs?.verifiedOnly === "boolean" ? tablePrefs.verifiedOnly : true;
 siteVerifiedFilterEl.checked = verifiedOnly;
@@ -422,6 +426,7 @@ function siteSortValue(site, key) {
     case "supporter":
     case "plus":
       return Number(Boolean(site[key]));
+    case "createdAt":
     case "verifiedAt":
     case "lastSeenAt":
     case "lastMessageAt":

@@ -11,7 +11,7 @@ import {
   renderStyleOverrideFields,
 } from "../../lib/site-config.mjs";
 import { isSceneCountInputName, sanitizeSceneConfig } from "../../lib/site-config-core.mjs";
-import { getMatchingWwwOrigin } from "../../lib/url.mjs";
+import { getMatchingWwwOrigin, normalizeWebsiteInput } from "../../lib/url.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 
 const registerView = document.getElementById("register-view");
@@ -66,7 +66,7 @@ function showSuccess(body) {
 }
 
 function updateMatchingWwwControls() {
-  const matching = getMatchingWwwOrigin(siteOriginInput.value);
+  const matching = getMatchingWwwOrigin(normalizeWebsiteInput(siteOriginInput.value));
   if (!matching) {
     includeMatchingWwwInput.checked = false;
     includeMatchingWwwInput.disabled = true;
@@ -92,6 +92,11 @@ form.addEventListener("input", (event) => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!normalizeWebsiteInput(siteOriginInput.value)) {
+    setStatus("Enter a valid website address, like example.com.", true);
+    siteOriginInput.focus();
+    return;
+  }
   submitButton.disabled = true;
   setStatus("Creating your TownSquare...");
 
