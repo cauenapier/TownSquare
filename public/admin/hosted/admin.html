@@ -430,7 +430,7 @@
         <section class="hosted-section" id="counter-section">
           <h2>Presence counter</h2>
           <p class="hosted-note">
-            A small "N people here" badge for pages where the full square is too much. It loads no scene and opens no connection, so showing it never adds a visitor. Clicking it scrolls to a square on the same page, or sends visitors to the page you choose below. Pick a look, then paste the snippet.
+            A small badge for pages where the full square is too much. It can count everyone in your square, only the people reading the current page, or both. Pair the Minimal style with a Short label for the smallest badge ("5 here"). It loads no scene and opens no connection, so showing it never adds a visitor. Clicking it scrolls to a square on the same page, or sends visitors to the page you choose below. Pick a look, then paste the snippet.
           </p>
           <form class="hosted-form" id="counter-form">
             <div class="hosted-grid">
@@ -441,6 +441,21 @@
                   <option value="minimal">Minimal</option>
                   <option value="solid">Solid</option>
                   <option value="outline">Outline</option>
+                </select>
+              </label>
+              <label>
+                <span>Count</span>
+                <select id="counter-count" name="counter-count">
+                  <option value="both">Whole site and this page</option>
+                  <option value="site">Whole site</option>
+                  <option value="page">This page only</option>
+                </select>
+              </label>
+              <label>
+                <span>Label</span>
+                <select id="counter-label-style" name="counter-label-style">
+                  <option value="full">Full ("5 people here")</option>
+                  <option value="short">Short ("5 here")</option>
                 </select>
               </label>
               <label>
@@ -464,14 +479,48 @@
           <div class="hosted-section-head">
             <h3 class="hosted-subhead">Preview</h3>
           </div>
-          <div class="counter-preview" id="counter-preview"></div>
+          <div class="embed-preview" id="counter-preview"></div>
 
           <textarea id="counter-snippet" readonly rows="9" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-counter">Copy snippet</button>
           </div>
           <p class="hosted-note hosted-footnote">
-            Want full control of the look? Every value is a CSS variable — override <code>--ts-counter-accent</code>, <code>--ts-counter-bg</code>, <code>--ts-counter-ink</code>, <code>--ts-counter-radius</code>, and more on the <code>.ts-counter</code> element in your own stylesheet.
+            Want full control of the look? Any rule in your own stylesheet wins. Set variables like <code>--ts-counter-accent</code>, <code>--ts-counter-bg</code>, <code>--ts-counter-ink</code> and <code>--ts-counter-radius</code> on <code>.ts-counter</code> (or on <code>:root</code> for every counter), or style <code>.ts-counter__dot</code> and <code>.ts-counter__label</code> directly. All classes and variables are listed in the <a href="https://github.com/cauenapier/TownSquare/blob/main/docs/embed-styling.md" target="_blank" rel="noopener">styling guide</a>.
+          </p>
+        </section>
+
+        <!-- Reactions — emoji buttons with per-page counts for any page. -->
+        <section class="hosted-section" id="reactions-section">
+          <h2>Reactions</h2>
+          <p class="hosted-note">
+            A row of emoji buttons (❤️ 👍 👏 …) visitors can tap on a post or page. Counts are kept per page and only your site's origins can add to them. Pick the reactions, then paste the snippet where the bar should appear.
+          </p>
+          <form class="hosted-form" id="reactions-form">
+            <div class="hosted-grid" id="reactions-choices"></div>
+            <div class="hosted-grid">
+              <label>
+                <span>Accent color</span>
+                <input id="reactions-accent" name="reactions-accent" type="color" value="#2faa4f" />
+              </label>
+            </div>
+            <label class="hosted-toggle">
+              <input id="reactions-accent-default" name="reactions-accent-default" type="checkbox" checked />
+              <span>Use the default accent color</span>
+            </label>
+          </form>
+
+          <div class="hosted-section-head">
+            <h3 class="hosted-subhead">Preview</h3>
+          </div>
+          <div class="embed-preview" id="reactions-preview" inert></div>
+
+          <textarea id="reactions-snippet" readonly rows="9" spellcheck="false"></textarea>
+          <div class="hosted-actions">
+            <button type="button" id="copy-reactions">Copy snippet</button>
+          </div>
+          <p class="hosted-note hosted-footnote">
+            Counts follow the page's path by default. To share counts across URLs (or keep them stable if a URL changes), add <code>page: "your-post-id"</code> to the options. Restyle from your own stylesheet with variables like <code>--ts-reactions-accent</code>, <code>--ts-reactions-bg</code>, <code>--ts-reactions-radius</code> and <code>--ts-reactions-emoji-size</code>, or target <code>.ts-reactions__button</code>, <code>[data-reaction="heart"]</code> and <code>[aria-pressed="true"]</code> directly. See the <a href="https://github.com/cauenapier/TownSquare/blob/main/docs/embed-styling.md" target="_blank" rel="noopener">styling guide</a> for everything you can change.
           </p>
         </section>
 

@@ -888,6 +888,70 @@ async function getSitePresence(siteKey = "") {
   return body;
 }
 
+async function assertReactionsWork() {
+  const { site } = await createSite("Reactions Town", { origin: "https://reactions.example" });
+  const siteKey = site.siteKey;
+  const react = (body, { origin = "https://reactions.example", ip = "198.51.100.40" } = {}) => fetch(`${HTTP_ORIGIN}/api/reactions`, {
+    method: "POST",
+    headers: { "content-type": "text/plain", origin, "x-real-ip": ip },
+    body: JSON.stringify({ siteKey, page: "/post", ...body }),
+  });
+  const read = async (page) => {
+    const url = new URL("/api/reactions", HTTP_ORIGIN);
+    url.searchParams.set("siteKey", siteKey);
+    url.searchParams.set("page", page);
+    const response = await fetch(url, { headers: { "x-real-ip": "198.51.100.41" } });
+    assert(response.ok, "reaction read failed");
+    assert(response.headers.get("access-control-allow-origin") === "*", "reaction read is not CORS-readable");
+    return (await response.json()).counts;
+  };
+
+  assert(JSON.stringify(await read("/post")) === "{}", "new page should have no reactions");
+
+  const added = await react({ reaction: "heart", action: "add" });
+  assert(added.status === 200, `reaction add failed with ${added.status}`);
+  await react({ reaction: "heart", action: "add" }, { ip: "198.51.100.42" });
+  await react({ reaction: "clap", action: "add" });
+  const removed = await react({ reaction: "clap", action: "remove" });
+  assert(JSON.stringify((await removed.json()).counts) === JSON.stringify({ heart: 2 }), "remove did not update counts");
+  assert(JSON.stringify(await read("/post")) === JSON.stringify({ heart: 2 }), "reaction counts did not persist");
+  assert(JSON.stringify(await read("/other")) === "{}", "reactions leaked across pages");
+  assert(JSON.stringify(await read("/post/")) === JSON.stringify({ heart: 2 }), "trailing slash split a page's reactions");
+
+  const foreign = await react({ reaction: "heart", action: "add" }, { origin: "https://evil.example" });
+  assert(foreign.status === 403, "reaction from a foreign origin was accepted");
+  const unknown = await react({ reaction: "poop", action: "add" });
+  assert(unknown.status === 400, "unknown reaction key was accepted");
+  assert(JSON.stringify(await read("/post")) === JSON.stringify({ heart: 2 }), "rejected reactions changed counts");
+}
+
+async function assertPagePresenceCounts() {
+  const { site } = await createSite("Page Presence Town");
+  const { siteKey } = site;
+  const read = async (page, ip) => {
+    const url = new URL("/api/site-presence", HTTP_ORIGIN);
+    url.searchParams.set("siteKey", siteKey);
+    if (page !== null) url.searchParams.set("page", page);
+    const response = await fetch(url, { headers: { "x-real-ip": ip } });
+    assert(response.ok, "page presence request failed");
+    return response.json();
+  };
+
+  const onPost = await connect({ x: 0.3, browserId: "page-a", siteKey, origin: HTTP_ORIGIN, readingUrl: `${HTTP_ORIGIN}/blog/post?ref=x#top` });
+  const onOther = await connect({ x: 0.6, browserId: "page-b", siteKey, origin: HTTP_ORIGIN, readingUrl: `${HTTP_ORIGIN}/about`, ip: "192.0.2.80" });
+  await delay(80);
+
+  const post = await read("/blog/post/", "198.51.100.50");
+  assert(post.activeVisitors === 2 && post.pageVisitors === 1, `expected 2 site / 1 page visitors, got ${JSON.stringify(post)}`);
+  const empty = await read("/nowhere", "198.51.100.51");
+  assert(empty.activeVisitors === 2 && empty.pageVisitors === 0, "unvisited page should report zero page visitors");
+  const sitewide = await read(null, "198.51.100.52");
+  assert(!Object.hasOwn(sitewide, "pageVisitors"), "page count returned without a page parameter");
+
+  onPost.ws.close();
+  onOther.ws.close();
+}
+
 async function assertPublicEndpointRateLimits() {
   const connectionLimit = Number(process.env.CONNECTION_CLICKS_PER_HOUR || 600);
   const mapLimit = Number(process.env.MAP_CLICKS_PER_HOUR || 600);
@@ -1955,6 +2019,8 @@ async function main() {
 
   await assertCustomizationPersists();
   await assertMatchingWwwOriginsWork();
+  await assertReactionsWork();
+  await assertPagePresenceCounts();
   await assertAdminNeighbourhoodRelationships();
   await assertOwnerProfilePersists();
   await assertModerationTools();

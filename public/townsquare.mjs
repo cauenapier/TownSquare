@@ -250,6 +250,9 @@ export function mountTownSquare(root, options = {}) {
     root.dataset.townsquareSurface = "";
   }
   root.replaceChildren();
+  // Lets companion embeds (the presence counter) find the square on the page
+  // whatever id the host gave its mount node.
+  root.dataset.townsquareMounted = "";
 
   const {
     app,
@@ -477,6 +480,7 @@ export function mountTownSquare(root, options = {}) {
   }
   disposers.push(wireGameLoop(ctx));
   disposers.push(() => closeTrays(ctx));
+  disposers.push(() => delete root.dataset.townsquareMounted);
 
   return {
     ctx,

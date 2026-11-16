@@ -30,9 +30,12 @@ import {
 } from "../../lib/site-config-core.mjs";
 import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { prepareReciprocalConnection } from "../../lib/neighbourhood.mjs";
-import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
+import {
+  mountTownSquareCounter, COUNTER_VARIANTS, COUNTER_COUNTS, COUNTER_LABEL_STYLES,
+} from "../../townsquare-counter.mjs";
+import { mountTownSquareReactions, DEFAULT_REACTIONS, reactionLabel } from "../../townsquare-reactions.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
-import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../../lib/shared-constants.mjs";
+import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS, REACTIONS } from "../../lib/shared-constants.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -81,9 +84,18 @@ const counterVariantSelect = document.getElementById("counter-variant");
 const counterAccentInput = document.getElementById("counter-accent");
 const counterAccentDefaultInput = document.getElementById("counter-accent-default");
 const counterUrlInput = document.getElementById("counter-url");
+const counterCountSelect = document.getElementById("counter-count");
+const counterLabelStyleSelect = document.getElementById("counter-label-style");
 const counterPreview = document.getElementById("counter-preview");
 const counterSnippetEl = document.getElementById("counter-snippet");
 const copyCounterButton = document.getElementById("copy-counter");
+const reactionsForm = document.getElementById("reactions-form");
+const reactionsChoices = document.getElementById("reactions-choices");
+const reactionsAccentInput = document.getElementById("reactions-accent");
+const reactionsAccentDefaultInput = document.getElementById("reactions-accent-default");
+const reactionsPreview = document.getElementById("reactions-preview");
+const reactionsSnippetEl = document.getElementById("reactions-snippet");
+const copyReactionsButton = document.getElementById("copy-reactions");
 const connectionsList = document.getElementById("connections-list");
 const addConnectionButton = document.getElementById("add-connection");
 const saveConnectionsButton = document.getElementById("save-connections");
@@ -1155,9 +1167,10 @@ function render(data, { background = false } = {}) {
   }
   // The counter's look lives only in this form, so build it once we know the
   // siteKey; later background polls leave the picker and its preview alone.
-  if (!counterInitialized) {
-    counterInitialized = true;
+  if (!embedsInitialized) {
+    embedsInitialized = true;
     renderCounter();
+    renderReactions();
   }
   chatDisabledInput.checked = currentSite.chatDisabled;
   botProtectionInput.checked = Boolean(currentSite.botProtection);
@@ -1243,6 +1256,8 @@ function readCounterConfig() {
     variant: COUNTER_VARIANTS.includes(requested) ? requested : "pill",
     accent: counterAccentDefaultInput.checked ? "" : counterAccentInput.value,
     townSquareUrl: counterUrlInput.value.trim(),
+    count: COUNTER_COUNTS.includes(counterCountSelect.value) ? counterCountSelect.value : "site",
+    labelStyle: COUNTER_LABEL_STYLES.includes(counterLabelStyleSelect.value) ? counterLabelStyleSelect.value : "full",
   };
 }
 
@@ -1254,6 +1269,8 @@ function buildCounterSnippet(config) {
   lines.push(`    variant: ${JSON.stringify(config.variant)}`);
   if (config.accent) lines.push(`    accent: ${JSON.stringify(config.accent)}`);
   if (config.townSquareUrl) lines.push(`    townSquareUrl: ${JSON.stringify(config.townSquareUrl)}`);
+  if (config.count !== "site") lines.push(`    count: ${JSON.stringify(config.count)}`);
+  if (config.labelStyle !== "full") lines.push(`    labelStyle: ${JSON.stringify(config.labelStyle)}`);
   return `<div id="townsquare-count"></div>
 <script type="module">
   import { mountTownSquareCounter } from ${JSON.stringify(`${serverOrigin}/townsquare-counter.mjs`)};
@@ -1265,7 +1282,7 @@ ${lines.join(",\n")}
 }
 
 let counterPreviewHandle = null;
-let counterInitialized = false;
+let embedsInitialized = false;
 function renderCounter() {
   const config = readCounterConfig();
   counterAccentInput.disabled = counterAccentDefaultInput.checked;
@@ -1283,6 +1300,8 @@ function renderCounter() {
     variant: config.variant,
     accent: config.accent || undefined,
     townSquareUrl: config.townSquareUrl || undefined,
+    count: config.count,
+    labelStyle: config.labelStyle,
   });
 }
 
@@ -1292,6 +1311,71 @@ counterForm.addEventListener("input", (event) => {
   renderCounter();
 });
 
+// One checkbox per reaction the server accepts; the embed's default set starts
+// checked.
+reactionsChoices.replaceChildren(...Object.entries(REACTIONS).map(([key, emoji]) => {
+  const label = document.createElement("label");
+  label.className = "hosted-toggle";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.name = "reaction";
+  input.value = key;
+  input.checked = DEFAULT_REACTIONS.includes(key);
+  const text = document.createElement("span");
+  text.textContent = `${emoji} ${reactionLabel(key)}`;
+  label.append(input, text);
+  return label;
+}));
+
+function readReactionsConfig() {
+  return {
+    reactions: [...reactionsChoices.querySelectorAll("input:checked")].map((input) => input.value),
+    accent: reactionsAccentDefaultInput.checked ? "" : reactionsAccentInput.value,
+  };
+}
+
+function buildReactionsSnippet(config) {
+  const serverOrigin = window.location.origin;
+  const siteKey = currentSite?.siteKey || "";
+  const lines = [`    serverOrigin: ${JSON.stringify(serverOrigin)}`];
+  if (siteKey) lines.push(`    siteKey: ${JSON.stringify(siteKey)}`);
+  if (config.reactions.length) lines.push(`    reactions: ${JSON.stringify(config.reactions)}`);
+  if (config.accent) lines.push(`    accent: ${JSON.stringify(config.accent)}`);
+  return `<div id="townsquare-reactions"></div>
+<script type="module">
+  import { mountTownSquareReactions } from ${JSON.stringify(`${serverOrigin}/townsquare-reactions.mjs`)};
+
+  mountTownSquareReactions(document.getElementById("townsquare-reactions"), {
+${lines.join(",\n")}
+  });
+</script>`;
+}
+
+// The preview reads this site's real counts for "/" but is inert: writes are
+// only accepted from the site's own origins, not from this admin page.
+let reactionsPreviewHandle = null;
+function renderReactions() {
+  const config = readReactionsConfig();
+  reactionsAccentInput.disabled = reactionsAccentDefaultInput.checked;
+  if (document.activeElement !== reactionsSnippetEl) {
+    reactionsSnippetEl.value = buildReactionsSnippet(config);
+  }
+  reactionsPreviewHandle?.destroy();
+  reactionsPreviewHandle = mountTownSquareReactions(reactionsPreview, {
+    serverOrigin: window.location.origin,
+    siteKey: currentSite?.siteKey || "",
+    page: "/",
+    reactions: config.reactions,
+    accent: config.accent || undefined,
+  });
+}
+
+reactionsForm.addEventListener("input", (event) => {
+  if (event.target === reactionsAccentInput) reactionsAccentDefaultInput.checked = false;
+  renderReactions();
+});
+
+bindCopy(copyReactionsButton, { text: () => reactionsSnippetEl.value, source: reactionsSnippetEl });
 bindCopy(copyCounterButton, { text: () => counterSnippetEl.value, source: counterSnippetEl });
 bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
 bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnippetEl });
