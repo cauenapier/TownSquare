@@ -800,6 +800,12 @@ body {
   font-weight: 650;
 }
 
+/* The rule above supplies a display value, so make the native hidden state
+   explicit (e.g. an accent picker that only shows when the default is off). */
+.hosted-form label[hidden] {
+  display: none;
+}
+
 .hosted-form label small {
   font-weight: 500;
   color: var(--ink-faint);

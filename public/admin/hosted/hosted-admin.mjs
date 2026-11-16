@@ -1250,6 +1250,11 @@ function render(data, { background = false } = {}) {
  * style lives entirely in this form (no server round-trip). Read the current
  * picker state into a config the preview and snippet both use.
  */
+/** Show an accent picker only while its "Use the default accent color" box is off. */
+function syncAccentPicker(picker, useDefault) {
+  picker.closest("label").hidden = useDefault.checked;
+}
+
 function readCounterConfig() {
   const requested = counterVariantSelect.value;
   return {
@@ -1285,7 +1290,7 @@ let counterPreviewHandle = null;
 let embedsInitialized = false;
 function renderCounter() {
   const config = readCounterConfig();
-  counterAccentInput.disabled = counterAccentDefaultInput.checked;
+  syncAccentPicker(counterAccentInput, counterAccentDefaultInput);
 
   if (document.activeElement !== counterSnippetEl) {
     counterSnippetEl.value = buildCounterSnippet(config);
@@ -1305,11 +1310,7 @@ function renderCounter() {
   });
 }
 
-counterForm.addEventListener("input", (event) => {
-  // Picking a colour means the owner wants a custom accent, not the default.
-  if (event.target === counterAccentInput) counterAccentDefaultInput.checked = false;
-  renderCounter();
-});
+counterForm.addEventListener("input", renderCounter);
 
 // One checkbox per reaction the server accepts; the embed's default set starts
 // checked.
@@ -1356,7 +1357,7 @@ ${lines.join(",\n")}
 let reactionsPreviewHandle = null;
 function renderReactions() {
   const config = readReactionsConfig();
-  reactionsAccentInput.disabled = reactionsAccentDefaultInput.checked;
+  syncAccentPicker(reactionsAccentInput, reactionsAccentDefaultInput);
   if (document.activeElement !== reactionsSnippetEl) {
     reactionsSnippetEl.value = buildReactionsSnippet(config);
   }
@@ -1370,10 +1371,7 @@ function renderReactions() {
   });
 }
 
-reactionsForm.addEventListener("input", (event) => {
-  if (event.target === reactionsAccentInput) reactionsAccentDefaultInput.checked = false;
-  renderReactions();
-});
+reactionsForm.addEventListener("input", renderReactions);
 
 bindCopy(copyReactionsButton, { text: () => reactionsSnippetEl.value, source: reactionsSnippetEl });
 bindCopy(copyCounterButton, { text: () => counterSnippetEl.value, source: counterSnippetEl });

@@ -1,5 +1,9 @@
 # Styling the counter and reactions embeds
 
+A friendlier guide with live examples is at
+<https://townsquare.cauenapier.com/docs/styling/>. This file is the reference
+for developers working on the embeds.
+
 The presence counter (`/townsquare-counter.mjs`) and the reactions bar
 (`/townsquare-reactions.mjs`) bring a small built-in stylesheet, so they look
 right with no CSS. Everything in that stylesheet can be changed from the host

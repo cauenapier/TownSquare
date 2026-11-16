@@ -290,7 +290,7 @@
             <h2>Scene customization</h2>
           </div>
           <p class="hosted-note">
-            Edit the scene, colors, and message board with a live preview. Changes only go live on your site once you press Publish. Your colors are delivered automatically — see the Embed snippet section for details.
+            Changes go live on your site when you press Publish. <a href="/docs/#customize" target="_blank" rel="noopener">Learn more</a>
           </p>
 
           <form class="hosted-form" id="customization-form">
@@ -351,7 +351,7 @@
               <div class="hosted-section-head">
                 <h2 id="message-board-title">Message board</h2>
               </div>
-              <p class="hosted-note">Leave a note visitors can read by clicking the board. It appears on your site once you Publish and shows a "!" badge until each visitor opens it. The board only appears once it has a title or message.</p>
+              <p class="hosted-note">A note visitors open by clicking the board. <a href="/docs/#message-board" target="_blank" rel="noopener">Learn more</a></p>
               <label>
                 <span>Title</span>
                 <input id="board-title" name="board-title" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Welcome!" />
@@ -412,25 +412,19 @@
         <section class="hosted-section" id="install-section">
           <h2>Embed snippet</h2>
           <p class="hosted-note">
-            <strong>Recommended:</strong> Paste this once where you want the square to appear. It carries your site identity and colors — everything you change above (scene, colors, neighbour links, message board) updates automatically, no re-pasting needed. Scene changes reach connected visitors immediately; colors update with the linked stylesheet.
-          </p>
-          <p class="hosted-note">
-            Keep the <code>max-width</code> on the mount <code>&lt;div&gt;</code>. The square is built for a column — in a full-width area it flattens to a stripe and the composer stretches out of shape. Adjust the value to fit your layout, but leave one set.
+            Paste this once where the square should appear. It updates on its own. Keep the <code>max-width</code> on the <code>&lt;div&gt;</code>. <a href="/docs/#snippet" target="_blank" rel="noopener">Learn more</a>
           </p>
           <textarea id="embed-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-snippet">Copy snippet</button>
           </div>
-          <p class="hosted-note hosted-footnote">
-            <strong>Power user?</strong> You can pin any field (<code>scene</code>, <code>connections</code>, <code>messageBoard</code>) directly in the snippet's options, or add custom CSS on your own site to override colors. See "Custom CSS override" below.
-          </p>
         </section>
 
         <!-- Presence counter — a lightweight "N people here" badge for other pages. -->
         <section class="hosted-section" id="counter-section">
           <h2>Presence counter</h2>
           <p class="hosted-note">
-            A small badge for pages where the full square is too much. It can count everyone in your square, only the people reading the current page, or both. Pair the Minimal style with a Short label for the smallest badge ("5 here"). It loads no scene and opens no connection, so showing it never adds a visitor. Clicking it scrolls to a square on the same page, or sends visitors to the page you choose below. Pick a look, then paste the snippet.
+            A small badge that shows who's around, like "5 people here". <a href="/docs/#counter" target="_blank" rel="noopener">Learn more</a>
           </p>
           <form class="hosted-form" id="counter-form">
             <div class="hosted-grid">
@@ -459,21 +453,20 @@
                 </select>
               </label>
               <label>
-                <span>Accent color</span>
-                <input id="counter-accent" name="counter-accent" type="color" value="#2faa4f" />
-              </label>
-              <label>
-                <span>Town square page <small>only used off-page</small></span>
+                <span>Town square page <small>if the square isn't on that page</small></span>
                 <input id="counter-url" name="counter-url" type="url" inputmode="url" maxlength="320" placeholder="https://your-site/townsquare" />
               </label>
             </div>
-            <p class="hosted-note">
-              If the full square is on the same page as the badge, clicking just scrolls to it — leave this blank. Set it only when the badge sits on a page <em>without</em> the square (e.g. a blog post or footer); then clicks send visitors to this page instead.
-            </p>
             <label class="hosted-toggle">
               <input id="counter-accent-default" name="counter-accent-default" type="checkbox" checked />
               <span>Use the default accent color</span>
             </label>
+            <div class="hosted-grid">
+              <label hidden>
+                <span>Accent color</span>
+                <input id="counter-accent" name="counter-accent" type="color" value="#2faa4f" />
+              </label>
+            </div>
           </form>
 
           <div class="hosted-section-head">
@@ -486,7 +479,7 @@
             <button type="button" id="copy-counter">Copy snippet</button>
           </div>
           <p class="hosted-note hosted-footnote">
-            Want full control of the look? Any rule in your own stylesheet wins. Set variables like <code>--ts-counter-accent</code>, <code>--ts-counter-bg</code>, <code>--ts-counter-ink</code> and <code>--ts-counter-radius</code> on <code>.ts-counter</code> (or on <code>:root</code> for every counter), or style <code>.ts-counter__dot</code> and <code>.ts-counter__label</code> directly. All classes and variables are listed in the <a href="https://github.com/cauenapier/TownSquare/blob/main/docs/embed-styling.md" target="_blank" rel="noopener">styling guide</a>.
+            Want a different look? <a href="/docs/styling/#counter" target="_blank" rel="noopener">Style it with CSS</a>.
           </p>
         </section>
 
@@ -494,20 +487,20 @@
         <section class="hosted-section" id="reactions-section">
           <h2>Reactions</h2>
           <p class="hosted-note">
-            A row of emoji buttons (❤️ 👍 👏 …) visitors can tap on a post or page. Counts are kept per page and only your site's origins can add to them. Pick the reactions, then paste the snippet where the bar should appear.
+            Emoji buttons visitors can tap. Each page keeps its own counts. <a href="/docs/#reactions" target="_blank" rel="noopener">Learn more</a>
           </p>
           <form class="hosted-form" id="reactions-form">
             <div class="hosted-grid" id="reactions-choices"></div>
-            <div class="hosted-grid">
-              <label>
-                <span>Accent color</span>
-                <input id="reactions-accent" name="reactions-accent" type="color" value="#2faa4f" />
-              </label>
-            </div>
             <label class="hosted-toggle">
               <input id="reactions-accent-default" name="reactions-accent-default" type="checkbox" checked />
               <span>Use the default accent color</span>
             </label>
+            <div class="hosted-grid">
+              <label hidden>
+                <span>Accent color</span>
+                <input id="reactions-accent" name="reactions-accent" type="color" value="#2faa4f" />
+              </label>
+            </div>
           </form>
 
           <div class="hosted-section-head">
@@ -520,22 +513,19 @@
             <button type="button" id="copy-reactions">Copy snippet</button>
           </div>
           <p class="hosted-note hosted-footnote">
-            Counts follow the page's path by default. To share counts across URLs (or keep them stable if a URL changes), add <code>page: "your-post-id"</code> to the options. Restyle from your own stylesheet with variables like <code>--ts-reactions-accent</code>, <code>--ts-reactions-bg</code>, <code>--ts-reactions-radius</code> and <code>--ts-reactions-emoji-size</code>, or target <code>.ts-reactions__button</code>, <code>[data-reaction="heart"]</code> and <code>[aria-pressed="true"]</code> directly. See the <a href="https://github.com/cauenapier/TownSquare/blob/main/docs/embed-styling.md" target="_blank" rel="noopener">styling guide</a> for everything you can change.
+            Want a different look? <a href="/docs/styling/#reactions" target="_blank" rel="noopener">Style it with CSS</a>.
           </p>
         </section>
 
         <section class="hosted-section" id="style-section">
           <h2>Custom CSS override (optional)</h2>
           <p class="hosted-note">
-            <strong>For advanced customization only.</strong> If you want to override the colors from your own website's stylesheet instead of using the automatic updates above, paste this CSS. Your custom CSS will take priority and won't update when you change colors here — you'd need to re-copy it manually.
+            Only if you want to manage colors in your own stylesheet. It won't follow changes you make here. <a href="/docs/#customize-css" target="_blank" rel="noopener">Learn more</a>
           </p>
           <textarea id="style-snippet" readonly rows="7" spellcheck="false"></textarea>
           <div class="hosted-actions">
             <button type="button" id="copy-style">Copy CSS</button>
           </div>
-          <p class="hosted-note hosted-footnote">
-            <strong>When to use this:</strong> You want full control over colors in your site's own stylesheet, or you want to coordinate TownSquare colors with the rest of your site's design. Otherwise, stick with the standard snippet above — it's simpler and updates automatically.
-          </p>
         </section>
 
         </div>
