@@ -430,7 +430,7 @@
         <section class="hosted-section" id="counter-section">
           <h2>Presence counter</h2>
           <p class="hosted-note">
-            A small "N people here" badge for pages where the full square is too much, optionally with how many of them are reading the current page. It loads no scene and opens no connection, so showing it never adds a visitor. Clicking it scrolls to a square on the same page, or sends visitors to the page you choose below. Pick a look, then paste the snippet.
+            A small badge for pages where the full square is too much. It can count everyone in your square, only the people reading the current page, or both. Pair the Minimal style with a Short label for the smallest badge ("5 here"). It loads no scene and opens no connection, so showing it never adds a visitor. Clicking it scrolls to a square on the same page, or sends visitors to the page you choose below. Pick a look, then paste the snippet.
           </p>
           <form class="hosted-form" id="counter-form">
             <div class="hosted-grid">
@@ -441,6 +441,21 @@
                   <option value="minimal">Minimal</option>
                   <option value="solid">Solid</option>
                   <option value="outline">Outline</option>
+                </select>
+              </label>
+              <label>
+                <span>Count</span>
+                <select id="counter-count" name="counter-count">
+                  <option value="both">Whole site and this page</option>
+                  <option value="site">Whole site</option>
+                  <option value="page">This page only</option>
+                </select>
+              </label>
+              <label>
+                <span>Label</span>
+                <select id="counter-label-style" name="counter-label-style">
+                  <option value="full">Full ("5 people here")</option>
+                  <option value="short">Short ("5 here")</option>
                 </select>
               </label>
               <label>
@@ -458,10 +473,6 @@
             <label class="hosted-toggle">
               <input id="counter-accent-default" name="counter-accent-default" type="checkbox" checked />
               <span>Use the default accent color</span>
-            </label>
-            <label class="hosted-toggle">
-              <input id="counter-show-page" name="counter-show-page" type="checkbox" checked />
-              <span>Also show how many are on the current page <small>(e.g. "5 people here · 2 on this page")</small></span>
             </label>
           </form>
 

@@ -30,7 +30,9 @@ import {
 } from "../../lib/site-config-core.mjs";
 import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { prepareReciprocalConnection } from "../../lib/neighbourhood.mjs";
-import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
+import {
+  mountTownSquareCounter, COUNTER_VARIANTS, COUNTER_COUNTS, COUNTER_LABEL_STYLES,
+} from "../../townsquare-counter.mjs";
 import { mountTownSquareReactions } from "../../townsquare-reactions.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS, REACTIONS } from "../../lib/shared-constants.mjs";
@@ -82,7 +84,8 @@ const counterVariantSelect = document.getElementById("counter-variant");
 const counterAccentInput = document.getElementById("counter-accent");
 const counterAccentDefaultInput = document.getElementById("counter-accent-default");
 const counterUrlInput = document.getElementById("counter-url");
-const counterShowPageInput = document.getElementById("counter-show-page");
+const counterCountSelect = document.getElementById("counter-count");
+const counterLabelStyleSelect = document.getElementById("counter-label-style");
 const counterPreview = document.getElementById("counter-preview");
 const counterSnippetEl = document.getElementById("counter-snippet");
 const copyCounterButton = document.getElementById("copy-counter");
@@ -1253,7 +1256,8 @@ function readCounterConfig() {
     variant: COUNTER_VARIANTS.includes(requested) ? requested : "pill",
     accent: counterAccentDefaultInput.checked ? "" : counterAccentInput.value,
     townSquareUrl: counterUrlInput.value.trim(),
-    showPage: counterShowPageInput.checked,
+    count: COUNTER_COUNTS.includes(counterCountSelect.value) ? counterCountSelect.value : "site",
+    labelStyle: COUNTER_LABEL_STYLES.includes(counterLabelStyleSelect.value) ? counterLabelStyleSelect.value : "full",
   };
 }
 
@@ -1265,7 +1269,8 @@ function buildCounterSnippet(config) {
   lines.push(`    variant: ${JSON.stringify(config.variant)}`);
   if (config.accent) lines.push(`    accent: ${JSON.stringify(config.accent)}`);
   if (config.townSquareUrl) lines.push(`    townSquareUrl: ${JSON.stringify(config.townSquareUrl)}`);
-  if (config.showPage) lines.push("    showPage: true");
+  if (config.count !== "site") lines.push(`    count: ${JSON.stringify(config.count)}`);
+  if (config.labelStyle !== "full") lines.push(`    labelStyle: ${JSON.stringify(config.labelStyle)}`);
   return `<div id="townsquare-count"></div>
 <script type="module">
   import { mountTownSquareCounter } from ${JSON.stringify(`${serverOrigin}/townsquare-counter.mjs`)};
@@ -1295,7 +1300,8 @@ function renderCounter() {
     variant: config.variant,
     accent: config.accent || undefined,
     townSquareUrl: config.townSquareUrl || undefined,
-    showPage: config.showPage,
+    count: config.count,
+    labelStyle: config.labelStyle,
   });
 }
 

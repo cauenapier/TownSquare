@@ -10,10 +10,11 @@
  *
  * A town square is keyed per site (per `siteKey`, or the shared default scene
  * for self-hosters), not per page. So "here" means "in this site's square,"
- * regardless of which page each visitor is reading. With `showPage`, the badge
- * also says how many of them are reading this page (as reported by their
- * widget), e.g. "5 people here · 2 on this page". Clicking the counter takes
- * the visitor to that one square:
+ * regardless of which page each visitor is reading. `count` picks what the
+ * badge reports: the whole site, only the visitors reading this page (as
+ * reported by their widget), or both. `labelStyle: "short"` trims the text to
+ * "5 here"; the full sentence stays in the tooltip and accessible label.
+ * Clicking the counter takes the visitor to that one square:
  *   1. if the full widget is mounted on the same page, scroll to it;
  *   2. otherwise navigate to the configured `townSquareUrl`.
  * With neither available the counter renders as plain, non-interactive text.
@@ -33,6 +34,10 @@ const WIDGET_ROOT_SELECTOR = "[data-townsquare-mounted], #townsquare-root";
 /** Built-in looks. Each is just a class; every value behind them is a CSS var. */
 export const COUNTER_VARIANTS = Object.freeze(["pill", "minimal", "solid", "outline"]);
 const DEFAULT_VARIANT = "pill";
+/** What the badge counts: the whole site's square, this page's readers, or both. */
+export const COUNTER_COUNTS = Object.freeze(["site", "page", "both"]);
+/** "full" sentences ("5 people here") or "short" ones ("5 here"). */
+export const COUNTER_LABEL_STYLES = Object.freeze(["full", "short"]);
 
 // Every visible value is a CSS custom property, so a host can restyle any
 // variant by overriding these on `.ts-counter` (or one mount node). The variant
@@ -143,17 +148,23 @@ function safeUrl(value) {
   }
 }
 
+const people = (n) => (n === 1 ? "1 person" : `${n} people`);
+
 /**
- * Human label for a visitor count, optionally with this page's share.
+ * Badge text for the site and page counts.
  *
- * @param {number} count
- * @param {number|null} [pageCount] Omit (null) to leave the page out.
+ * @param {{ site: number, page: number }} counts
+ * @param {{ count?: "site"|"page"|"both", labelStyle?: "full"|"short" }} [options]
  * @returns {string}
  */
-function labelFor(count, pageCount = null) {
-  if (count <= 0) return "No one here yet";
-  const site = count === 1 ? "1 person here" : `${count} people here`;
-  return pageCount === null ? site : `${site} · ${pageCount} on this page`;
+export function counterLabel({ site, page }, { count = "site", labelStyle = "full" } = {}) {
+  if (labelStyle === "short") {
+    if (count === "both") return `${site} here · ${page} on page`;
+    return `${count === "page" ? page : site} here`;
+  }
+  if (count === "page") return page <= 0 ? "No one on this page yet" : `${people(page)} on this page`;
+  if (site <= 0) return "No one here yet";
+  return count === "both" ? `${people(site)} here · ${page} on this page` : `${people(site)} here`;
 }
 
 /**
@@ -163,7 +174,8 @@ function labelFor(count, pageCount = null) {
  * @property {string} [townSquareUrl] Where to send the visitor when the full widget is not on this page.
  * @property {"pill"|"minimal"|"solid"|"outline"} [variant="pill"] Built-in look. Every variant is fully CSS-customizable via the `--ts-counter-*` variables.
  * @property {string} [accent] Accent color for the dot/fill/border. Written inline as `--ts-counter-accent`; omit to keep the stylesheet default.
- * @property {boolean} [showPage=false] Also show how many of the site's visitors are reading this page (matched by path).
+ * @property {"site"|"page"|"both"} [count="site"] What to count: the whole site's square, only visitors reading this page (matched by path), or both.
+ * @property {"full"|"short"} [labelStyle="full"] "full" reads "5 people here"; "short" reads "5 here" and keeps the full sentence in the tooltip.
  * @property {number} [pollMs=20000] Poll interval in ms (floored at 5000).
  * @property {string} [label] Accessible verb for the action, e.g. "Visit the town square".
  */
@@ -198,13 +210,15 @@ export function mountTownSquareCounter(root, options = {}) {
   const requestedVariant = options.variant || root.dataset.townsquareVariant || DEFAULT_VARIANT;
   const variant = COUNTER_VARIANTS.includes(requestedVariant) ? requestedVariant : DEFAULT_VARIANT;
   const accent = options.accent || root.dataset.townsquareAccent || "";
-  const showPage = options.showPage ?? root.dataset.townsquareShowPage === "true";
+  const pick = (value, allowed) => (allowed.includes(value) ? value : allowed[0]);
+  const count = pick(options.count || root.dataset.townsquareCount, COUNTER_COUNTS);
+  const labelStyle = pick(options.labelStyle || root.dataset.townsquareLabelStyle, COUNTER_LABEL_STYLES);
 
   injectStyles();
 
   const endpoint = new URL("/api/site-presence", serverOrigin);
   if (siteKey) endpoint.searchParams.set("siteKey", siteKey);
-  if (showPage) endpoint.searchParams.set("page", window.location.pathname || "/");
+  if (count !== "site") endpoint.searchParams.set("page", window.location.pathname || "/");
 
   // A <button> when the counter can take the visitor somewhere; otherwise a
   // plain element so a non-actionable badge is not announced as a control.
@@ -245,16 +259,18 @@ export function mountTownSquareCounter(root, options = {}) {
   let pollTimer = null;
   let inFlight = null;
 
-  const render = (count, pageCount) => {
-    const empty = count <= 0;
-    const label = labelFor(count, pageCount);
+  const render = (counts) => {
+    const label = counterLabel(counts, { count, labelStyle });
+    const fullLabel = counterLabel(counts, { count });
     labelEl.textContent = label;
-    el.dataset.empty = String(empty);
+    el.title = labelStyle === "short" ? fullLabel : "";
+    el.dataset.empty = String((count === "page" ? counts.page : counts.site) <= 0);
     el.hidden = false;
     if (el instanceof HTMLButtonElement) {
-      el.setAttribute("aria-label", `${label}. ${actionLabel}.`);
+      el.setAttribute("aria-label", `${fullLabel}. ${actionLabel}.`);
     } else {
       el.setAttribute("role", "status");
+      el.setAttribute("aria-label", fullLabel);
     }
   };
 
@@ -273,7 +289,7 @@ export function mountTownSquareCounter(root, options = {}) {
       }
       const data = await res.json();
       const toCount = (value) => (Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0);
-      if (!disposed) render(toCount(data?.activeVisitors), showPage ? toCount(data?.pageVisitors) : null);
+      if (!disposed) render({ site: toCount(data?.activeVisitors), page: toCount(data?.pageVisitors) });
     } catch {
       // Network error or aborted poll: keep the last rendered value.
     } finally {

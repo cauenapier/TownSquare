@@ -71,8 +71,8 @@ The generated snippet gives the mount a centered `max-width: 460px`, which is a
 good default for the widget's column layout. Hosts can choose another width;
 test the installed page at its intended desktop and mobile sizes.
 
-For a read-only presence pill ("5 people here · 2 on this page" with
-`showPage`), use `mountTownSquareCounter` from `/townsquare-counter.mjs`.
+For a read-only presence pill ("5 people here", "2 on this page", or a short
+"5 here"), use `mountTownSquareCounter` from `/townsquare-counter.mjs`.
 Clicking it scrolls to a square mounted on the same page, otherwise opens
 `townSquareUrl`. Its option contract is documented next to the
 implementation in [`public/townsquare-counter.mjs`](public/townsquare-counter.mjs).
