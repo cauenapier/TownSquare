@@ -82,6 +82,7 @@ const counterVariantSelect = document.getElementById("counter-variant");
 const counterAccentInput = document.getElementById("counter-accent");
 const counterAccentDefaultInput = document.getElementById("counter-accent-default");
 const counterUrlInput = document.getElementById("counter-url");
+const counterShowPageInput = document.getElementById("counter-show-page");
 const counterPreview = document.getElementById("counter-preview");
 const counterSnippetEl = document.getElementById("counter-snippet");
 const copyCounterButton = document.getElementById("copy-counter");
@@ -1252,6 +1253,7 @@ function readCounterConfig() {
     variant: COUNTER_VARIANTS.includes(requested) ? requested : "pill",
     accent: counterAccentDefaultInput.checked ? "" : counterAccentInput.value,
     townSquareUrl: counterUrlInput.value.trim(),
+    showPage: counterShowPageInput.checked,
   };
 }
 
@@ -1263,6 +1265,7 @@ function buildCounterSnippet(config) {
   lines.push(`    variant: ${JSON.stringify(config.variant)}`);
   if (config.accent) lines.push(`    accent: ${JSON.stringify(config.accent)}`);
   if (config.townSquareUrl) lines.push(`    townSquareUrl: ${JSON.stringify(config.townSquareUrl)}`);
+  if (config.showPage) lines.push("    showPage: true");
   return `<div id="townsquare-count"></div>
 <script type="module">
   import { mountTownSquareCounter } from ${JSON.stringify(`${serverOrigin}/townsquare-counter.mjs`)};
@@ -1292,6 +1295,7 @@ function renderCounter() {
     variant: config.variant,
     accent: config.accent || undefined,
     townSquareUrl: config.townSquareUrl || undefined,
+    showPage: config.showPage,
   });
 }
 

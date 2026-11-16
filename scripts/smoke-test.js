@@ -924,6 +924,33 @@ async function assertReactionsWork() {
   assert(JSON.stringify(await read("/post")) === JSON.stringify({ heart: 2 }), "rejected reactions changed counts");
 }
 
+async function assertPagePresenceCounts() {
+  const { site } = await createSite("Page Presence Town");
+  const { siteKey } = site;
+  const read = async (page, ip) => {
+    const url = new URL("/api/site-presence", HTTP_ORIGIN);
+    url.searchParams.set("siteKey", siteKey);
+    if (page !== null) url.searchParams.set("page", page);
+    const response = await fetch(url, { headers: { "x-real-ip": ip } });
+    assert(response.ok, "page presence request failed");
+    return response.json();
+  };
+
+  const onPost = await connect({ x: 0.3, browserId: "page-a", siteKey, origin: HTTP_ORIGIN, readingUrl: `${HTTP_ORIGIN}/blog/post?ref=x#top` });
+  const onOther = await connect({ x: 0.6, browserId: "page-b", siteKey, origin: HTTP_ORIGIN, readingUrl: `${HTTP_ORIGIN}/about`, ip: "192.0.2.80" });
+  await delay(80);
+
+  const post = await read("/blog/post/", "198.51.100.50");
+  assert(post.activeVisitors === 2 && post.pageVisitors === 1, `expected 2 site / 1 page visitors, got ${JSON.stringify(post)}`);
+  const empty = await read("/nowhere", "198.51.100.51");
+  assert(empty.activeVisitors === 2 && empty.pageVisitors === 0, "unvisited page should report zero page visitors");
+  const sitewide = await read(null, "198.51.100.52");
+  assert(!Object.hasOwn(sitewide, "pageVisitors"), "page count returned without a page parameter");
+
+  onPost.ws.close();
+  onOther.ws.close();
+}
+
 async function assertPublicEndpointRateLimits() {
   const connectionLimit = Number(process.env.CONNECTION_CLICKS_PER_HOUR || 600);
   const mapLimit = Number(process.env.MAP_CLICKS_PER_HOUR || 600);
@@ -1992,6 +2019,7 @@ async function main() {
   await assertCustomizationPersists();
   await assertMatchingWwwOriginsWork();
   await assertReactionsWork();
+  await assertPagePresenceCounts();
   await assertAdminNeighbourhoodRelationships();
   await assertOwnerProfilePersists();
   await assertModerationTools();

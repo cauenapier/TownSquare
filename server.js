@@ -1451,6 +1451,9 @@ function handleStats(_req, res) {
  * reads the shared default (self-hosted) scene; an unknown or disabled site
  * returns 404 so the counter can hide itself.
  *
+ * With a `page` path the response also carries `pageVisitors`: how many of
+ * those visitors are reading that page (see {@link countPageVisitors}).
+ *
  * @param {import("http").IncomingMessage} req
  * @param {import("http").ServerResponse} res
  */
@@ -1462,21 +1465,19 @@ function handleSitePresence(req, res) {
 
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
   const siteKey = url.searchParams.get("siteKey") || "";
+  const page = url.searchParams.get("page");
 
-  if (!siteKey) {
-    const scene = scenes.get("default");
-    sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
-    return;
-  }
-
-  const site = sitesByKey.get(siteKey);
-  if (!site || site.disabled) {
+  const site = siteKey ? sitesByKey.get(siteKey) : null;
+  if (siteKey && (!site || site.disabled)) {
     sendPublicJson(res, 404, { error: "unknown site" });
     return;
   }
 
-  const scene = scenes.get(site.siteKey);
-  sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+  const scene = scenes.get(site ? site.siteKey : "default");
+  sendPublicJson(res, 200, {
+    activeVisitors: scene ? countActiveVisitors(scene) : 0,
+    ...(page === null ? {} : { pageVisitors: scene ? countPageVisitors(scene, page) : 0 }),
+  });
 }
 
 /**
@@ -3543,6 +3544,32 @@ function countActiveVisitors(scene) {
   let count = 0;
   for (const identity of scene.identities.values()) {
     if (identity.joined) count += 1;
+  }
+  return count;
+}
+
+/** Pathname without a trailing slash (except root), so "/blog/" matches "/blog". */
+function comparablePath(pathname) {
+  const path = String(pathname || "").slice(0, MAX_PAGE_URL_LEN);
+  return path.length > 1 ? path.replace(/\/+$/, "") || "/" : path || "/";
+}
+
+/**
+ * Joined visitors whose reported reading URL is on `pagePath`. Only the path
+ * is compared: the scene already belongs to one site, and its allowed origins
+ * (e.g. the www pair) are the same pages. Visitors who report no reading URL
+ * are not counted.
+ */
+function countPageVisitors(scene, pagePath) {
+  const target = comparablePath(pagePath);
+  let count = 0;
+  for (const identity of scene.identities.values()) {
+    if (!identity.joined || !identity.readingUrl) continue;
+    try {
+      if (comparablePath(new URL(identity.readingUrl).pathname) === target) count += 1;
+    } catch {
+      // Stored reading URLs are already validated; skip anything unparsable.
+    }
   }
   return count;
 }

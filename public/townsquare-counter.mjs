@@ -10,10 +10,11 @@
  *
  * A town square is keyed per site (per `siteKey`, or the shared default scene
  * for self-hosters), not per page. So "here" means "in this site's square,"
- * regardless of which page each visitor is reading. Clicking the counter takes
+ * regardless of which page each visitor is reading. With `showPage`, the badge
+ * also says how many of them are reading this page (as reported by their
+ * widget), e.g. "5 people here · 2 on this page". Clicking the counter takes
  * the visitor to that one square:
- *   1. if the full widget is mounted on the same page (`#townsquare-root`),
- *      scroll to it;
+ *   1. if the full widget is mounted on the same page, scroll to it;
  *   2. otherwise navigate to the configured `townSquareUrl`.
  * With neither available the counter renders as plain, non-interactive text.
  */
@@ -24,7 +25,10 @@ const STYLE_ID = "townsquare-counter-style";
 const DEFAULT_POLL_MS = 20000;
 const MIN_POLL_MS = 5000;
 const POLL_TIMEOUT_MS = 10000;
-const WIDGET_ROOT_SELECTOR = "#townsquare-root";
+// The widget marks its mount root with `data-townsquare-mounted`, so the square
+// is found whatever id the host gave it; `#townsquare-root` is the snippet's
+// default id and covers a square that has not mounted yet.
+const WIDGET_ROOT_SELECTOR = "[data-townsquare-mounted], #townsquare-root";
 
 /** Built-in looks. Each is just a class; every value behind them is a CSS var. */
 export const COUNTER_VARIANTS = Object.freeze(["pill", "minimal", "solid", "outline"]);
@@ -140,15 +144,16 @@ function safeUrl(value) {
 }
 
 /**
- * Human label for a visitor count.
+ * Human label for a visitor count, optionally with this page's share.
  *
  * @param {number} count
+ * @param {number|null} [pageCount] Omit (null) to leave the page out.
  * @returns {string}
  */
-function labelFor(count) {
+function labelFor(count, pageCount = null) {
   if (count <= 0) return "No one here yet";
-  if (count === 1) return "1 person here";
-  return `${count} people here`;
+  const site = count === 1 ? "1 person here" : `${count} people here`;
+  return pageCount === null ? site : `${site} · ${pageCount} on this page`;
 }
 
 /**
@@ -158,6 +163,7 @@ function labelFor(count) {
  * @property {string} [townSquareUrl] Where to send the visitor when the full widget is not on this page.
  * @property {"pill"|"minimal"|"solid"|"outline"} [variant="pill"] Built-in look. Every variant is fully CSS-customizable via the `--ts-counter-*` variables.
  * @property {string} [accent] Accent color for the dot/fill/border. Written inline as `--ts-counter-accent`; omit to keep the stylesheet default.
+ * @property {boolean} [showPage=false] Also show how many of the site's visitors are reading this page (matched by path).
  * @property {number} [pollMs=20000] Poll interval in ms (floored at 5000).
  * @property {string} [label] Accessible verb for the action, e.g. "Visit the town square".
  */
@@ -192,11 +198,13 @@ export function mountTownSquareCounter(root, options = {}) {
   const requestedVariant = options.variant || root.dataset.townsquareVariant || DEFAULT_VARIANT;
   const variant = COUNTER_VARIANTS.includes(requestedVariant) ? requestedVariant : DEFAULT_VARIANT;
   const accent = options.accent || root.dataset.townsquareAccent || "";
+  const showPage = options.showPage ?? root.dataset.townsquareShowPage === "true";
 
   injectStyles();
 
   const endpoint = new URL("/api/site-presence", serverOrigin);
   if (siteKey) endpoint.searchParams.set("siteKey", siteKey);
+  if (showPage) endpoint.searchParams.set("page", window.location.pathname || "/");
 
   // A <button> when the counter can take the visitor somewhere; otherwise a
   // plain element so a non-actionable badge is not announced as a control.
@@ -237,13 +245,14 @@ export function mountTownSquareCounter(root, options = {}) {
   let pollTimer = null;
   let inFlight = null;
 
-  const render = (count) => {
+  const render = (count, pageCount) => {
     const empty = count <= 0;
-    labelEl.textContent = labelFor(count);
+    const label = labelFor(count, pageCount);
+    labelEl.textContent = label;
     el.dataset.empty = String(empty);
     el.hidden = false;
     if (el instanceof HTMLButtonElement) {
-      el.setAttribute("aria-label", `${labelFor(count)}. ${actionLabel}.`);
+      el.setAttribute("aria-label", `${label}. ${actionLabel}.`);
     } else {
       el.setAttribute("role", "status");
     }
@@ -263,8 +272,8 @@ export function mountTownSquareCounter(root, options = {}) {
         return;
       }
       const data = await res.json();
-      const count = Number(data && data.activeVisitors);
-      if (!disposed) render(Number.isFinite(count) ? Math.max(0, count) : 0);
+      const toCount = (value) => (Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0);
+      if (!disposed) render(toCount(data?.activeVisitors), showPage ? toCount(data?.pageVisitors) : null);
     } catch {
       // Network error or aborted poll: keep the last rendered value.
     } finally {
