@@ -41,11 +41,20 @@ const STYLES = `
   font-size: var(--ts-reactions-font-size, 0.875rem);
 }
 :where(.ts-reactions__button) {
+  --_ts-reactions-pad-y: var(--ts-reactions-pad-y, 0.56em);
+  --_ts-reactions-pad-x: var(--ts-reactions-pad-x, 0.7em);
   display: inline-flex;
   align-items: center;
   gap: var(--ts-reactions-button-gap, 0.4em);
   margin: 0;
-  padding: var(--ts-reactions-pad-y, 0.35em) var(--ts-reactions-pad-x, 0.7em);
+  /* Optical centering: geometrically centered glyphs read as low, and the
+     emoji brings its own side bearing, so give a hair more room below than
+     above and a hair less on the emoji side. */
+  padding:
+    var(--_ts-reactions-pad-y)
+    var(--_ts-reactions-pad-x)
+    calc(var(--_ts-reactions-pad-y) + 0.04em)
+    calc(var(--_ts-reactions-pad-x) - 0.05em);
   border: var(--ts-reactions-border-width, 1px) solid var(--ts-reactions-border-color, transparent);
   border-radius: var(--ts-reactions-radius, 999px);
   font: inherit;
@@ -69,10 +78,27 @@ const STYLES = `
 }
 :where(.ts-reactions__emoji) {
   font-size: var(--ts-reactions-emoji-size, 1em);
-  line-height: 1;
 }
 :where(.ts-reactions__count) {
   font-variant-numeric: tabular-nums;
+}
+/* Trim each glyph's box to cap height and baseline, so flex centering
+   centers the visible ink, not the empty ascender and descender space that
+   otherwise pushes digits and emoji about 2px above center. */
+:where(.ts-reactions__emoji, .ts-reactions__count) {
+  text-box: trim-both cap alphabetic;
+}
+/* Browsers without text-box (Firefox for now): untrimmed boxes are taller, so
+   take the trimmed space back out of the padding to keep the same height, and
+   nudge the glyphs down by roughly the offset trimming would remove. */
+@supports not (text-box: trim-both cap alphabetic) {
+  :where(.ts-reactions__button) {
+    padding-block: calc(var(--_ts-reactions-pad-y) - 0.21em) calc(var(--_ts-reactions-pad-y) - 0.17em);
+  }
+  :where(.ts-reactions__emoji, .ts-reactions__count) {
+    position: relative;
+    top: 0.08em;
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   :where(.ts-reactions__button) { transition: transform 120ms ease, background-color 160ms ease; }

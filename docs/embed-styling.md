@@ -108,7 +108,7 @@ set it on that variant's class, e.g. `.ts-counter--solid { --ts-counter-bg: … 
 | `--ts-reactions-shadow` | Button box shadow. |
 | `--ts-reactions-radius` | Button corner radius. |
 | `--ts-reactions-font-size` | Text size. Padding and gaps scale with it. |
-| `--ts-reactions-pad-y`, `--ts-reactions-pad-x` | Button padding. |
+| `--ts-reactions-pad-y`, `--ts-reactions-pad-x` | Button padding. The bottom gets slightly more and the emoji side slightly less, so the content looks centered. |
 | `--ts-reactions-gap` | Space between buttons. |
 | `--ts-reactions-button-gap` | Space between the emoji and the count. |
 | `--ts-reactions-emoji-size` | Emoji size, relative to the text. |
@@ -116,6 +116,12 @@ set it on that variant's class, e.g. `.ts-counter--solid { --ts-counter-bg: … 
 | `--ts-reactions-pressed-border-color` | Pressed border. Defaults to the accent. |
 | `--ts-reactions-pressed-ink` | Pressed text color. |
 | `--ts-reactions-focus-color` | Keyboard focus ring. Defaults to the accent. |
+
+Inside each button, the emoji and the count are trimmed to their cap height
+and baseline (`text-box: trim-both cap alphabetic`), so the button centers the
+visible glyphs. Browsers without `text-box` get a close fallback. If you
+replace the padding with your own `padding` rule, keep the trim in mind: the
+button's height comes from the padding plus the cap height.
 
 ## Recipes
 
