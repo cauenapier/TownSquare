@@ -31,8 +31,9 @@ import {
 import { getMatchingWwwOrigin } from "../../lib/url.mjs";
 import { prepareReciprocalConnection } from "../../lib/neighbourhood.mjs";
 import { mountTownSquareCounter, COUNTER_VARIANTS } from "../../townsquare-counter.mjs";
+import { mountTownSquareReactions } from "../../townsquare-reactions.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
-import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS } from "../../lib/shared-constants.mjs";
+import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS, REACTIONS } from "../../lib/shared-constants.mjs";
 
 const loginView = document.getElementById("login-view");
 const adminView = document.getElementById("admin-view");
@@ -84,6 +85,13 @@ const counterUrlInput = document.getElementById("counter-url");
 const counterPreview = document.getElementById("counter-preview");
 const counterSnippetEl = document.getElementById("counter-snippet");
 const copyCounterButton = document.getElementById("copy-counter");
+const reactionsForm = document.getElementById("reactions-form");
+const reactionsChoices = document.getElementById("reactions-choices");
+const reactionsAccentInput = document.getElementById("reactions-accent");
+const reactionsAccentDefaultInput = document.getElementById("reactions-accent-default");
+const reactionsPreview = document.getElementById("reactions-preview");
+const reactionsSnippetEl = document.getElementById("reactions-snippet");
+const copyReactionsButton = document.getElementById("copy-reactions");
 const connectionsList = document.getElementById("connections-list");
 const addConnectionButton = document.getElementById("add-connection");
 const saveConnectionsButton = document.getElementById("save-connections");
@@ -1158,6 +1166,7 @@ function render(data, { background = false } = {}) {
   if (!counterInitialized) {
     counterInitialized = true;
     renderCounter();
+    renderReactions();
   }
   chatDisabledInput.checked = currentSite.chatDisabled;
   botProtectionInput.checked = Boolean(currentSite.botProtection);
@@ -1292,6 +1301,71 @@ counterForm.addEventListener("input", (event) => {
   renderCounter();
 });
 
+// One checkbox per reaction the server accepts; the first three start checked,
+// matching the embed's default set.
+reactionsChoices.replaceChildren(...Object.entries(REACTIONS).map(([key, emoji], index) => {
+  const label = document.createElement("label");
+  label.className = "hosted-toggle";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.name = "reaction";
+  input.value = key;
+  input.checked = index < 3;
+  const text = document.createElement("span");
+  text.textContent = `${emoji} ${key.replace("-", " ")}`;
+  label.append(input, text);
+  return label;
+}));
+
+function readReactionsConfig() {
+  return {
+    reactions: [...reactionsChoices.querySelectorAll("input:checked")].map((input) => input.value),
+    accent: reactionsAccentDefaultInput.checked ? "" : reactionsAccentInput.value,
+  };
+}
+
+function buildReactionsSnippet(config) {
+  const serverOrigin = window.location.origin;
+  const siteKey = currentSite?.siteKey || "";
+  const lines = [`    serverOrigin: ${JSON.stringify(serverOrigin)}`];
+  if (siteKey) lines.push(`    siteKey: ${JSON.stringify(siteKey)}`);
+  if (config.reactions.length) lines.push(`    reactions: ${JSON.stringify(config.reactions)}`);
+  if (config.accent) lines.push(`    accent: ${JSON.stringify(config.accent)}`);
+  return `<div id="townsquare-reactions"></div>
+<script type="module">
+  import { mountTownSquareReactions } from ${JSON.stringify(`${serverOrigin}/townsquare-reactions.mjs`)};
+
+  mountTownSquareReactions(document.getElementById("townsquare-reactions"), {
+${lines.join(",\n")}
+  });
+</script>`;
+}
+
+// The preview reads this site's real counts for "/" but is inert: writes are
+// only accepted from the site's own origins, not from this admin page.
+let reactionsPreviewHandle = null;
+function renderReactions() {
+  const config = readReactionsConfig();
+  reactionsAccentInput.disabled = reactionsAccentDefaultInput.checked;
+  if (document.activeElement !== reactionsSnippetEl) {
+    reactionsSnippetEl.value = buildReactionsSnippet(config);
+  }
+  reactionsPreviewHandle?.destroy();
+  reactionsPreviewHandle = mountTownSquareReactions(reactionsPreview, {
+    serverOrigin: window.location.origin,
+    siteKey: currentSite?.siteKey || "",
+    page: "/",
+    reactions: config.reactions,
+    accent: config.accent || undefined,
+  });
+}
+
+reactionsForm.addEventListener("input", (event) => {
+  if (event.target === reactionsAccentInput) reactionsAccentDefaultInput.checked = false;
+  renderReactions();
+});
+
+bindCopy(copyReactionsButton, { text: () => reactionsSnippetEl.value, source: reactionsSnippetEl });
 bindCopy(copyCounterButton, { text: () => counterSnippetEl.value, source: counterSnippetEl });
 bindCopy(copyButton, { text: () => snippetEl.value, source: snippetEl });
 bindCopy(copyStyleButton, { text: () => styleSnippetEl.value, source: styleSnippetEl });

@@ -888,6 +888,42 @@ async function getSitePresence(siteKey = "") {
   return body;
 }
 
+async function assertReactionsWork() {
+  const { site } = await createSite("Reactions Town", { origin: "https://reactions.example" });
+  const siteKey = site.siteKey;
+  const react = (body, { origin = "https://reactions.example", ip = "198.51.100.40" } = {}) => fetch(`${HTTP_ORIGIN}/api/reactions`, {
+    method: "POST",
+    headers: { "content-type": "text/plain", origin, "x-real-ip": ip },
+    body: JSON.stringify({ siteKey, page: "/post", ...body }),
+  });
+  const read = async (page) => {
+    const url = new URL("/api/reactions", HTTP_ORIGIN);
+    url.searchParams.set("siteKey", siteKey);
+    url.searchParams.set("page", page);
+    const response = await fetch(url, { headers: { "x-real-ip": "198.51.100.41" } });
+    assert(response.ok, "reaction read failed");
+    assert(response.headers.get("access-control-allow-origin") === "*", "reaction read is not CORS-readable");
+    return (await response.json()).counts;
+  };
+
+  assert(JSON.stringify(await read("/post")) === "{}", "new page should have no reactions");
+
+  const added = await react({ reaction: "heart", action: "add" });
+  assert(added.status === 200, `reaction add failed with ${added.status}`);
+  await react({ reaction: "heart", action: "add" }, { ip: "198.51.100.42" });
+  await react({ reaction: "clap", action: "add" });
+  const removed = await react({ reaction: "clap", action: "remove" });
+  assert(JSON.stringify((await removed.json()).counts) === JSON.stringify({ heart: 2 }), "remove did not update counts");
+  assert(JSON.stringify(await read("/post")) === JSON.stringify({ heart: 2 }), "reaction counts did not persist");
+  assert(JSON.stringify(await read("/other")) === "{}", "reactions leaked across pages");
+
+  const foreign = await react({ reaction: "heart", action: "add" }, { origin: "https://evil.example" });
+  assert(foreign.status === 403, "reaction from a foreign origin was accepted");
+  const unknown = await react({ reaction: "poop", action: "add" });
+  assert(unknown.status === 400, "unknown reaction key was accepted");
+  assert(JSON.stringify(await read("/post")) === JSON.stringify({ heart: 2 }), "rejected reactions changed counts");
+}
+
 async function assertPublicEndpointRateLimits() {
   const connectionLimit = Number(process.env.CONNECTION_CLICKS_PER_HOUR || 600);
   const mapLimit = Number(process.env.MAP_CLICKS_PER_HOUR || 600);
@@ -1955,6 +1991,7 @@ async function main() {
 
   await assertCustomizationPersists();
   await assertMatchingWwwOriginsWork();
+  await assertReactionsWork();
   await assertAdminNeighbourhoodRelationships();
   await assertOwnerProfilePersists();
   await assertModerationTools();

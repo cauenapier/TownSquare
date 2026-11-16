@@ -31,3 +31,14 @@ export const DEFAULT_OWNER_BADGE_COLOR = OWNER_BADGE_COLORS[0];
 export function randomSpawnX(random = Math.random) {
   return MIN_X + random() * (MAX_X - MIN_X);
 }
+
+// Reactions the embeddable reactions bar may record, in display order. The
+// server only accepts these keys; embeds pick a subset via their options.
+export const REACTIONS = Object.freeze({
+  heart: "❤️",
+  "thumbs-up": "👍",
+  clap: "👏",
+  laugh: "😂",
+  wow: "😮",
+  fire: "🔥",
+});

@@ -8,6 +8,7 @@ static-file resolver.
 
 - `townsquare.mjs` — widget mount API.
 - `townsquare-counter.mjs` — read-only presence counter.
+- `townsquare-reactions.mjs` — per-page emoji reactions bar.
 - `widget/` — scene, input, chat, presence, and plugin behavior.
 - `lib/` — canonical browser/Node-neutral contracts and utilities. The server
   imports these same files directly; do not add DOM or Node-only dependencies.

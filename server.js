@@ -8,6 +8,7 @@ const { plugins } = require("./server/plugins");
 const { atomicWriteJson } = require("./server/atomic-write");
 const { createVisitorStats } = require("./server/visitor-stats");
 const { createMessageStats } = require("./server/message-stats");
+const { createReactionStore } = require("./server/reactions");
 const { createHistoricalStats } = require("./server/historical-stats");
 const { registerPublicPlugins } = require("./plugins");
 const { createToken, hashAdminToken, tokensMatch, adminTokenMatches } = require("./server/auth-tokens");
@@ -93,6 +94,8 @@ const MAP_WORLD_FILE = path.join(DATA_DIR, "map-world.json");
 const VISITOR_STATS_FILE = path.join(DATA_DIR, "visitor-stats.json");
 const MESSAGE_STATS_FILE = path.join(DATA_DIR, "message-stats.json");
 const HISTORICAL_STATS_FILE = path.join(DATA_DIR, "historical-stats.json");
+const REACTIONS_FILE = path.join(DATA_DIR, "reactions.json");
+const MAX_REACTION_PAGE_LEN = 200;
 const DEFAULT_MAP_WORLD_FILE = path.join(PUBLIC_DIR, "default-map-world.json");
 let ALLOWED_ORIGINS = new Set();
 const DEFAULT_DEV_ORIGINS = new Set([
@@ -193,6 +196,8 @@ let CHARACTER_COLORS = new Set();
 let OWNER_BADGE_COLORS = new Set();
 /** @type {() => number} */
 let randomSpawnX;
+/** @type {Set<string>} */
+let REACTION_KEYS = new Set();
 
 function envFlag(name) {
   const value = String(process.env[name] || "").trim().toLowerCase();
@@ -1216,6 +1221,10 @@ const MAP_CLICKS_PER_HOUR = readLimit("MAP_CLICKS_PER_HOUR", 600);
 const SITE_PRESENCE_READS_PER_HOUR = readLimit("SITE_PRESENCE_READS_PER_HOUR", 600);
 const DISCOVERY_READS_PER_HOUR = readLimit("DISCOVERY_READS_PER_HOUR", 600);
 const DISCOVERY_EVENTS_PER_HOUR = readLimit("DISCOVERY_EVENTS_PER_HOUR", 600);
+const reactionReadsByIp = makeBucketStore();
+const reactionWritesByIp = makeBucketStore();
+const REACTION_READS_PER_HOUR = readLimit("REACTION_READS_PER_HOUR", 600);
+const REACTION_WRITES_PER_HOUR = readLimit("REACTION_WRITES_PER_HOUR", 120);
 
 function isConnectionClickAllowed(ip) {
   return connectionClicksByIp.take(ip, CONNECTION_CLICKS_PER_HOUR);
@@ -1235,6 +1244,14 @@ function isDiscoveryReadAllowed(ip) {
 
 function isDiscoveryEventAllowed(ip) {
   return discoveryEventsByIp.take(ip, DISCOVERY_EVENTS_PER_HOUR);
+}
+
+function isReactionReadAllowed(ip) {
+  return reactionReadsByIp.take(ip, REACTION_READS_PER_HOUR);
+}
+
+function isReactionWriteAllowed(ip) {
+  return reactionWritesByIp.take(ip, REACTION_WRITES_PER_HOUR);
 }
 
 const plausible = createPlausibleProxy({
@@ -1460,6 +1477,97 @@ function handleSitePresence(req, res) {
 
   const scene = scenes.get(site.siteKey);
   sendPublicJson(res, 200, { activeVisitors: scene ? countActiveVisitors(scene) : 0 });
+}
+
+/**
+ * Resolve the reactions bucket for a request: a hosted site by `siteKey`, or
+ * the shared default bucket for self-hosters. Returns null for an unknown or
+ * disabled site.
+ */
+function resolveReactionSite(siteKey) {
+  if (!siteKey) return { key: "default", site: null };
+  const site = sitesByKey.get(siteKey);
+  return site && !site.disabled ? { key: site.siteKey, site } : null;
+}
+
+/** Page ids are caller-chosen (default: the host page's pathname). */
+function sanitizeReactionPage(value) {
+  const page = typeof value === "string" ? value.trim().slice(0, MAX_REACTION_PAGE_LEN) : "";
+  return page || "/";
+}
+
+/**
+ * Public read of one page's reaction counts for the reactions embed.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handleGetReactions(req, res) {
+  if (!isReactionReadAllowed(getRequestIp(req))) {
+    sendPublicJson(res, 429, { error: "rate limited" });
+    return;
+  }
+
+  const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+  const target = resolveReactionSite(url.searchParams.get("siteKey") || "");
+  if (!target) {
+    sendPublicJson(res, 404, { error: "unknown site" });
+    return;
+  }
+
+  const page = sanitizeReactionPage(url.searchParams.get("page"));
+  sendPublicJson(res, 200, { counts: reactionStore.getCounts(target.key, page) });
+}
+
+/**
+ * Add or remove one visitor reaction. Only the site's own pages may write: the
+ * browser-set Origin must be one of the site's allowed origins (or, for the
+ * self-hosted default bucket, an allowed server origin). Which reactions a
+ * visitor has toggled is remembered in their browser, so the server keeps only
+ * counts and relies on the per-IP budget to bound scripted inflation.
+ *
+ * The embed posts JSON as text/plain so the request stays CORS-simple (no
+ * preflight); the body is parsed the same either way.
+ *
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+function handlePostReaction(req, res) {
+  if (!isReactionWriteAllowed(getRequestIp(req))) {
+    sendPublicJson(res, 429, { error: "rate limited" });
+    return;
+  }
+
+  readJsonBody(req, res, (body) => {
+    const target = resolveReactionSite(typeof body.siteKey === "string" ? body.siteKey : "");
+    if (!target) {
+      sendPublicJson(res, 404, { error: "unknown site" });
+      return;
+    }
+
+    const origin = req.headers.origin || "";
+    const originAllowed = target.site
+      ? isOriginAllowedForSite(origin, target.site)
+      : Boolean(origin) && isAllowedOrigin(origin, req.headers.host);
+    if (!originAllowed) {
+      sendPublicJson(res, 403, { error: "origin not allowed" });
+      return;
+    }
+
+    const reaction = typeof body.reaction === "string" ? body.reaction : "";
+    if (!REACTION_KEYS.has(reaction) || !["add", "remove"].includes(body.action)) {
+      sendPublicJson(res, 400, { error: "invalid reaction" });
+      return;
+    }
+
+    const page = sanitizeReactionPage(body.page);
+    const counts = reactionStore.adjust(target.key, page, reaction, body.action === "add" ? 1 : -1);
+    if (!counts) {
+      sendPublicJson(res, 409, { error: "page limit reached" });
+      return;
+    }
+    sendPublicJson(res, 200, { counts });
+  });
 }
 
 /**
@@ -2346,6 +2454,7 @@ const SERVICE_ADMIN_ACTIONS = {
     closeSiteScene(site.siteKey, 4003, "site deleted");
     adminSessions.destroyForSite(site.siteKey);
     sitesByKey.delete(site.siteKey);
+    reactionStore.removeSite(site.siteKey);
     saveSites();
     return { deletedSiteKey: site.siteKey };
   },
@@ -3495,6 +3604,7 @@ const scenes = new Map();
 const visitorStats = createVisitorStats({ filePath: VISITOR_STATS_FILE });
 const messageStats = createMessageStats({ filePath: MESSAGE_STATS_FILE });
 const historicalStats = createHistoricalStats({ filePath: HISTORICAL_STATS_FILE });
+const reactionStore = createReactionStore({ filePath: REACTIONS_FILE });
 let nextConnectionId = 1;
 
 function finalizeDisconnect(identity) {
@@ -3521,6 +3631,8 @@ const HTTP_ROUTES = new Map([
   ["GET /api/discovery/random", handleRandomTown],
   ["GET /api/stats", handleStats],
   ["GET /api/site-presence", handleSitePresence],
+  ["GET /api/reactions", handleGetReactions],
+  ["POST /api/reactions", handlePostReaction],
   ["POST /api/sites", handleRegisterSite],
   ["POST /api/connection-click", handleConnectionClick],
   ["POST /api/map-click", handleMapClick],
@@ -4325,6 +4437,8 @@ async function startServer() {
   visitorStats.start();
   messageStats.load();
   messageStats.start();
+  reactionStore.load();
+  reactionStore.start();
   historicalStats.load();
   // Preserve the detail still available when upgrading. Previously pruned
   // browser-level data cannot be reconstructed.
@@ -4344,6 +4458,7 @@ async function startServer() {
   CHARACTER_COLORS = new Set(shared.CHARACTER_COLORS);
   OWNER_BADGE_COLORS = new Set(shared.OWNER_BADGE_COLORS);
   randomSpawnX = shared.randomSpawnX;
+  REACTION_KEYS = new Set(Object.keys(shared.REACTIONS));
 
   // A failure to bind the port is fatal and must not be swallowed by the
   // uncaughtException guard below — exit so the supervisor can restart.
@@ -4426,6 +4541,8 @@ function shutdown(signal) {
     visitorStats.flush();
     messageStats.stop();
     messageStats.flush();
+    reactionStore.stop();
+    reactionStore.flush();
     historicalStats.stop();
     historicalStats.flush();
   } catch (error) {

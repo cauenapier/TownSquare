@@ -75,11 +75,17 @@ For a read-only presence pill, use `mountTownSquareCounter` from
 `/townsquare-counter.mjs`. Its option contract is documented next to the
 implementation in [`public/townsquare-counter.mjs`](public/townsquare-counter.mjs).
 
+For an emoji reactions bar (❤️ 👍 👏 …) with per-page counts, use
+`mountTownSquareReactions` from `/townsquare-reactions.mjs`; options are
+documented in [`public/townsquare-reactions.mjs`](public/townsquare-reactions.mjs).
+Writes are accepted only from the site's allowed origins (or, self-hosted,
+`ALLOWED_ORIGINS`) and counts are stored in `DATA_DIR/reactions.json`.
+
 ## Hosted operation
 
 - `/register` creates a site key, install snippet, and private admin token.
 - `/admin` manages a registered site's scene, appearance, connections, owner
-  identity, moderation, counter, overlay, and enabled add-ons.
+  identity, moderation, counter, reactions, overlay, and enabled add-ons.
 - `/service-admin` manages the service registry, aggregate activity, global map,
   and operator notifications when `SERVICE_ADMIN_PASSWORD` is set.
 - `/map` displays verified, enabled sites. The widget can also offer eligible
