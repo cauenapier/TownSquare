@@ -25,10 +25,17 @@ export function createExpandController({ app, expandButton, chatScope, getAvatar
   // Expanded mode overlays the host page, so lock its scroll while open and
   // restore whatever inline overflow it had before.
   let hostBodyOverflow = "";
+  // Going fixed pulls the widget out of the page flow, so the document gets
+  // shorter and the browser clamps its scroll offset. Remember where the
+  // visitor was and put them back there on collapse, so the widget is still
+  // in view instead of the page having jumped up.
+  let hostScroll = null;
 
   const setExpanded = (next) => {
-    if (next !== expanded) {
+    const changed = next !== expanded;
+    if (changed) {
       if (next) {
+        hostScroll = { left: window.scrollX, top: window.scrollY };
         hostBodyOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
       } else {
@@ -37,6 +44,11 @@ export function createExpandController({ app, expandButton, chatScope, getAvatar
     }
     expanded = next;
     app.classList.toggle("townsquare--expanded", expanded);
+    if (changed && !expanded && hostScroll) {
+      // The class change above restores the widget's in-flow height first.
+      window.scrollTo({ ...hostScroll, behavior: "instant" });
+      hostScroll = null;
+    }
     expandButton.classList.toggle("townsquare__button--active", expanded);
     expandButton.setAttribute("aria-pressed", String(expanded));
     expandButton.setAttribute("aria-label", expanded ? "Collapse widget" : "Expand widget");
