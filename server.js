@@ -1491,10 +1491,12 @@ function resolveReactionSite(siteKey) {
   return site && !site.disabled ? { key: site.siteKey, site } : null;
 }
 
-/** Page ids are caller-chosen (default: the host page's pathname). */
+/**
+ * Page ids are caller-chosen (default: the host page's pathname). Normalized
+ * like the counter's page paths, so "/blog/" and "/blog" share counts.
+ */
 function sanitizeReactionPage(value) {
-  const page = typeof value === "string" ? value.trim().slice(0, MAX_REACTION_PAGE_LEN) : "";
-  return page || "/";
+  return comparablePath(typeof value === "string" ? value.trim().slice(0, MAX_REACTION_PAGE_LEN) : "");
 }
 
 /**
@@ -3550,8 +3552,7 @@ function countActiveVisitors(scene) {
 
 /** Pathname without a trailing slash (except root), so "/blog/" matches "/blog". */
 function comparablePath(pathname) {
-  const path = String(pathname || "").slice(0, MAX_PAGE_URL_LEN);
-  return path.length > 1 ? path.replace(/\/+$/, "") || "/" : path || "/";
+  return String(pathname || "").slice(0, MAX_PAGE_URL_LEN).replace(/\/+$/, "") || "/";
 }
 
 /**

@@ -33,7 +33,7 @@ import { prepareReciprocalConnection } from "../../lib/neighbourhood.mjs";
 import {
   mountTownSquareCounter, COUNTER_VARIANTS, COUNTER_COUNTS, COUNTER_LABEL_STYLES,
 } from "../../townsquare-counter.mjs";
-import { mountTownSquareReactions } from "../../townsquare-reactions.mjs";
+import { mountTownSquareReactions, DEFAULT_REACTIONS, reactionLabel } from "../../townsquare-reactions.mjs";
 import { createCustomizationPreview } from "./hosted-preview.mjs";
 import { CHARACTER_COLORS, DEFAULT_OWNER_BADGE_COLOR, DISPLAY_NAME_MAX, OWNER_BADGE_COLORS, REACTIONS } from "../../lib/shared-constants.mjs";
 
@@ -1167,8 +1167,8 @@ function render(data, { background = false } = {}) {
   }
   // The counter's look lives only in this form, so build it once we know the
   // siteKey; later background polls leave the picker and its preview alone.
-  if (!counterInitialized) {
-    counterInitialized = true;
+  if (!embedsInitialized) {
+    embedsInitialized = true;
     renderCounter();
     renderReactions();
   }
@@ -1282,7 +1282,7 @@ ${lines.join(",\n")}
 }
 
 let counterPreviewHandle = null;
-let counterInitialized = false;
+let embedsInitialized = false;
 function renderCounter() {
   const config = readCounterConfig();
   counterAccentInput.disabled = counterAccentDefaultInput.checked;
@@ -1311,18 +1311,18 @@ counterForm.addEventListener("input", (event) => {
   renderCounter();
 });
 
-// One checkbox per reaction the server accepts; the first three start checked,
-// matching the embed's default set.
-reactionsChoices.replaceChildren(...Object.entries(REACTIONS).map(([key, emoji], index) => {
+// One checkbox per reaction the server accepts; the embed's default set starts
+// checked.
+reactionsChoices.replaceChildren(...Object.entries(REACTIONS).map(([key, emoji]) => {
   const label = document.createElement("label");
   label.className = "hosted-toggle";
   const input = document.createElement("input");
   input.type = "checkbox";
   input.name = "reaction";
   input.value = key;
-  input.checked = index < 3;
+  input.checked = DEFAULT_REACTIONS.includes(key);
   const text = document.createElement("span");
-  text.textContent = `${emoji} ${key.replace("-", " ")}`;
+  text.textContent = `${emoji} ${reactionLabel(key)}`;
   label.append(input, text);
   return label;
 }));

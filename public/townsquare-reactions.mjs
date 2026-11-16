@@ -20,7 +20,11 @@ const STORAGE_PREFIX = "townsquare-reactions:";
 
 /** Every reaction key the server accepts, in display order. */
 export const REACTION_KEYS = Object.freeze(Object.keys(REACTIONS));
-const DEFAULT_REACTIONS = Object.freeze(["heart", "thumbs-up", "clap"]);
+/** Shown when the `reactions` option is missing or names no known key. */
+export const DEFAULT_REACTIONS = Object.freeze(["heart", "thumbs-up", "clap"]);
+
+/** Human name for a reaction key, e.g. "thumbs-up" → "thumbs up". */
+export const reactionLabel = (key) => key.replaceAll("-", " ");
 
 // Styling contract (documented in docs/embed-styling.md), the same as the
 // presence counter's:
@@ -191,6 +195,9 @@ export function mountTownSquareReactions(root, options = {}) {
   bar.className = "ts-reactions";
   bar.setAttribute("role", "group");
   bar.setAttribute("aria-label", "Reactions");
+  // Hidden until the first counts arrive, so an unknown site or an unreachable
+  // server never flashes a row of zeros.
+  bar.hidden = true;
   if (accent) bar.style.setProperty("--ts-reactions-accent", accent);
 
   const buttons = new Map(shown.map((key) => {
@@ -217,19 +224,19 @@ export function mountTownSquareReactions(root, options = {}) {
       const pressed = reacted.has(key);
       count.textContent = String(value);
       button.setAttribute("aria-pressed", String(pressed));
-      button.setAttribute("aria-label", `${key.replace("-", " ")}: ${value}`);
+      button.setAttribute("aria-label", `${reactionLabel(key)}: ${value}`);
     }
   };
 
-  const request = async (init) => {
+  const readUrl = new URL(endpoint);
+  if (siteKey) readUrl.searchParams.set("siteKey", siteKey);
+  readUrl.searchParams.set("page", page);
+
+  /** Fetch `url` and return its `counts`, or null on any failure. */
+  const request = async (url, init = {}) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const url = new URL(endpoint);
-      if (!init) {
-        if (siteKey) url.searchParams.set("siteKey", siteKey);
-        url.searchParams.set("page", page);
-      }
       const res = await fetch(url.href, { ...init, signal: controller.signal });
       if (!res.ok) return null;
       const data = await res.json();
@@ -242,7 +249,7 @@ export function mountTownSquareReactions(root, options = {}) {
   };
 
   const refresh = async () => {
-    const next = await request();
+    const next = await request(readUrl);
     if (disposed) return;
     if (!next) {
       // Unknown/disabled site or server unreachable: hide rather than show zeros.
@@ -255,18 +262,21 @@ export function mountTownSquareReactions(root, options = {}) {
   };
 
   // Optimistic: flip the local state and count immediately, then reconcile with
-  // the server's totals, or roll back if the write was rejected.
+  // the server's totals, or roll back this one reaction if the write failed.
   async function toggle(key) {
     if (pending.has(key)) return;
     pending.add(key);
     const adding = !reacted.has(key);
-    const previous = { ...counts };
+    const delta = adding ? 1 : -1;
+    const bump = (by) => {
+      counts = { ...counts, [key]: Math.max(0, (Number(counts[key]) || 0) + by) };
+    };
     if (adding) reacted.add(key);
     else reacted.delete(key);
-    counts = { ...counts, [key]: Math.max(0, (Number(counts[key]) || 0) + (adding ? 1 : -1)) };
+    bump(delta);
     render();
 
-    const next = await request({
+    const next = await request(endpoint, {
       method: "POST",
       headers: { "content-type": "text/plain;charset=UTF-8" },
       body: JSON.stringify({ siteKey, page, reaction: key, action: adding ? "add" : "remove" }),
@@ -277,7 +287,7 @@ export function mountTownSquareReactions(root, options = {}) {
       counts = next;
       writeReacted(storageKey, reacted);
     } else {
-      counts = previous;
+      bump(-delta);
       if (adding) reacted.delete(key);
       else reacted.add(key);
     }

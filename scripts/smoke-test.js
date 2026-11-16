@@ -916,6 +916,7 @@ async function assertReactionsWork() {
   assert(JSON.stringify((await removed.json()).counts) === JSON.stringify({ heart: 2 }), "remove did not update counts");
   assert(JSON.stringify(await read("/post")) === JSON.stringify({ heart: 2 }), "reaction counts did not persist");
   assert(JSON.stringify(await read("/other")) === "{}", "reactions leaked across pages");
+  assert(JSON.stringify(await read("/post/")) === JSON.stringify({ heart: 2 }), "trailing slash split a page's reactions");
 
   const foreign = await react({ reaction: "heart", action: "add" }, { origin: "https://evil.example" });
   assert(foreign.status === 403, "reaction from a foreign origin was accepted");
